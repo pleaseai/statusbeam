@@ -18,11 +18,13 @@
     "typecheck": "turbo run typecheck",
     "test": "bun test",
     "setup": "bash scripts/setup.sh",
-    "deploy": "bun run --filter '@statusbeam/worker' deploy && bun run --filter '@statusbeam/web' deploy"
+    "deploy": "bun run --filter '@statusbeam/worker' deploy && bun run --filter '@statusbeam/web' deploy",
+    "check:typescript-version": "tsc --version | grep -E '^Version 7\\.'"
   },
   "devDependencies": {
     "@pleaseai/eslint-config": "^0.0.4",
     "@types/bun": "^1.3.14",
+    "@typescript/native": "npm:typescript@^7.0.2",
     "eslint": "^10.7.0",
     "turbo": "^2.10.5",
     "typescript": "^6.0"
