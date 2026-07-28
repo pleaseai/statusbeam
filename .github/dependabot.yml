@@ -9,11 +9,13 @@ updates:
       actions:
         patterns: ['*']
 
-  # npm/bun dependencies across the monorepo.
-  - package-ecosystem: npm
+  # Bun dependencies across the monorepo.
+  - package-ecosystem: bun
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     groups:
       dependencies:
         patterns: ['*']
