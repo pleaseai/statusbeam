@@ -1,0 +1,23 @@
+.github/workflows/ci.yml
+  s_7c3a5d399c4fa7::t_92511162538d57 40-42
+bun.lock
+  s_7c3a5d399c4fa7::t_ff890da9af3f29 10,699-740
+package.json
+  s_7c3a5d399c4fa7::t_932c4e78e9036e 21-22,27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "0119243b8da532563547bd6f40b0d99c33434155",
+  "prompts": {},
+  "sessions": {
+    "s_7c3a5d399c4fa7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7fb64cb5-11a5-4485-898d-3c3b8c3d4e4f",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Minsu Lee <minsu.lee@pleaseai.dev>"
+    }
+  }
+}
