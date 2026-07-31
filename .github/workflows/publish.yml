@@ -76,9 +76,11 @@ jobs:
         with:
           # Node 24 bundles the npm >= 11.5.1 that trusted publishing needs —
           # npm comes from the Node dist tarball, not an ad-hoc registry
-          # install. No `cache:` input, so no cache-capable path in the
-          # publish workflow (zizmor cache-poisoning).
+          # install. setup-node v5+ turns npm caching ON by default; disable
+          # it so no cache-capable path exists in the publish workflow
+          # (zizmor cache-poisoning).
           node-version: 24
+          package-manager-cache: false
 
       - name: Install dependencies
         # --ignore-scripts: a release-triggered publish must not run arbitrary
