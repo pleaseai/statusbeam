@@ -40,7 +40,7 @@
     },
     "apps/web": {
       "name": "@statusbeam/web",
-      "version": "1.0.0",
+      "version": "0.1.0",
       "dependencies": {
         "@astrojs/cloudflare": "^14",
         "@astrojs/react": "^6",
@@ -67,7 +67,7 @@
     },
     "apps/worker": {
       "name": "@statusbeam/worker",
-      "version": "1.0.0",
+      "version": "0.1.0",
       "dependencies": {
         "@statusbeam/core": "workspace:*",
       },
@@ -78,7 +78,7 @@
     },
     "packages/cli": {
       "name": "@statusbeam/cli",
-      "version": "1.0.0",
+      "version": "0.1.0",
       "bin": {
         "statusbeam": "./dist/cli.js",
       },
@@ -93,7 +93,7 @@
     },
     "packages/core": {
       "name": "@statusbeam/core",
-      "version": "1.0.0",
+      "version": "0.1.0",
       "dependencies": {
         "yaml": "^2.5.0",
         "zod": "^4.4.3",
@@ -101,7 +101,7 @@
     },
     "packages/create-statusbeam": {
       "name": "create-statusbeam",
-      "version": "1.0.0",
+      "version": "0.1.0",
       "bin": {
         "create-statusbeam": "./dist/index.js",
       },

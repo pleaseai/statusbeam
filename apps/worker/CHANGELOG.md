@@ -1,10 +1,11 @@
 # Changelog
 
-## 1.0.0 (2026-07-09)
+## 0.1.0 (2026-07-31)
 
 
 ### Features
 
+* add Sentry Uptime adapter (webhook + poll backstop) ([#53](https://github.com/pleaseai/statusbeam/issues/53)) ([e2970b1](https://github.com/pleaseai/statusbeam/commit/e2970b13be7f11ddb0ff3d246e4618b7acacc939))
 * close the cache-purge loop with shared Cache-Tag emit ([#10](https://github.com/pleaseai/statusbeam/issues/10)) ([193d3f9](https://github.com/pleaseai/statusbeam/commit/193d3f9c2a2ee2db5e9ba821c8462e63f5c20665))
 * incident timeline ([#7](https://github.com/pleaseai/statusbeam/issues/7)) ([6549a74](https://github.com/pleaseai/statusbeam/commit/6549a74771528c715a05c1a4e6f2f140efd0aa7d))
 * package-based distribution (ADR-0002) ([#30](https://github.com/pleaseai/statusbeam/issues/30)) ([ae8b017](https://github.com/pleaseai/statusbeam/commit/ae8b0174276042cdc87dd0e2ec986643e79c26ab))
@@ -19,4 +20,4 @@
 
 * The following workspace dependencies were updated
   * dependencies
-    * @statusbeam/core bumped to 1.0.0
+    * @statusbeam/core bumped to 0.1.0

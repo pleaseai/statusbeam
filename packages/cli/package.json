@@ -1,7 +1,7 @@
 {
   "name": "@statusbeam/cli",
   "type": "module",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "StatusBeam CLI — provision, configure, and deploy a StatusBeam status page to Cloudflare.",
   "license": "MIT",
   "homepage": "https://github.com/pleaseai/statusbeam/tree/main/packages/cli#readme",
