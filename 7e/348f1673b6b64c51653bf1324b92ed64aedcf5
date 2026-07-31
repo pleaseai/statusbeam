@@ -1,0 +1,43 @@
+apps/worker/CHANGELOG.md
+  s_2c6127fdf83161::t_2d47860aa39fe1 8
+  s_2c6127fdf83161::t_1b56b0c674084c 3,23
+packages/core/CHANGELOG.md
+  s_2c6127fdf83161::t_3433f60bcfe1be 8
+  s_2c6127fdf83161::t_7dca3bfd492fd7 3
+.release-please-manifest.json
+  s_2c6127fdf83161::t_b42b3bd1a6775d 2-6
+apps/web/CHANGELOG.md
+  s_2c6127fdf83161::t_74f7600cf84efd 3,33
+apps/web/package.json
+  s_2c6127fdf83161::t_70af8ea32040e4 4
+apps/worker/package.json
+  s_2c6127fdf83161::t_bd52687a098791 4
+bun.lock
+  s_2c6127fdf83161::t_e00c87727ac5af 43,70,81,96,104
+packages/cli/CHANGELOG.md
+  s_2c6127fdf83161::t_9589ddd214211c 3,15-17
+packages/cli/package.json
+  s_2c6127fdf83161::t_0f07f76dd94788 4
+packages/core/package.json
+  s_2c6127fdf83161::t_43133a26ddb105 4
+packages/create-statusbeam/CHANGELOG.md
+  s_2c6127fdf83161::t_774a2543aa5638 3
+packages/create-statusbeam/package.json
+  s_2c6127fdf83161::t_5e81ade20351f9 4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.19",
+  "base_commit_sha": "7e348f1673b6b64c51653bf1324b92ed64aedcf5",
+  "prompts": {},
+  "sessions": {
+    "s_2c6127fdf83161": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "756f80bd-4fc1-4a3c-be0f-cbdf6977259c",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Minsu Lee <minsu.lee@pleaseai.dev>"
+    }
+  }
+}
