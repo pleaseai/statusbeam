@@ -3,9 +3,20 @@ name: Publish
 # release-please cuts one GitHub Release per changed package (tags like
 # `core-v0.1.0`, `cli-v0.1.0`). Each published release fires this workflow, which
 # publishes just that package to npm with provenance. See ADR-0002.
+#
+# A release-triggered run executes the workflow file AT THE TAG'S COMMIT, so a
+# fix to this file never reaches already-cut tags. The workflow_dispatch input
+# covers that: it publishes an existing release tag using the current (main)
+# workflow file.
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to publish (e.g. core-v1.0.0)
+        required: true
+        type: string
 
 # Least privilege. id-token: write is required for npm provenance (OIDC).
 permissions:
@@ -21,7 +32,7 @@ jobs:
       - name: Resolve package from the release tag
         id: pkg
         env:
-          TAG: ${{ github.event.release.tag_name }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
         run: |
           # tags: <component>-v<version> → strip the -v<version> suffix.
           component="${TAG%-v*}"
@@ -39,6 +50,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # Build the tagged tree in both trigger modes (checkout would default
+          # to the default branch on workflow_dispatch).
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
           persist-credentials: false
 
       - name: Set up bun
@@ -91,5 +105,9 @@ jobs:
           # before it was dropped). Provenance still works: it keys off the
           # id-token: write OIDC + the GitHub Actions env, not setup-node.
           npm config set //registry.npmjs.org/:_authToken "$NODE_AUTH_TOKEN"
+          # Publish from outside the repo checkout: inside the Bun workspaces
+          # monorepo, `npm publish <tarball>` enters workspace mode and dies
+          # with ENOWORKSPACES.
+          cd "$dest"
           # npm (not bun) publish: only npm emits the provenance attestation.
           npm publish "$tarball" --provenance --access public
