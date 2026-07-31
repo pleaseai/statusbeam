@@ -1,0 +1,19 @@
+.github/workflows/publish.yml
+  s_2c6127fdf83161::t_81b9877f8b66f5 104-107
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.19",
+  "base_commit_sha": "59e9635a3cbdde2aa62b94a9fb3c6d547cc611ec",
+  "prompts": {},
+  "sessions": {
+    "s_2c6127fdf83161": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "756f80bd-4fc1-4a3c-be0f-cbdf6977259c",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Minsu Lee <minsu.lee@pleaseai.dev>"
+    }
+  }
+}
