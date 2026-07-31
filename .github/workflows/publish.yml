@@ -69,10 +69,16 @@ jobs:
           bun-version: 1.3.14
           # This workflow is release-triggered and publishes to npm; a poisoned
           # cache could taint the tarball, so disable caching (zizmor cache-poisoning).
-          # node + npm (used for the provenance publish) come from the runner's
-          # preinstalled toolchain — no actions/setup-node, which would re-introduce
-          # a cache-capable action into the publish path.
           no-cache: true
+
+      - name: Set up node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          # Node 24 bundles the npm >= 11.5.1 that trusted publishing needs —
+          # npm comes from the Node dist tarball, not an ad-hoc registry
+          # install. No `cache:` input, so no cache-capable path in the
+          # publish workflow (zizmor cache-poisoning).
+          node-version: 24
 
       - name: Install dependencies
         # --ignore-scripts: a release-triggered publish must not run arbitrary
@@ -97,9 +103,6 @@ jobs:
       - name: Pack + publish with provenance
         working-directory: ${{ steps.pkg.outputs.dir }}
         run: |
-          # Trusted publishing needs npm >= 11.5.1; the runner's preinstalled
-          # node ships an older one. Version-pinned global install, no cache.
-          npm install -g npm@^11.5.1
           dest="$RUNNER_TEMP/pack"
           mkdir -p "$dest"
           # bun pm pack rewrites workspace:* deps to real versions in the tarball.
