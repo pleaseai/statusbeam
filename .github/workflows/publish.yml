@@ -101,13 +101,13 @@ jobs:
           if [ -z "$tarball" ]; then
             echo "::error::no tarball produced by bun pm pack"; exit 1
           fi
+          # Run every npm command from outside the repo checkout: inside the Bun
+          # workspaces monorepo npm enters workspace mode, and both `npm config
+          # set` and `npm publish <tarball>` die with ENOWORKSPACES there.
+          cd "$dest"
           # Configure the npm registry auth (setup-node's registry-url did this
           # before it was dropped). Provenance still works: it keys off the
           # id-token: write OIDC + the GitHub Actions env, not setup-node.
           npm config set //registry.npmjs.org/:_authToken "$NODE_AUTH_TOKEN"
-          # Publish from outside the repo checkout: inside the Bun workspaces
-          # monorepo, `npm publish <tarball>` enters workspace mode and dies
-          # with ENOWORKSPACES.
-          cd "$dest"
           # npm (not bun) publish: only npm emits the provenance attestation.
           npm publish "$tarball" --provenance --access public
