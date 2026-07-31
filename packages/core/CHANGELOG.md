@@ -1,10 +1,11 @@
 # Changelog
 
-## 1.0.0 (2026-07-09)
+## 0.1.0 (2026-07-31)
 
 
 ### Features
 
+* add Sentry Uptime adapter (webhook + poll backstop) ([#53](https://github.com/pleaseai/statusbeam/issues/53)) ([e2970b1](https://github.com/pleaseai/statusbeam/commit/e2970b13be7f11ddb0ff3d246e4618b7acacc939))
 * badges & public status API (shields.io endpoints) ([#20](https://github.com/pleaseai/statusbeam/issues/20)) ([ed229cd](https://github.com/pleaseai/statusbeam/commit/ed229cdfdbcc301217e031cc9b28145a97f1d946))
 * close the cache-purge loop with shared Cache-Tag emit ([#10](https://github.com/pleaseai/statusbeam/issues/10)) ([193d3f9](https://github.com/pleaseai/statusbeam/commit/193d3f9c2a2ee2db5e9ba821c8462e63f5c20665))
 * **core:** add Atlassian Statuspage check adapter ([#23](https://github.com/pleaseai/statusbeam/issues/23)) ([bf53f33](https://github.com/pleaseai/statusbeam/commit/bf53f337960883149cbfdcb600d800187c0fcadd))

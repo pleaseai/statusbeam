@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.0.0 (2026-07-09)
+## 0.1.0 (2026-07-31)
 
 
 ### Features
@@ -30,4 +30,4 @@
 
 * The following workspace dependencies were updated
   * dependencies
-    * @statusbeam/core bumped to 1.0.0
+    * @statusbeam/core bumped to 0.1.0
