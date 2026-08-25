@@ -69,7 +69,7 @@ export const aigatewayConfigSchema = z
      * full `name`. When omitted the model is graded across all its endpoints and
      * the best one wins — the gateway routes around a failing provider.
      */
-    endpoint: z.string().min(1).optional(),
+    endpoint: z.string().trim().min(1).optional(),
     /** Published uptime percentage below this marks the endpoint `degraded`. */
     degradedUptime: z.number().min(0).max(100).default(99),
     /** Published uptime percentage below this marks the endpoint `down`. */

@@ -100,14 +100,17 @@ beats `up`:
 | ----------------------------------------------------------- | ---------- |
 | Published uptime < `downUptime`                             | `down`     |
 | Published uptime < `degradedUptime`                         | `degraded` |
-| Endpoint `status` is negative (deranked/disabled by the gateway) | `degraded` |
+| Endpoint `status` is any non-zero value (deranked, disabled, or unrecognized) | `degraded` |
 | Published p50 latency > `maxResponseTime`                   | `degraded` |
 | Otherwise                                                   | `up`       |
 
 **Uptime is the primary signal.** It is the one number both gateways document and
-publish consistently. The `status` integer is **undocumented** (`0` for healthy,
-`-2` and `-5` observed in the wild), so a negative value only ever yields
-`degraded` — never `down` on its own.
+publish consistently. The `status` integer is **undocumented** — `0` is the only
+value observed to mean healthy, with `-2` and `-5` seen in the wild for a
+deranked or disabled endpoint. Any non-zero value is therefore read as a
+degradation signal: an unrecognized code is not evidence of health, and a status
+page should not report a state it cannot interpret as operational. It only ever
+yields `degraded` — never `down` on its own, since its severity is unknown.
 
 When the gateway published **no uptime sample** for any window, that is silence
 rather than a verdict: the check falls through to the `status` and latency rules
@@ -185,9 +188,10 @@ status code, while a genuine network outage records `code: 0`.
 - **Shared telemetry, not yours.** A healthy verdict means the gateway is serving
   the model well *in aggregate*; your own key, region, or rate limits can still
   fail while this reads `up`.
-- **Undocumented `status`.** Its exact codes aren't published. If the gateways
-  document them later, the mapping can be tightened; until then a negative value
-  is treated as a degradation signal only.
+- **Undocumented `status`.** Its exact codes aren't published, so only `0` is
+  read as healthy and every other value is treated as a degradation signal only.
+  If the gateways document them later, the mapping can be tightened — a code
+  that turns out to mean "healthy" would currently show as `degraded`.
 - **Incidents aren't ingested.** Only current health is read.
 
 ## How it fits together

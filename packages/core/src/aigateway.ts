@@ -153,10 +153,13 @@ export function aigatewaySample(endpoint: AigatewayEndpoint, provider: Aigateway
  * publish consistently. When the gateway published none for any window, that is
  * silence rather than a verdict, so the weaker signals decide instead.
  *
- * The `status` integer is undocumented (`0` healthy, `-2`/`-5` observed in the
- * wild), so a negative value — the gateway has deranked or disabled the endpoint
- * — only ever yields `degraded`, never `down` on its own. `down` beats
- * `degraded` beats `up`.
+ * The `status` integer is undocumented: `0` is the only value observed to mean
+ * healthy, with `-2`/`-5` seen in the wild for a deranked or disabled endpoint.
+ * Any non-zero value is therefore treated as a degradation signal — an
+ * unrecognized code is not evidence of health, and a status page should not
+ * report a state it cannot interpret as operational. It only ever yields
+ * `degraded`, never `down` on its own, since its severity is unknown.
+ * `down` beats `degraded` beats `up`.
  */
 export function deriveAigatewayStatus(
   sample: AigatewaySample,
@@ -172,13 +175,94 @@ export function deriveAigatewayStatus(
       return 'degraded'
     }
   }
-  if (typeof endpointStatus === 'number' && endpointStatus < 0) {
+  if (typeof endpointStatus === 'number' && endpointStatus !== 0) {
     return 'degraded'
   }
   if (sample.latencyP50 !== undefined && sample.latencyP50 > maxResponseTime) {
     return 'degraded'
   }
   return 'up'
+}
+
+/**
+ * Pick a model's verdict from its graded endpoints: the **best** status wins,
+ * because the gateway routes around a failing provider, so one bad endpoint is
+ * not a model-level outage.
+ *
+ * Among endpoints tied at the best status, one that published a latency sample
+ * is preferred. Gateways list endpoints in their own order, and an idle endpoint
+ * with null telemetry is often listed first (Vercel lists `azure` before
+ * `openai` for `openai/gpt-5`), which would otherwise report `0` while a healthy
+ * sibling has a real p50.
+ *
+ * Throws on an empty list rather than inventing a verdict for a model with no
+ * endpoints. Callers guard that case first with a specific message; this is the
+ * backstop, and {@link gradeAigatewayResponse} turns it into a `down` result.
+ */
+function bestAigatewayEndpoint(
+  endpoints: AigatewayEndpoint[],
+  cfg: AigatewayConfig,
+  maxResponseTime: number,
+): { sample: AigatewaySample, status: CheckStatus } {
+  let best: { sample: AigatewaySample, status: CheckStatus } | undefined
+  for (const endpoint of endpoints) {
+    const sample = aigatewaySample(endpoint, cfg.provider)
+    const candidate = { sample, status: deriveAigatewayStatus(sample, endpoint.status, cfg, maxResponseTime) }
+    if (best === undefined) {
+      best = candidate
+      continue
+    }
+    const delta = AIGATEWAY_STATUS_RANK[candidate.status] - AIGATEWAY_STATUS_RANK[best.status]
+    const breaksTie = delta === 0
+      && best.sample.latencyP50 === undefined
+      && candidate.sample.latencyP50 !== undefined
+    if (delta > 0 || breaksTie) {
+      best = candidate
+    }
+  }
+  if (best === undefined) {
+    throw new Error('AI Gateway endpoint list is empty')
+  }
+  return best
+}
+
+/**
+ * Phase 2 of {@link checkAigateway}: parse the endpoints payload and grade it.
+ *
+ * The request already completed, so the real HTTP status is preserved in `code`
+ * — a payload/config problem (unknown endpoint name, changed schema) is
+ * deterministic and distinct from a network outage, and collapsing it to
+ * `code: 0` would make a persistent misconfiguration look like flakiness in the
+ * persisted history.
+ */
+async function gradeAigatewayResponse(
+  site: Site,
+  cfg: AigatewayConfig,
+  res: Response,
+  checkedAt: string,
+): Promise<CheckResult> {
+  const base = { slug: site.slug, code: res.status, responseTime: 0, checkedAt }
+  try {
+    const parsed = aigatewayEndpointsSchema.safeParse(await res.json())
+    if (!parsed.success) {
+      return { ...base, status: 'down', error: `AI Gateway endpoints payload failed validation: ${parsed.error.message}` }
+    }
+    const endpoints = selectAigatewayEndpoint(parsed.data.data.endpoints, cfg.endpoint)
+    if (endpoints.length === 0) {
+      return { ...base, status: 'down', error: `AI Gateway model publishes no endpoints: ${cfg.model}` }
+    }
+    const best = bestAigatewayEndpoint(endpoints, cfg, site.maxResponseTime)
+    return {
+      ...base,
+      status: best.status,
+      // Round: the persisted `response_time` column is an INTEGER, and gateways
+      // publish fractional milliseconds.
+      responseTime: Math.round(best.sample.latencyP50 ?? 0),
+    }
+  }
+  catch (err) {
+    return { ...base, status: 'down', error: err instanceof Error ? err.message : String(err) }
+  }
 }
 
 /**
@@ -204,8 +288,7 @@ export async function checkAigateway(
 ): Promise<CheckResult> {
   const fetchImpl = deps.fetchImpl ?? fetch
   const now = deps.now ?? Date.now
-  const start = now()
-  const checkedAt = new Date(start).toISOString()
+  const checkedAt = new Date(now()).toISOString()
   const cfg = site.aigateway
 
   if (!cfg) {
@@ -219,19 +302,17 @@ export async function checkAigateway(
     }
   }
 
-  const url = aigatewayEndpointsUrl(cfg)
-
-  // Every failure path below reports `responseTime: 0`: this adapter's response
-  // time is the *published* model latency, and a failed check has none. Timing
-  // the gateway's own API instead would inject its round-trip (tens of ms) into
-  // a series that otherwise holds model latencies (hundreds to thousands),
+  // Every failure path reports `responseTime: 0`: this adapter's response time
+  // is the *published* model latency, and a failed check has none. Timing the
+  // gateway's own API instead would inject its round-trip (tens of ms) into a
+  // series that otherwise holds model latencies (hundreds to thousands),
   // because ingest persists `response_time` for down results too.
   //
   // Phase 1: the network round-trip. A throw means the request never completed,
   // so `code: 0` is the honest signal (per CheckResult.code).
   let res: Response
   try {
-    res = await fetchImpl(url, {
+    res = await fetchImpl(aigatewayEndpointsUrl(cfg), {
       method: 'GET',
       redirect: 'follow',
       // Cap the round-trip so a slow/hung gateway API can't stall the cron tick;
@@ -255,57 +336,5 @@ export async function checkAigateway(
     return { slug: site.slug, status: 'down', code: res.status, responseTime: 0, checkedAt, error: `AI Gateway API returned ${res.status}` }
   }
 
-  // Phase 2: parse and grade. The request completed, so preserve the real HTTP
-  // status in `code` — a payload/config problem (unknown endpoint name, changed
-  // schema) is deterministic and distinct from a network outage, and collapsing
-  // it to `code: 0` would make a persistent misconfiguration look like flakiness
-  // in the persisted history.
-  try {
-    const parsed = aigatewayEndpointsSchema.safeParse(await res.json())
-    if (!parsed.success) {
-      return { slug: site.slug, status: 'down', code: res.status, responseTime: 0, checkedAt, error: `AI Gateway endpoints payload failed validation: ${parsed.error.message}` }
-    }
-    const endpoints = selectAigatewayEndpoint(parsed.data.data.endpoints, cfg.endpoint)
-    if (endpoints.length === 0) {
-      return { slug: site.slug, status: 'down', code: res.status, responseTime: 0, checkedAt, error: `AI Gateway model publishes no endpoints: ${cfg.model}` }
-    }
-    const graded = endpoints.map((endpoint) => {
-      const sample = aigatewaySample(endpoint, cfg.provider)
-      return { sample, status: deriveAigatewayStatus(sample, endpoint.status, cfg, site.maxResponseTime) }
-    })
-    const best = graded.reduce((a, b) => {
-      const delta = AIGATEWAY_STATUS_RANK[b.status] - AIGATEWAY_STATUS_RANK[a.status]
-      if (delta > 0) {
-        return b
-      }
-      // Among endpoints tied at the best status, prefer one that published a
-      // latency sample. The gateway lists endpoints in its own order, and an
-      // idle endpoint with null telemetry is often listed first (Vercel lists
-      // `azure` before `openai` for `openai/gpt-5`), which would otherwise
-      // report `0` while a healthy sibling has a real p50.
-      if (delta === 0 && a.sample.latencyP50 === undefined && b.sample.latencyP50 !== undefined) {
-        return b
-      }
-      return a
-    })
-    return {
-      slug: site.slug,
-      status: best.status,
-      code: res.status,
-      // Round: the persisted `response_time` column is an INTEGER, and gateways
-      // publish fractional milliseconds.
-      responseTime: Math.round(best.sample.latencyP50 ?? 0),
-      checkedAt,
-    }
-  }
-  catch (err) {
-    return {
-      slug: site.slug,
-      status: 'down',
-      code: res.status,
-      responseTime: 0,
-      checkedAt,
-      error: err instanceof Error ? err.message : String(err),
-    }
-  }
+  return gradeAigatewayResponse(site, cfg, res, checkedAt)
 }

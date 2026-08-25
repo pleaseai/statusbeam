@@ -125,6 +125,22 @@ describe('parseConfig with an aigateway site', () => {
     expect(config.sites[0]?.aigateway?.downUptime).toBe(80)
   })
 
+  // A whitespace-only endpoint would pass a bare `.min(1)`, then trim to '' in
+  // selectAigatewayEndpoint, match nothing, and record the site down on every
+  // run. Trimming first turns that typo into a config error at load time.
+  it('rejects a whitespace-only endpoint', () => {
+    expect(() =>
+      parseConfig(`${aigatewayYaml}      provider: openrouter\n      model: anthropic/claude-opus-4.5\n      endpoint: "   "\n`),
+    ).toThrow()
+  })
+
+  it('trims surrounding whitespace from an endpoint', () => {
+    const config = parseConfig(
+      `${aigatewayYaml}      provider: openrouter\n      model: anthropic/claude-opus-4.5\n      endpoint: "  amazon-bedrock  "\n`,
+    )
+    expect(config.sites[0]?.aigateway?.endpoint).toBe('amazon-bedrock')
+  })
+
   it('rejects an unknown provider', () => {
     expect(() => parseConfig(`${aigatewayYaml}      provider: bedrock\n      model: anthropic/claude-opus-4.5\n`)).toThrow()
   })

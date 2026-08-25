@@ -230,6 +230,19 @@ describe('deriveAigatewayStatus', () => {
     expect(deriveAigatewayStatus({ ...window, uptime: 100 }, -5, cfg, 5000)).toBe('degraded')
   })
 
+  // The `status` integer is undocumented, so only `0` is evidence of health. An
+  // unrecognized positive code must not read as operational just because we have
+  // never seen it.
+  it('is degraded for an unknown non-zero endpoint status', () => {
+    expect(deriveAigatewayStatus({ ...window, uptime: 100 }, 1, cfg, 5000)).toBe('degraded')
+    expect(deriveAigatewayStatus({ ...window, uptime: 100 }, 3, cfg, 5000)).toBe('degraded')
+  })
+
+  it('ignores a missing endpoint status rather than treating it as unhealthy', () => {
+    expect(deriveAigatewayStatus({ ...window, uptime: 100 }, null, cfg, 5000)).toBe('up')
+    expect(deriveAigatewayStatus({ ...window, uptime: 100 }, undefined, cfg, 5000)).toBe('up')
+  })
+
   it('is degraded when the published p50 exceeds maxResponseTime', () => {
     expect(deriveAigatewayStatus({ ...window, uptime: 100, latencyP50: 6000 }, 0, cfg, 5000)).toBe('degraded')
   })
