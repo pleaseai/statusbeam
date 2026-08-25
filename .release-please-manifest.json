@@ -1,7 +1,7 @@
 {
-  "packages/core": "0.1.0",
-  "apps/worker": "0.1.0",
-  "apps/web": "0.1.0",
-  "packages/cli": "0.1.0",
-  "packages/create-statusbeam": "0.1.0"
+  "packages/core": "0.2.0",
+  "apps/worker": "0.1.1",
+  "apps/web": "0.1.1",
+  "packages/cli": "0.1.1",
+  "packages/create-statusbeam": "0.2.0"
 }
