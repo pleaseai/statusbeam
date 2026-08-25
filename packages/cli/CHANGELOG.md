@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.1.1](https://github.com/pleaseai/statusbeam/compare/cli-v0.1.0...cli-v0.1.1) (2026-08-25)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @statusbeam/core bumped to 0.2.0
+    * @statusbeam/web bumped to 0.1.1
+    * @statusbeam/worker bumped to 0.1.1
+
 ## 0.1.0 (2026-07-31)
 
 

@@ -1,7 +1,7 @@
 {
   "name": "@statusbeam/worker",
   "type": "module",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "StatusBeam check Worker — probes your services on a cron and writes results to D1 + KV.",
   "license": "MIT",
   "homepage": "https://github.com/pleaseai/statusbeam/tree/main/apps/worker#readme",
