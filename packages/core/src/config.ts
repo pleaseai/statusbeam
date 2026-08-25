@@ -1,5 +1,6 @@
 import { parse as parseYaml } from 'yaml'
 import { z } from 'zod'
+import { aigatewayEndpointsUrl } from './aigateway'
 import { DEFAULT_LOCALE, LOCALES } from './i18n'
 
 /**
@@ -8,8 +9,10 @@ import { DEFAULT_LOCALE, LOCALES } from './i18n'
  * `statuspage` code path (see check.ts). `sentry` mirrors a Sentry Uptime
  * monitor: the primary path is an inbound issue webhook (`POST /webhooks/sentry/:slug`),
  * with an optional poll backstop that reads Sentry's Issues API (see sentry.ts).
+ * `aigateway` reads a model's published endpoint health from the Vercel AI
+ * Gateway or OpenRouter (see aigateway.ts).
  */
-export const checkKindSchema = z.enum(['http', 'tcp', 'ssl', 'statuspage', 'incidentio', 'sentry'])
+export const checkKindSchema = z.enum(['http', 'tcp', 'ssl', 'statuspage', 'incidentio', 'sentry', 'aigateway'])
 export type CheckKind = z.infer<typeof checkKindSchema>
 
 /**
@@ -42,6 +45,49 @@ export const sentryConfigSchema = z.object({
 })
 export type SentryConfig = z.infer<typeof sentryConfigSchema>
 
+/** Which model-routing gateway publishes the endpoint health we read. */
+export const aigatewayProviderSchema = z.enum(['vercel', 'openrouter'])
+export type AigatewayProvider = z.infer<typeof aigatewayProviderSchema>
+
+/**
+ * Settings for a `check: aigateway` site: which model, on which gateway, and the
+ * uptime thresholds that turn the gateway's published telemetry into a verdict.
+ * Both gateways expose this data unauthenticated, so no token is involved — and
+ * no probe traffic is sent to the model (see aigateway.ts).
+ */
+export const aigatewayConfigSchema = z
+  .object({
+    /** The gateway that publishes the telemetry. */
+    provider: aigatewayProviderSchema,
+    /** Model id in `creator/model` form, e.g. `anthropic/claude-opus-4.5`. */
+    model: z
+      .string()
+      .regex(/^[^/\s]+\/[^/\s]+$/, 'model must be in creator/model form, e.g. anthropic/claude-opus-4.5'),
+    /**
+     * Optional single endpoint (one provider serving the model) to track,
+     * matched case-insensitively against `tag`, then `provider_name`, then the
+     * full `name`. When omitted the model is graded across all its endpoints and
+     * the best one wins — the gateway routes around a failing provider.
+     */
+    endpoint: z.string().min(1).optional(),
+    /** Published uptime percentage below this marks the endpoint `degraded`. */
+    degradedUptime: z.number().min(0).max(100).default(99),
+    /** Published uptime percentage below this marks the endpoint `down`. */
+    downUptime: z.number().min(0).max(100).default(50),
+  })
+  .superRefine((cfg, ctx) => {
+    // An inverted pair would make `down` unreachable (or swallow `degraded`
+    // entirely); catch it at parse time rather than grading with it.
+    if (cfg.downUptime > cfg.degradedUptime) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['downUptime'],
+        message: `downUptime must be at or below degradedUptime (got ${cfg.downUptime} > ${cfg.degradedUptime})`,
+      })
+    }
+  })
+export type AigatewayConfig = z.infer<typeof aigatewayConfigSchema>
+
 /** Turn a human name into a stable, URL-safe slug. */
 export function slugify(input: string): string {
   return input
@@ -54,7 +100,12 @@ export function slugify(input: string): string {
 export const siteSchema = z
   .object({
     name: z.string().min(1),
-    url: z.string().url(),
+    /**
+     * The endpoint to check, or the status-page base URL for the mirroring
+     * adapters. Optional only for `check: aigateway`, whose URL is derived from
+     * the `aigateway` block; required for every other kind (see superRefine).
+     */
+    url: z.string().url().optional(),
     check: checkKindSchema.default('http'),
     method: z.string().default('GET'),
     expectedStatusCodes: z.array(z.number().int()).default([200]),
@@ -74,6 +125,12 @@ export const siteSchema = z
      * at parse time for other check kinds (see superRefine below).
      */
     sentry: sentryConfigSchema.optional(),
+    /**
+     * For `check: aigateway` only — which model on which gateway to read (see
+     * {@link aigatewayConfigSchema}). Required for that kind and rejected at
+     * parse time for every other one (see superRefine below).
+     */
+    aigateway: aigatewayConfigSchema.optional(),
     /**
      * Optional explicit slug; defaults to slugify(name). Constrained to the
      * same charset slugify emits so it's safe to embed in a `Cache-Tag` (no
@@ -102,8 +159,42 @@ export const siteSchema = z
         message: `sentry config is only valid with check: sentry (got check: ${site.check})`,
       })
     }
+    // Same for the `aigateway` block — and unlike `sentry` it is *required* for
+    // its kind: there is no webhook path, so without it the check has no model
+    // to read and no URL to derive.
+    if (site.aigateway !== undefined && site.check !== 'aigateway') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['aigateway'],
+        message: `aigateway config is only valid with check: aigateway (got check: ${site.check})`,
+      })
+    }
+    if (site.aigateway === undefined && site.check === 'aigateway') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['aigateway'],
+        message: 'aigateway config is required for check: aigateway',
+      })
+    }
+    // Every other kind fetches (or displays) a URL the user supplies. `url` is
+    // optional in the object schema only so an `aigateway` site can omit it.
+    if (site.url === undefined && site.check !== 'aigateway') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['url'],
+        message: `url is required for check: ${site.check}`,
+      })
+    }
   })
-  .transform(site => ({ ...site, slug: site.slug ?? slugify(site.name) }))
+  .transform(site => ({
+    ...site,
+    slug: site.slug ?? slugify(site.name),
+    // An `aigateway` site needs no user-supplied URL — the gateway's endpoints
+    // URL *is* the thing being read — so derive it and keep `Site['url']` a
+    // plain string for everything downstream. The refinement above guarantees
+    // the block is present for that kind, so the `''` fallback is unreachable.
+    url: site.url ?? (site.aigateway ? aigatewayEndpointsUrl(site.aigateway) : ''),
+  }))
 
 export type Site = z.infer<typeof siteSchema>
 

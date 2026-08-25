@@ -55,6 +55,37 @@ describe('checkSite', () => {
     expect(result.code).toBe(200)
     expect(result.slug).toBe('example')
   })
+
+  it('dispatches an aigateway check to the gateway adapter', async () => {
+    const aigatewaySite = siteSchema.parse({
+      name: 'Claude Opus 4.5',
+      check: 'aigateway',
+      aigateway: { provider: 'vercel', model: 'anthropic/claude-opus-4.5' },
+    })
+    const seen: string[] = []
+    const result = await checkSite(aigatewaySite, {
+      fetchImpl: (url) => {
+        seen.push(url)
+        return Promise.resolve(new Response(JSON.stringify({
+          data: {
+            id: 'anthropic/claude-opus-4.5',
+            endpoints: [{
+              provider_name: 'anthropic',
+              status: 0,
+              uptime_last_1h: 100,
+              latency_last_1h: { p50: 814, p95: 1673 },
+            }],
+          },
+        }), { status: 200 }))
+      },
+      now: () => 0,
+    })
+    expect(seen[0]).toBe('https://ai-gateway.vercel.sh/v1/models/anthropic/claude-opus-4.5/endpoints')
+    expect(result.status).toBe('up')
+    expect(result.code).toBe(200)
+    // The gateway's published p50, not the round-trip of the API call.
+    expect(result.responseTime).toBe(814)
+  })
 })
 
 describe('statuspageSummaryUrl', () => {

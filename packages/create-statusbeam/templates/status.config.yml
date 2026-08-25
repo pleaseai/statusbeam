@@ -6,7 +6,7 @@ name: Acme Status
 sites:
   - name: Website
     url: https://example.com
-    check: http # http | tcp | ssl | statuspage
+    check: http # http | tcp | ssl | statuspage | incidentio | sentry | aigateway
     expectedStatusCodes: [200]
     maxResponseTime: 2000 # ms; slower responses are marked "degraded"
   - name: API

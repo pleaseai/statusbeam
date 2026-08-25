@@ -1,6 +1,7 @@
 import type { Site } from './config'
 import type { CheckResult, CheckStatus } from './types'
 import { z } from 'zod'
+import { checkAigateway } from './aigateway'
 import { checkSentry } from './sentry'
 
 /** Minimal fetch signature so callers (and tests) can pass any compatible impl. */
@@ -33,7 +34,10 @@ export function deriveStatus(
  * API, and `incidentio` reads an incident.io status page — which serves a
  * Statuspage-compatible `summary.json`, so it shares the same code path. `sentry`
  * reads a Sentry Uptime monitor's issue state via the Issues API (needs the
- * injected `sentryToken`; see sentry.ts). Every other kind (`http`/`tcp`/`ssl`)
+ * injected `sentryToken`; see sentry.ts). `aigateway` reads a model's published
+ * endpoint health from the Vercel AI Gateway or OpenRouter — telemetry the
+ * gateway already collects, so no probe traffic is sent to the model (see
+ * aigateway.ts). Every other kind (`http`/`tcp`/`ssl`)
  * currently falls through to a plain HTTP fetch. `tcp`/`ssl` runtime probing is
  * tracked in the roadmap.
  */
@@ -48,6 +52,9 @@ export async function checkSite(
   }
   if (site.check === 'sentry') {
     return checkSentry(site, { fetchImpl, now, token: deps.sentryToken })
+  }
+  if (site.check === 'aigateway') {
+    return checkAigateway(site, { fetchImpl, now })
   }
   return checkHttp(site, fetchImpl, now)
 }
