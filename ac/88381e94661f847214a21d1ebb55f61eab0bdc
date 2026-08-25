@@ -1,0 +1,23 @@
+.please/docs/review/rejected-findings.jsonl
+  s_49ea55b0d847d9::t_f4d3ab0f3e285c 1
+docs/adapters/aigateway.md
+  s_49ea55b0d847d9::t_1dde3dd36fa457 126-130
+packages/core/src/aigateway.ts
+  s_49ea55b0d847d9::t_1dde3dd36fa457 128-134
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "ac88381e94661f847214a21d1ebb55f61eab0bdc",
+  "prompts": {},
+  "sessions": {
+    "s_49ea55b0d847d9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fe86b2df-9919-493e-9ad8-98fe20e76e41",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Minsu Lee <minsu.lee@pleaseai.dev>"
+    }
+  }
+}
