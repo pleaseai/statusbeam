@@ -1,3 +1,4 @@
+export * from './aigateway'
 export * from './badge'
 export * from './cache'
 export * from './check'

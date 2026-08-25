@@ -84,6 +84,95 @@ describe('parseConfig', () => {
   })
 })
 
+const aigatewayYaml = `
+name: Example Status
+sites:
+  - name: Claude Opus 4.5
+    check: aigateway
+    aigateway:
+`
+
+describe('parseConfig with an aigateway site', () => {
+  it('parses a minimal aigateway site and applies the uptime defaults', () => {
+    const config = parseConfig(`${aigatewayYaml}      provider: vercel\n      model: anthropic/claude-opus-4.5\n`)
+    const site = config.sites[0]
+    expect(site?.check).toBe('aigateway')
+    expect(site?.aigateway?.provider).toBe('vercel')
+    expect(site?.aigateway?.model).toBe('anthropic/claude-opus-4.5')
+    expect(site?.aigateway?.degradedUptime).toBe(99)
+    expect(site?.aigateway?.downUptime).toBe(50)
+    expect(site?.aigateway?.endpoint).toBeUndefined()
+  })
+
+  it('fills url with the gateway endpoints URL when the site omits it', () => {
+    const config = parseConfig(`${aigatewayYaml}      provider: openrouter\n      model: anthropic/claude-opus-4.5\n`)
+    expect(config.sites[0]?.url).toBe('https://openrouter.ai/api/v1/models/anthropic/claude-opus-4.5/endpoints')
+  })
+
+  it('keeps an explicit url when one is given', () => {
+    const config = parseConfig(
+      `${aigatewayYaml}      provider: vercel\n      model: anthropic/claude-opus-4.5\n    url: https://example.com\n`,
+    )
+    expect(config.sites[0]?.url).toBe('https://example.com')
+  })
+
+  it('accepts an endpoint and custom uptime thresholds', () => {
+    const config = parseConfig(
+      `${aigatewayYaml}      provider: openrouter\n      model: anthropic/claude-opus-4.5\n      endpoint: amazon-bedrock\n      degradedUptime: 95\n      downUptime: 80\n`,
+    )
+    expect(config.sites[0]?.aigateway?.endpoint).toBe('amazon-bedrock')
+    expect(config.sites[0]?.aigateway?.degradedUptime).toBe(95)
+    expect(config.sites[0]?.aigateway?.downUptime).toBe(80)
+  })
+
+  // A whitespace-only endpoint would pass a bare `.min(1)`, then trim to '' in
+  // selectAigatewayEndpoint, match nothing, and record the site down on every
+  // run. Trimming first turns that typo into a config error at load time.
+  it('rejects a whitespace-only endpoint', () => {
+    expect(() =>
+      parseConfig(`${aigatewayYaml}      provider: openrouter\n      model: anthropic/claude-opus-4.5\n      endpoint: "   "\n`),
+    ).toThrow()
+  })
+
+  it('trims surrounding whitespace from an endpoint', () => {
+    const config = parseConfig(
+      `${aigatewayYaml}      provider: openrouter\n      model: anthropic/claude-opus-4.5\n      endpoint: "  amazon-bedrock  "\n`,
+    )
+    expect(config.sites[0]?.aigateway?.endpoint).toBe('amazon-bedrock')
+  })
+
+  it('rejects an unknown provider', () => {
+    expect(() => parseConfig(`${aigatewayYaml}      provider: bedrock\n      model: anthropic/claude-opus-4.5\n`)).toThrow()
+  })
+
+  it('rejects a model that is not in creator/model form', () => {
+    expect(() => parseConfig(`${aigatewayYaml}      provider: vercel\n      model: claude-opus-4.5\n`)).toThrow()
+    expect(() => parseConfig(`${aigatewayYaml}      provider: vercel\n      model: a/b/c\n`)).toThrow()
+  })
+
+  it('rejects downUptime above degradedUptime', () => {
+    expect(() =>
+      parseConfig(`${aigatewayYaml}      provider: vercel\n      model: anthropic/claude-opus-4.5\n      degradedUptime: 90\n      downUptime: 95\n`),
+    ).toThrow()
+  })
+
+  it('rejects check: aigateway without an aigateway block', () => {
+    expect(() => parseConfig(`${baseYaml}    check: aigateway\n`)).toThrow()
+  })
+
+  it('rejects an aigateway block on a non-aigateway check kind', () => {
+    expect(() =>
+      parseConfig(`${baseYaml}    check: http\n    aigateway:\n      provider: vercel\n      model: anthropic/claude-opus-4.5\n`),
+    ).toThrow()
+  })
+
+  it('rejects a site with no url on a non-aigateway check kind', () => {
+    // `url` is optional in the schema only so an aigateway site can omit it;
+    // every other kind still has to supply one.
+    expect(() => parseConfig('name: Example Status\nsites:\n  - name: Example\n    check: http\n')).toThrow()
+  })
+})
+
 describe('theme.locale', () => {
   it('defaults to en when theme is absent', () => {
     expect(parseConfig(baseYaml).theme.locale).toBe('en')

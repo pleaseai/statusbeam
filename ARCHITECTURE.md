@@ -106,8 +106,9 @@ Root config: `package.json` (Bun `1.3.14` workspaces `apps/*`, `packages/*`),
 1. Cron fires → `scheduled()` in `apps/worker/src/index.ts`.
 2. `loadConfig()` reads YAML from KV key `config`, validates via `parseConfig()`
    (`packages/core/src/config.ts`).
-3. `checkSite(site)` probes each service — HTTP, Atlassian Statuspage, or a
-   Sentry Uptime monitor's issue state (`packages/core/src/check.ts`).
+3. `checkSite(site)` probes each service — HTTP, Atlassian Statuspage, a
+   Sentry Uptime monitor's issue state, or a model endpoint's published health on
+   the Vercel AI Gateway / OpenRouter (`packages/core/src/check.ts`).
 4. Results are batch-inserted into the D1 `checks` table (`apps/worker/schema.sql`).
 5. `writeSummary()` aggregates D1 history (GROUP BY slug/day) into a
    `SiteSummary[]` snapshot and writes KV key `summary`.

@@ -6,7 +6,7 @@ name: Acme Status
 sites:
   - name: Website
     url: https://example.com
-    check: http # http | tcp | ssl | statuspage | incidentio | sentry
+    check: http # http | tcp | ssl | statuspage | incidentio | sentry | aigateway
     expectedStatusCodes: [200]
     maxResponseTime: 2000 # ms; slower responses are marked "degraded"
   - name: API
@@ -51,6 +51,28 @@ sites:
     check: sentry
     sentry:
       org: my-org
+
+  # Track a model endpoint's health as published by the Vercel AI Gateway or
+  # OpenRouter. Reads the gateway's own production telemetry — no probe traffic
+  # is sent to the model, so no tokens are spent and no API key is needed. `url`
+  # is derived from provider + model. See docs/adapters/aigateway.md.
+  - name: Claude Opus 4.5
+    check: aigateway
+    aigateway:
+      provider: vercel # vercel | openrouter
+      model: anthropic/claude-opus-4.5 # creator/model
+  # Add `endpoint` to grade one provider endpoint instead of the whole model
+  # (matched on tag, provider name, or full name — curl the endpoints URL to see
+  # them). Without it every endpoint is graded and the best one wins.
+  - name: Claude Opus 4.5 (Bedrock)
+    check: aigateway
+    maxResponseTime: 3000 # compared against the gateway's published p50
+    aigateway:
+      provider: openrouter
+      model: anthropic/claude-opus-4.5
+      endpoint: amazon-bedrock
+      degradedUptime: 99 # published uptime % below this ⇒ degraded
+      downUptime: 50 # published uptime % below this ⇒ down
 
 # All optional. Keep the real Slack URL in the private config you upload to KV,
 # not in this committed example (the webhook URL is a secret).

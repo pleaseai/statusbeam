@@ -170,7 +170,7 @@ name: Acme Status
 sites:
   - name: Website
     url: https://example.com
-    check: http # http | tcp | ssl | statuspage | incidentio
+    check: http # http | tcp | ssl | statuspage | incidentio | sentry | aigateway
     expectedStatusCodes: [200]
     maxResponseTime: 2000 # ms → "degraded" above this
   - name: API
@@ -209,6 +209,7 @@ Each site sets a `check` kind:
 | `statuspage` | Mirrors an Atlassian Statuspage's own verdict. See the [Statuspage adapter guide](./docs/adapters/statuspage.md).|
 | `incidentio` | Mirrors an [incident.io](https://incident.io) status page (Statuspage-compatible). See the [incident.io adapter guide](./docs/adapters/incidentio.md).|
 | `sentry`     | Mirrors a [Sentry Uptime](https://docs.sentry.io/product/uptime-monitoring/) monitor via issue webhook (real-time) + optional poll backstop. See the [Sentry adapter guide](./docs/adapters/sentry.md).|
+| `aigateway`  | Reads a model endpoint's published health from the [Vercel AI Gateway](https://vercel.com/docs/ai-gateway) or [OpenRouter](https://openrouter.ai/docs). See the [AI Gateway adapter guide](./docs/adapters/aigateway.md).|
 
 The **Statuspage adapter** reads a vendor's `/api/v2/summary.json` (Claude,
 Vercel, `*.statuspage.io`, …) and maps their overall indicator — or a single
@@ -227,6 +228,16 @@ verdict in real time from a Sentry issue webhook (`POST /webhooks/sentry/:slug`)
 with an optional cron poll of Sentry's Issues API as the backstop. Binary
 (`up`/`down`). Setup, status mapping, and the webhook-only vs. poll modes:
 [`docs/adapters/sentry.md`](./docs/adapters/sentry.md).
+
+The **AI Gateway adapter** puts a model's health on your status page by reading
+what the [Vercel AI Gateway](https://vercel.com/docs/ai-gateway) or
+[OpenRouter](https://openrouter.ai/docs) already publishes about the providers
+serving it — uptime and latency from their own production traffic. It sends no
+probe requests to the model, so it spends **no tokens** and needs no API key.
+Grade the whole model (best endpoint wins, since the gateway routes around a
+failing provider) or one provider endpoint by name. Note the two gateways
+aggregate over different windows, and OpenRouter currently publishes no latency:
+[`docs/adapters/aigateway.md`](./docs/adapters/aigateway.md).
 
 ### Internationalization
 
@@ -349,6 +360,7 @@ fork-from-source appendix — is in **[DEPLOYMENT.md](./DEPLOYMENT.md)**.
 - [x] **incident.io adapter** — mirror any incident.io status page by page or component ([guide](./docs/adapters/incidentio.md)).
 - [x] **Statuspage webhooks** — real-time ingest via `POST /webhooks/statuspage/:slug`, cron as the backstop ([guide](./docs/adapters/statuspage.md#real-time-updates-via-webhooks)).
 - [x] **Sentry Uptime adapter** — mirror a [Sentry Uptime](https://docs.sentry.io/product/uptime-monitoring/) monitor via issue webhook (`POST /webhooks/sentry/:slug`) + optional Issues-API poll backstop ([guide](./docs/adapters/sentry.md)).
+- [x] **AI Gateway adapter** — track a model endpoint's published health on the [Vercel AI Gateway](https://vercel.com/docs/ai-gateway) or [OpenRouter](https://openrouter.ai/docs), token-free ([guide](./docs/adapters/aigateway.md)).
 
 **In progress / planned**
 

@@ -20,7 +20,7 @@ name: Acme Status
 sites:
   - name: Website
     url: https://example.com
-    check: http # http | tcp | ssl | statuspage | incidentio
+    check: http # http | tcp | ssl | statuspage | incidentio | sentry | aigateway
     expectedStatusCodes: [200]
     maxResponseTime: 2000 # ms; slower responses are marked "degraded"
   - name: API
@@ -63,11 +63,13 @@ theme:
 | Field                 | Type       | Notes                                                              |
 | --------------------- | ---------- | ------------------------------------------------------------------ |
 | `name`                | string     | Display name for the service.                                      |
-| `url`                 | string     | Endpoint to check (or status-page base URL for `statuspage`/`incidentio`).|
-| `check`               | enum       | `http` \| `tcp` \| `ssl` \| `statuspage` \| `incidentio`.          |
+| `url`                 | string     | Endpoint to check (or status-page base URL for `statuspage`/`incidentio`). Optional for `aigateway`, which derives it from the gateway and model. |
+| `check`               | enum       | `http` \| `tcp` \| `ssl` \| `statuspage` \| `incidentio` \| `sentry` \| `aigateway`. |
 | `expectedStatusCodes` | number[]   | Codes treated as healthy (HTTP checks).                            |
 | `maxResponseTime`     | number     | Milliseconds; slower responses are marked **degraded**.            |
 | `component`           | string     | For `statuspage`/`incidentio`: track one component by name (case-insensitive) or id. |
+| `sentry`              | object     | For `check: sentry`: enables the Issues-API poll backstop (`org`, optional `project`/`query`/`host`). Omit for a webhook-only site. |
+| `aigateway`           | object     | Required for `check: aigateway`: `provider` (`vercel` \| `openrouter`), `model` (`creator/model`), optional `endpoint`, `degradedUptime`, `downUptime`. |
 
 ### `notifications`
 
