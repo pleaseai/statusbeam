@@ -1,0 +1,69 @@
+packages/core/src/index.ts
+  s_49ea55b0d847d9::t_e113e589ffdc9b 1
+packages/core/src/check.test.ts
+  s_49ea55b0d847d9::t_268df453f75cbc 58-88
+packages/core/src/config.test.ts
+  s_49ea55b0d847d9::t_d799674036af8f 87-159
+packages/core/src/aigateway.ts
+  s_49ea55b0d847d9::t_37fdc10e4f14a9 221-226,228,245,252,259,273-287
+  s_49ea55b0d847d9::t_c0e6bd4cee5d21 1-194,197-220,227,229-244,246-251,253-258,260-272,288-308
+  s_49ea55b0d847d9::t_d2789c0dfe847c 195-196
+docs/adapters/aigateway.md
+  s_49ea55b0d847d9::t_a6fa6b35725fa3 119-122
+  s_49ea55b0d847d9::t_bb016a9335caa3 161-162,167-173
+  s_49ea55b0d847d9::t_f4d2b783890bc8 1-66,68-118,123-160,163-166,174-205
+  s_49ea55b0d847d9::t_f77f54d802240c 67
+packages/create-statusbeam/templates/status.config.yml
+  s_49ea55b0d847d9::t_3043155165bef2 9
+status.config.example.yml
+  s_49ea55b0d847d9::t_2cd47b51e68f0b 9
+  s_49ea55b0d847d9::t_af41dcca9caa8b 55-76
+README.md
+  s_49ea55b0d847d9::t_f6e6315b85ce8d 173
+  s_49ea55b0d847d9::t_9924a2ba6b8c17 363
+  s_49ea55b0d847d9::t_056f8011c37e63 212
+  s_49ea55b0d847d9::t_336ef84eaa7c1e 232-241
+packages/core/src/config.ts
+  s_49ea55b0d847d9::t_6fd309fb2f23f8 48-90
+  s_49ea55b0d847d9::t_c767de16223ccf 129-133
+  s_49ea55b0d847d9::t_3d9a4e7a37c51c 3,12-13,15
+  s_49ea55b0d847d9::t_4210f312ffebae 162-187,189-197
+  s_49ea55b0d847d9::t_ed1c340518d9f0 103-108,128
+packages/core/src/check.ts
+  s_49ea55b0d847d9::t_775a867cbed72e 37-40,56-57
+  s_49ea55b0d847d9::t_a517207bf042a1 4
+  s_aa5dc262ab7afa::t_907288a95a0e08 58
+packages/core/src/aigateway.test.ts
+  s_49ea55b0d847d9::t_338faeb1ec9c47 385-388,391,395,400,403,407
+  s_49ea55b0d847d9::t_4a3a452aaf4fc7 291-342
+  s_49ea55b0d847d9::t_596821b93a428d 1-290,343-384,389-390,392-394,396-399,401-402,404-406,408-436
+ARCHITECTURE.md
+  s_49ea55b0d847d9::t_b18e0f3a2efee3 109-111
+apps/docs/src/content/docs/guides/configuration.mdx
+  s_49ea55b0d847d9::t_18ac0b33fc8d4d 23
+  s_49ea55b0d847d9::t_846d2209321932 66-67,71-72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "bad4b991857417d750c7002104db1da47bca28f8",
+  "prompts": {},
+  "sessions": {
+    "s_49ea55b0d847d9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fe86b2df-9919-493e-9ad8-98fe20e76e41",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Minsu Lee <minsu.lee@pleaseai.dev>"
+    },
+    "s_aa5dc262ab7afa": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bdfcb745-a54d-41c3-b238-7adfef9a4956",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Minsu Lee <minsu.lee@pleaseai.dev>"
+    }
+  }
+}
