@@ -123,9 +123,11 @@ ones.
 
 ## Aggregation windows differ per gateway
 
-The two gateways aggregate over **different windows**, and StatusBeam reads the
-narrowest one each publishes, falling back to a wider window when the narrow one
-is `null` (routine for a low-traffic endpoint):
+The two gateways aggregate over **different windows**. StatusBeam reads each
+gateway's headline aggregate first — the same window its latency figure covers,
+so one check describes one time slice — and falls back to a shorter window, then
+to `1d`, only when the gateway published `null` there (routine for a low-traffic
+endpoint, which has usually nulled the shorter window too):
 
 | Provider     | Uptime windows (in order) | Latency window |
 | ------------ | ------------------------- | -------------- |

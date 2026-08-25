@@ -125,10 +125,13 @@ function latencyP50(latency: AigatewayLatency): number | undefined {
  * Resolve one endpoint's telemetry for the given gateway. The two aggregate over
  * different windows, so the window that produced each number is carried along
  * (and surfaced in the adapter docs) rather than silently compared: Vercel's
- * uptime is hourly, OpenRouter's half-hourly. Within a gateway the narrowest
- * window wins, falling back to a wider one when the gateway published `null`
- * there — routine on OpenRouter, where a low-traffic endpoint reports nothing
- * for the short windows.
+ * uptime is hourly, OpenRouter's half-hourly. Within a gateway that headline
+ * aggregate is the primary window — the same window the latency figure covers,
+ * so one CheckResult describes one time slice rather than two. Only when the
+ * gateway published `null` there is a shorter window tried, then `1d`,
+ * preferring a stale-but-real number over none. In practice an endpoint idle
+ * enough to null the primary window has usually nulled the shorter one too, so
+ * the realistic fallback is straight to `1d`.
  */
 export function aigatewaySample(endpoint: AigatewayEndpoint, provider: AigatewayProvider): AigatewaySample {
   const windows: [number | null | undefined, string][] = provider === 'vercel'
