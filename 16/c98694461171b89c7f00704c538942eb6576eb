@@ -1,0 +1,29 @@
+packages/core/src/config.test.ts
+  s_49ea55b0d847d9::t_b2de207911de02 128-143
+packages/core/src/aigateway.test.ts
+  s_49ea55b0d847d9::t_0e9a646937a628 233-245
+docs/adapters/aigateway.md
+  s_49ea55b0d847d9::t_92d3d80119e146 103,108-113,191-194
+packages/core/src/config.ts
+  s_49ea55b0d847d9::t_2545e1027cc669 72
+packages/core/src/aigateway.ts
+  s_49ea55b0d847d9::t_2545e1027cc669 159
+  s_49ea55b0d847d9::t_025a716496afca 156-158,160-162,178
+  s_49ea55b0d847d9::t_80e3ea04fb5cbc 187-267,291,305-308,315,339
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "16c98694461171b89c7f00704c538942eb6576eb",
+  "prompts": {},
+  "sessions": {
+    "s_49ea55b0d847d9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fe86b2df-9919-493e-9ad8-98fe20e76e41",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Minsu Lee <minsu.lee@pleaseai.dev>"
+    }
+  }
+}
