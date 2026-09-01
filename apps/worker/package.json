@@ -38,7 +38,7 @@
     "@statusbeam/core": "workspace:*"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20260721.1",
+    "@cloudflare/workers-types": "^5.20260825.1",
     "wrangler": "^4"
   }
 }
