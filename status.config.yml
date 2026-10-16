@@ -6,21 +6,21 @@
 name: statusbeam Demo
 
 sites:
-  - name: GitHub API
-    url: https://api.github.com
-    check: http
-    expectedStatusCodes: [200]
-    maxResponseTime: 2000
+  # Statuspage adapter — mirror each vendor's own published verdict (their
+  # /api/v2/summary.json) instead of a naive reachability ping. GitHub, Cloudflare
+  # and npm all publish an Atlassian Statuspage. See docs/adapters/statuspage.md.
+  - name: GitHub
+    url: https://www.githubstatus.com
+    check: statuspage
   - name: Cloudflare
-    url: https://www.cloudflare.com
-    check: http
-    expectedStatusCodes: [200]
-    maxResponseTime: 2000
-  - name: npm Registry
-    url: https://registry.npmjs.org
-    check: http
-    expectedStatusCodes: [200]
-    maxResponseTime: 3000
+    url: https://www.cloudflarestatus.com
+    check: statuspage
+  - name: npm
+    url: https://status.npmjs.org
+    check: statuspage
+    component: Package installation
+
+  # One plain http check for contrast — a direct reachability probe.
   - name: Cloudflare DNS
     url: https://1.1.1.1
     check: http
