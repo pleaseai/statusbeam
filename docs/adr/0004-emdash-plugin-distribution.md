@@ -90,9 +90,14 @@ Ship StatusBeam for EmDash as **two packages with one engine**:
    buffers the full body (fact 1), the plugin engine supports only monitors whose
    graded result does not depend on header-time behavior: responses under the 8 MiB
    body limit, with latency defined as time to the full body. Monitors outside that
-   contract stay on standalone StatusBeam. The plugin rejects or clearly flags them
-   at configuration time rather than reporting them as `down`; it does not
-   silently switch a configured `GET` to `HEAD`, which would change the check.
+   contract stay on standalone StatusBeam. The plugin warns about known-unsupported
+   monitors at configuration time, but response size and streaming are properties
+   of each future response, so the decisive guard runs at check time: when
+   `ctx.http.fetch` rejects because of the buffering limit, the engine records the
+   probe as unsupported rather than `down`, leaves it out of status and uptime
+   rollups, sends no status-change notification for it, and shows a persistent
+   warning on that monitor. It does not silently switch a configured `GET` to
+   `HEAD`, which would change the check.
 
 Because of (3), the render package can point its base URL at either source:
 
@@ -178,6 +183,11 @@ shapes instead of building a separate display-only plugin.
   HTTP responses through `ctx.http.fetch` on both runners (Worker Loader and
   Node/workerd) and confirm the graded results match the probe contract in
   Decision (4)._
+- _TODO: confirm the sandbox fetch's buffering-limit rejection is distinguishable
+  from a network failure (error type or code), so the check-time guard in
+  Decision (4) can classify it without masking a real outage; and decide how the
+  unsupported outcome is represented, since `CheckStatus` today is only
+  `up` / `degraded` / `down`._
 - _TODO: confirm a `response: "raw"` public route keeps `cacheControl` and returns
   `application/json` byte-identical to the standalone `/api/status.json`._
 
