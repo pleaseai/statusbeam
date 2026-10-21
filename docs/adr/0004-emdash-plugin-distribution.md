@@ -68,9 +68,11 @@ Five facts about StatusBeam and the EmDash host shape the decision:
 5. **A sandboxed plugin runs in one of three modes, and needs a runner for two of
    them.** Listed in `sandboxed: []`, it runs isolated under the site's configured
    `sandboxRunner`: Worker Loader (`sandbox()` from `@emdash-cms/cloudflare`) or a
-   `workerd` child process on Node (`@emdash-cms/sandbox-workerd/sandbox`). Both
-   runners cap CPU, subrequests, and wall time per invocation. With no runner
-   configured, or with a runner the platform cannot provide, plugins in
+   `workerd` child process on Node (`@emdash-cms/sandbox-workerd/sandbox`). The
+   runners enforce different fixed limits per invocation: Worker Loader caps CPU
+   time (50 ms), subrequests (10), and wall time (30 s); the Node/workerd runner
+   enforces only the 30 s wall time. Neither enforces a per-plugin memory limit.
+   With no runner configured, or with a runner the platform cannot provide, plugins in
    `sandboxed: []` do not load, and EmDash only logs a startup warning. A site can
    instead list the same plugin in `plugins: []` to run it in-process: capability
    gating still applies, but there is no isolation and no per-plugin resource limit.
@@ -108,9 +110,12 @@ Ship StatusBeam for EmDash as **two packages with one engine**:
    outside any sandbox. It fetches the public JSON from a configured base URL.
    - **Optional native Portable Text block.** For sites that want editors to embed
      status inside content, the package also ships an opt-in native plugin entry
-     point that registers a "status" Portable Text block through `componentsEntry`,
-     rendering with the same library components. It is the only StatusBeam code
-     registered as a native plugin, and it too has no hooks, cron, or storage.
+     point for a "status" Portable Text block. It needs both halves EmDash requires:
+     the editor definition in `admin.portableTextBlocks` (`type: "statusbeam-status"`
+     plus its fields), so editors can insert the block, and a `componentsEntry`
+     module exporting `blockComponents` keyed by that same `type`, rendering with
+     the same library components. It is the only StatusBeam code registered as a
+     native plugin, and it too has no hooks, cron, or storage.
 
 3. **A core-owned wire contract.** Move the public status response into
    `packages/core` as a zod schema + type (`statusResponseSchema`, per-site response).
@@ -265,10 +270,16 @@ building a separate display-only plugin.
 
 - _TODO: minimum `ctx.cron.schedule()` interval — does it support the current
   5-minute cadence?_
-- _TODO: the actual CPU, subrequest, and wall-time caps per `cron` invocation on
-  each sandbox runner (fact 5), and how many sites one run can probe._
+- _TODO: how many sites one `cron` invocation can probe under Worker Loader's
+  10-subrequest and 50 ms CPU caps (fact 5), counting notification deliveries as
+  subrequests too, and whether the engine must split a run across invocations._
 - _TODO: `ctx.storage` query cost for 90 days of history per site; whether to
   store raw checks or pre-aggregated day buckets._
+- _TODO: EmDash also lets a sandboxed plugin declare `admin.portableTextBlocks`
+  without `componentsEntry`, with the site passing its own renderer. Confirm
+  whether the engine plugin could declare the status block and the site map it to
+  a library component, which would remove the native entry point for plugin-engine
+  sites (standalone-backed sites would still need it)._
 - _TODO: whether a component-library component rendered during the site's SSR can
   fetch a same-site public plugin route without a network round trip._
 
@@ -280,4 +291,5 @@ building a separate display-only plugin.
   `references/hooks.md` (cron), `references/storage.md`, `references/api-routes.md`
 - EmDash docs: [Choosing a format](https://docs.emdashcms.com/plugins/creating-plugins/choosing-a-format/)
   (native-only needs, sandbox runners, in-process `plugins: []`),
+  [Plugin Sandbox](https://docs.emdashcms.com/deployment/plugin-sandbox/) (per-runner limits),
   [React admin](https://docs.emdashcms.com/plugins/creating-native-plugins/react-admin/)
