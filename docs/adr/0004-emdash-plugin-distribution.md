@@ -32,8 +32,10 @@ Four facts about StatusBeam and the EmDash host shape the decision:
    stops its latency timer when `fetch` resolves and never reads the body
    (`packages/core/src/check.ts:63-87`), so on the Worker it measures time to
    headers, while in the sandbox it measures time to the last body byte. A slow
-   body can push a healthy monitor to `degraded`, and a large or streaming response
-   fails as `down` (`code: 0`). The same monitor can therefore produce false outages
+   body can push a healthy monitor to `degraded`; a body over 8 MiB or a response that
+   never completes fails as `down` (`code: 0`). Under-limit streaming responses are
+   buffered successfully, but their latency is measured to the last body byte.
+   The same monitor can therefore produce false outages
    and notifications when it moves to the plugin.
 2. **EmDash runtime services map onto the Worker's.** The `cron` hook +
    `ctx.cron.schedule()` replaces Cron Triggers; `ctx.storage` / `ctx.kv` replace
@@ -132,7 +134,8 @@ shapes instead of building a separate display-only plugin.
   runtime and an `allowedHosts` list would require admin re-approval on every change.
 - Plugin-engine latency is time to the full body, not time to headers, so its
   numbers are not directly comparable with a standalone deployment's, and some
-  monitors (large or streaming responses) are standalone-only.
+  monitors (bodies over 8 MiB, or responses that never complete) are
+  standalone-only.
 - A second persistence back end: per-day uptime aggregation currently runs as SQL
   `GROUP BY` over D1 (`writeSummary()`); in the plugin it must be computed over
   `ctx.storage`. Two implementations of the same rollup must agree.
