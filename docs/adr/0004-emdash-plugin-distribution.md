@@ -1,8 +1,14 @@
-# ADR 0004 — EmDash distribution: sandboxed engine plugin + native render package
+# ADR-0004: EmDash distribution: sandboxed engine plugin + native render package
 
-- **Status:** Proposed
-- **Date:** 2026-10-21
-- **Deciders:** StatusBeam maintainers
+## Status
+
+Proposed
+
+**Deciders:** StatusBeam maintainers
+
+## Date
+
+2026-10-21
 
 ## Context
 

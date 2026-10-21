@@ -1,8 +1,14 @@
-# ADR 0002 — Package-based distribution
+# ADR-0002: Package-based distribution
 
-- **Status:** Accepted
-- **Date:** 2026-07-08
-- **Deciders:** StatusBeam maintainers
+## Status
+
+Accepted
+
+**Deciders:** StatusBeam maintainers
+
+## Date
+
+2026-07-08
 
 ## Context
 

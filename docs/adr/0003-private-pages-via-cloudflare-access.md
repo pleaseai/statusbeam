@@ -1,8 +1,14 @@
-# ADR 0003 — Private/internal pages via Cloudflare Access
+# ADR-0003: Private/internal pages via Cloudflare Access
 
-- **Status:** Proposed
-- **Date:** 2026-07-09
-- **Deciders:** StatusBeam maintainers
+## Status
+
+Proposed
+
+**Deciders:** StatusBeam maintainers
+
+## Date
+
+2026-07-09
 
 ## Context
 
