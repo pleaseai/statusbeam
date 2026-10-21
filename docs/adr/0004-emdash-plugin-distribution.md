@@ -67,7 +67,12 @@ Ship StatusBeam for EmDash as **two packages with one engine**:
    - check history in `ctx.storage`, the current snapshot in `ctx.kv`;
    - status-change notifications (Slack / webhooks), tokens in encrypted `ctx.settings`;
    - public JSON and shields.io badge routes, plus public webhook routes for
-     Statuspage / Sentry ingest;
+     Statuspage / Sentry ingest. `public: true` removes host authentication, so the
+     webhook routes keep the standalone endpoint's auth: fail closed when no secret
+     is configured, and compare the `?token=` query value against it in constant
+     time (`timingSafeEqual`, `apps/worker/src/webhook.ts:103-105`). The secret
+     lives in encrypted `ctx.settings`. A query token, not a header, carries it,
+     because EmDash strips credential headers at the route boundary;
    - a Block Kit admin page for monitors and settings.
 
 2. **`@statusbeam/emdash-ui` (npm, native) — rendering only.** A native plugin that
@@ -101,14 +106,17 @@ Ship StatusBeam for EmDash as **two packages with one engine**:
    warning on that monitor. It does not silently switch a configured `GET` to
    `HEAD`, which would change the check.
 
-Because of (3), the render package can point its base URL at either source:
+Because of the wire contract (Decision 3), the render package can point its base
+URL at either source:
 
 - **the sandboxed plugin's route** — "everything in EmDash";
 - **a standalone StatusBeam deployment's `/api/*`** — the EmDash site only displays
   status; the page and engine stay independent of the CMS.
 
-**Why this split:** the engine lives in exactly one package, so checks can't run
-twice (fact 3 turns into a guarantee: the UI *can't* touch engine state). Rendering
+**Why this split:** the engine lives in exactly one package, and the render package
+has no hooks, cron, or storage, so installing both can't run checks twice.
+Plugin-scoped storage (Context fact 3) adds that the UI can't read or write engine
+state either; it only sees the public JSON. Rendering
 requires native authority anyway, and isolating it in a hook-free package keeps the
 trusted surface small. The shared contract lets the same UI serve both deployment
 shapes instead of building a separate display-only plugin.
