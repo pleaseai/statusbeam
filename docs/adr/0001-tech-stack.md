@@ -1,8 +1,14 @@
-# ADR 0001 — Tech stack
+# ADR-0001: Tech stack
 
-- **Status:** Accepted
-- **Date:** 2026-07-07
-- **Deciders:** StatusBeam maintainers
+## Status
+
+Accepted
+
+**Deciders:** StatusBeam maintainers
+
+## Date
+
+2026-07-07
 
 > **Note:** This ADR's tech-stack decision stands. Its *distribution* framing —
 > upptime's "fork a repo, done" as the baseline — has been revisited by
