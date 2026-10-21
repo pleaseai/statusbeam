@@ -23,10 +23,18 @@ EmDash offers two plugin formats with different authority:
 
 Four facts about StatusBeam and the EmDash host shape the decision:
 
-1. **The check engine ports with no core changes.** `checkSite(site, { fetchImpl })`
-   already takes an injected fetch (`packages/core/src/check.ts:44`), so it can run on
-   `ctx.http.fetch`. `packages/core` depends only on `zod` + `yaml`, so it can be
-   bundled into a sandboxed plugin.
+1. **The check engine compiles against the sandbox, but its HTTP semantics change.**
+   `checkSite(site, { fetchImpl })` already takes an injected fetch
+   (`packages/core/src/check.ts:44`), and `packages/core` depends only on `zod` +
+   `yaml`, so it can be bundled into a sandboxed plugin and run on `ctx.http.fetch`.
+   That fetch is not equivalent to the Worker's, though: it buffers the complete
+   response body before resolving and rejects bodies over 8 MiB decoded. `checkHttp`
+   stops its latency timer when `fetch` resolves and never reads the body
+   (`packages/core/src/check.ts:63-87`), so on the Worker it measures time to
+   headers, while in the sandbox it measures time to the last body byte. A slow
+   body can push a healthy monitor to `degraded`, and a large or streaming response
+   fails as `down` (`code: 0`). The same monitor can therefore produce false outages
+   and notifications when it moves to the plugin.
 2. **EmDash runtime services map onto the Worker's.** The `cron` hook +
    `ctx.cron.schedule()` replaces Cron Triggers; `ctx.storage` / `ctx.kv` replace
    D1 / KV; `public: true` routes with `cacheControl` replace `/api/*` and the inbound
@@ -34,10 +42,14 @@ Four facts about StatusBeam and the EmDash host shape the decision:
    native and both sandbox runners.
 3. **Plugin storage is plugin-scoped.** A second plugin cannot read another plugin's
    storage directly; it has to go through that plugin's routes.
-4. **The public JSON shape has no shared schema.** `/api/status.json` builds its
-   payload inline in `apps/web/src/pages/api/status.json.ts` from `SiteSummary`.
-   There is no core-owned type for the response, so nothing currently guarantees two
-   producers would emit the same shape.
+4. **The public JSON shape has no shared schema, and plugin routes wrap it.**
+   `/api/status.json` builds its payload inline in
+   `apps/web/src/pages/api/status.json.ts` from `SiteSummary` and returns it
+   unwrapped. There is no core-owned type for the response. An ordinary EmDash plugin
+   route wraps its handler's return value in a `{ success: true, data }` envelope;
+   `public: true` and `cacheControl` do not remove it. Only a route that declares
+   `response: "raw"` and returns `pluginResponse()` sends an unwrapped body
+   (`application/json` is allowed; HTML, SVG, and other active types are not).
 
 Shipping only a sandboxed plugin leaves EmDash sites with no way to render a status
 page. Shipping only a native plugin rules out registry install and needs full site
@@ -60,12 +72,29 @@ Ship StatusBeam for EmDash as **two packages with one engine**:
    ships Astro components (status banner, 90-day bars, per-site detail) and **no
    hooks, cron, or storage**. It fetches the public JSON from a configured base URL.
 
-3. **A core-owned JSON contract.** Move the public status response into
+3. **A core-owned wire contract.** Move the public status response into
    `packages/core` as a zod schema + type (`statusResponseSchema`, per-site response).
    Both the standalone `apps/web` `/api/*` routes and the sandboxed plugin's routes
-   produce it, and the render package parses it.
+   produce it, and the render package parses it. The contract covers the HTTP wire,
+   not just the handler's return value:
+   - the plugin's public status, per-site, and badge routes declare
+     `response: "raw"` and return `pluginResponse()` with an `application/json`
+     body, so they emit the same unwrapped top-level shape as the standalone
+     endpoints (and a valid shields.io endpoint body for badges);
+   - the route path mapping from standalone `/api/*` to the plugin's routes is part
+     of the contract, so the render package changes only its base URL;
+   - HTTP-level parity tests compare the plugin routes' responses with the
+     standalone endpoints, rather than validating only pre-envelope handler objects.
 
-Because of (3), the render package's base URL can point at either source:
+4. **A documented probe contract for the plugin engine.** Because sandbox fetch
+   buffers the full body (fact 1), the plugin engine supports only monitors whose
+   graded result does not depend on header-time behavior: responses under the 8 MiB
+   body limit, with latency defined as time to the full body. Monitors outside that
+   contract stay on standalone StatusBeam. The plugin rejects or clearly flags them
+   at configuration time rather than reporting them as `down`; it does not
+   silently switch a configured `GET` to `HEAD`, which would change the check.
+
+Because of (3), the render package can point its base URL at either source:
 
 - **the sandboxed plugin's route** — "everything in EmDash";
 - **a standalone StatusBeam deployment's `/api/*`** — the EmDash site only displays
@@ -82,8 +111,9 @@ shapes instead of building a separate display-only plugin.
 ### Positive
 
 - One engine implementation for EmDash; the native package can't double-run checks.
-- `packages/core` is reused unchanged by the engine; the new JSON schema also
-  tightens the existing standalone `/api/*` routes.
+- `packages/core` code is reused by the engine without a fork (within the probe
+  contract); the new JSON schema also tightens the existing standalone `/api/*`
+  routes.
 - The render package works against standalone StatusBeam, so EmDash sites can show
   status without accepting the CMS-coupled engine.
 - The engine is registry-installable; only the small, read-only UI needs trust.
@@ -95,6 +125,9 @@ shapes instead of building a separate display-only plugin.
   standalone-backed mode keeps the guarantee; docs must say which mode does.
 - The engine needs `network:request:unrestricted`, because monitored hosts change at
   runtime and an `allowedHosts` list would require admin re-approval on every change.
+- Plugin-engine latency is time to the full body, not time to headers, so its
+  numbers are not directly comparable with a standalone deployment's, and some
+  monitors (large or streaming responses) are standalone-only.
 - A second persistence back end: per-day uptime aggregation currently runs as SQL
   `GROUP BY` over D1 (`writeSummary()`); in the plugin it must be computed over
   `ctx.storage`. Two implementations of the same rollup must agree.
@@ -132,6 +165,13 @@ shapes instead of building a separate display-only plugin.
   `SandboxedPlugin`, which is unverified.
 
 ## Open Questions (spike before Accepted)
+
+- _TODO: acceptance gate for probe semantics — run large, slow-body, and streaming
+  HTTP responses through `ctx.http.fetch` on both runners (Worker Loader and
+  Node/workerd) and confirm the graded results match the probe contract in
+  Decision (4)._
+- _TODO: confirm a `response: "raw"` public route keeps `cacheControl` and returns
+  `application/json` byte-identical to the standalone `/api/status.json`._
 
 - _TODO: minimum `ctx.cron.schedule()` interval — does it support the current
   5-minute cadence?_
