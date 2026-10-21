@@ -138,8 +138,16 @@ shapes instead of building a separate display-only plugin.
   (registry + npm).
 - Config moves from `status.config.yml` to plugin settings / Block Kit, which departs
   from the "single YAML validated only by core" invariant for this channel.
-  _TODO: decide whether settings store the YAML verbatim and still parse it through
-  `parseConfig`._
+  _TODO: choose where the plugin engine's monitor config lives. Whichever option
+  wins, the engine still validates it through core's `configSchema` /
+  `parseConfig`. The options:_
+
+  | Option | How it works | Trade-off |
+  |---|---|---|
+  | Block Kit admin page | Plugin `ctx.settings` edited through a plugin-owned Block Kit form | Self-contained in the sandboxed plugin; we build and maintain the form |
+  | YAML stored as-is in settings | One text setting holding `status.config.yml`, parsed by `parseConfig` | Keeps the single-YAML invariant and parity with standalone; poor editing UX |
+  | `json` field + `field-kit:list` | Monitors are a `json` field on a content entry, edited with the first-party native Field Kit widget; the engine reads it through `ctx.content` (`content:read`) | No form to build, values stay plain JSON; but the site must install a native plugin, seed the collection (plugins cannot create schema), and config becomes CMS content subject to its revisions and permissions |
+  | `json` field + plugin `admin.fieldWidgets` | Same storage as above, edited with a declarative Block Kit field widget shipped by our own sandboxed plugin | Registry-installable with no Field Kit dependency; still needs a seeded collection, and EmDash's browser E2E covers only a native React widget, so editor render and value persistence are unverified |
 
 ### Neutral
 
