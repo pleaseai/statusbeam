@@ -103,13 +103,14 @@ Ship StatusBeam for EmDash as **two packages with one engine**:
 2. **`@statusbeam/emdash-ui` (npm) — rendering only, not a plugin.** A plain Astro
    component library (status banner, 90-day bars, per-site detail) that the site
    imports into its own pages. It has no `definePlugin()`, no hooks, cron, or
-   storage, and needs no trust grant. It fetches the public JSON from a configured
-   base URL.
+   storage, and needs no EmDash plugin registration or capability approval. It is
+   still a trusted site dependency: its components run as site code during SSR,
+   outside any sandbox. It fetches the public JSON from a configured base URL.
    - **Optional native Portable Text block.** For sites that want editors to embed
      status inside content, the package also ships an opt-in native plugin entry
      point that registers a "status" Portable Text block through `componentsEntry`,
      rendering with the same library components. It is the only StatusBeam code
-     that needs native authority, and it too has no hooks, cron, or storage.
+     registered as a native plugin, and it too has no hooks, cron, or storage.
 
 3. **A core-owned wire contract.** Move the public status response into
    `packages/core` as a zod schema + type (`statusResponseSchema`, per-site response).
@@ -147,15 +148,18 @@ URL at either source:
 
 **Why this split:** the engine lives in exactly one package, and the render package
 is not a plugin at all, so installing both can't run checks twice. Rendering a page
-does not need native authority (see the format guide's three native-only needs in
-Context), so the common case adds no trusted code to the site. Only the optional
-Portable Text block does, and it is designed to consume only the public JSON and
-never engine state. That is a design constraint, not a host guarantee: as a native
-plugin it runs with full site authority, and plugin-scoped storage (Context fact 3)
-isolates storage access only between plugins through the plugin API. Keeping it
-hook-free and opt-in keeps the trusted surface small. The shared contract lets the
-same UI serve both deployment shapes instead of building a separate display-only
-plugin.
+is not one of the format guide's native-only needs (Context), so the common case
+registers no StatusBeam plugin with the host: no capability approval, and no hooks,
+routes, or admin surface beyond the engine's. That does not make the renderer
+untrusted-safe. Both the component library and the optional Portable Text block run
+as site code outside the sandbox, with the site's full authority, like any other
+server-side dependency the site imports. Both are designed to consume only the
+public JSON and never engine state; that is a constraint their implementation keeps,
+not a boundary the host enforces, and plugin-scoped storage (Context fact 3) isolates
+storage access only between plugins through the plugin API. Keeping the renderer
+hook-free, storage-free, and its native entry point opt-in keeps the trusted surface
+small. The shared contract lets the same UI serve both deployment shapes instead of
+building a separate display-only plugin.
 
 ## Consequences
 
@@ -167,8 +171,10 @@ plugin.
   routes.
 - The render package works against standalone StatusBeam, so EmDash sites can show
   status without accepting the CMS-coupled engine.
-- The engine is registry-installable, and the component library needs no trust; only
-  the optional, read-only Portable Text block does.
+- The engine is registry-installable, and the component library needs no plugin
+  registration or capability approval; only the optional Portable Text block is
+  registered as a native plugin. Both remain trusted site dependencies that site
+  operators review like any other server-side package.
 
 ### Negative
 
@@ -226,9 +232,12 @@ plugin.
   site would have to build its own templates against the JSON.
 - **Render package as a native plugin.** An earlier draft of this ADR shipped the
   Astro components inside a `definePlugin()` native plugin. Rendering a page is not
-  one of EmDash's native-only needs, so that form would demand full site authority
-  from every site that only wants to display status. Native authority is kept for
-  the optional Portable Text block, the one piece that needs it.
+  one of EmDash's native-only needs, so that form would add a plugin registration,
+  config change, and hook surface that the renderer does not use, for every site that
+  only wants to display status. It would not change the renderer's authority: a
+  plain library imported into site pages runs with the same full site authority. The
+  native plugin form is kept for the optional Portable Text block, the one piece
+  that needs `componentsEntry`.
 - **Native plugin only (full port).** Most capable and could reuse `StatusPage.astro`
   and possibly D1 SQL, but not registry-installable, runs with full site authority,
   and makes the whole app a second host to maintain.
