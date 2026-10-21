@@ -24,7 +24,7 @@ EmDash offers two plugin formats with different authority:
 |---|---|---|
 | Entry | `src/plugin.ts` default-exports a `SandboxedPlugin` | `definePlugin()` / `createPlugin()` |
 | Install | Registry, after admin approval of declared capabilities | Trusted site dependency only (code + config change) |
-| Custom Portable Text blocks | No | Yes — Astro renderers via `componentsEntry` |
+| Portable Text block renderers | No — the site must supply one | Yes — Astro renderers via `componentsEntry` |
 | Raw HTML/scripts in pages | No — `page:fragments` is trusted-only | Yes |
 | Admin UI | Block Kit only | React or Block Kit |
 
@@ -275,8 +275,9 @@ building a separate display-only plugin.
   subrequests too, and whether the engine must split a run across invocations._
 - _TODO: `ctx.storage` query cost for 90 days of history per site; whether to
   store raw checks or pre-aggregated day buckets._
-- _TODO: EmDash also lets a sandboxed plugin declare `admin.portableTextBlocks`
-  without `componentsEntry`, with the site passing its own renderer. Confirm
+- _TODO: EmDash's Portable Text page says a sandboxed plugin can declare
+  `admin.portableTextBlocks` without `componentsEntry`, with the site passing its
+  own renderer; this is unverified against the EmDash source. Confirm it, and
   whether the engine plugin could declare the status block and the site map it to
   a library component, which would remove the native entry point for plugin-engine
   sites (standalone-backed sites would still need it)._
