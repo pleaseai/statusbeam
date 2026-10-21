@@ -115,8 +115,10 @@ URL at either source:
 
 **Why this split:** the engine lives in exactly one package, and the render package
 has no hooks, cron, or storage, so installing both can't run checks twice.
-Plugin-scoped storage (Context fact 3) adds that the UI can't read or write engine
-state either; it only sees the public JSON. Rendering
+The render package is also designed to consume only the public JSON and never
+engine state. This is a design constraint, not a host guarantee: as a native
+plugin it runs with full site authority, and plugin-scoped storage (Context
+fact 3) isolates storage access only between plugins through the plugin API. Rendering
 requires native authority anyway, and isolating it in a hook-free package keeps the
 trusted surface small. The shared contract lets the same UI serve both deployment
 shapes instead of building a separate display-only plugin.
