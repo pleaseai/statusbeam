@@ -8,5 +8,8 @@ export default defineConfig({
   plugins: [emdashPluginTest()],
   test: {
     include: ['tests/**/*.host.ts'],
+    // Each test boots a runtime host in workerd; that takes seconds on a loaded machine.
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
   },
 })
