@@ -129,7 +129,8 @@ export async function reconcileShards(
   const stored = await loadStoredConfig(ctx)
   const config = stored.status === 'valid' ? stored.config : null
   const destinations = stored.status === 'valid' ? stored.destinations : []
-  const monitors = config ? pollableSites(config).length : 0
+  const sentryToken = stored.status === 'valid' ? stored.sentryToken : undefined
+  const monitors = config ? pollableSites(config, { sentryToken }).length : 0
   const shards = config ? shardCountFor(monitors, destinations.length) : null
   const plan = planReconcile(shards, await cron.list())
 

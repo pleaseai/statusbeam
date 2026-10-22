@@ -52,6 +52,23 @@ describe('sharding', () => {
 })
 
 describe('runShard', () => {
+  it('polls a Sentry monitor with the sentryToken secret and skips it without one', async () => {
+    const yaml = monitorsYaml(['web'], ['  - name: errors', '    check: sentry', '    url: https://sentry.example.com/', '    sentry:', '      org: acme'])
+    const seen: Array<{ url: string, auth: string | null }> = []
+    const fetch = async (url: string, init?: RequestInit) => {
+      seen.push({ url, auth: new Headers(init?.headers).get('authorization') })
+      return new Response(url.includes('sentry.io') ? '[]' : 'ok', { status: 200 })
+    }
+
+    await runShard(createFakeContext({ config: yaml, settings: { sentryToken: 'tok' }, fetch }).ctx, 0)
+    const polled = seen.find(s => s.url.includes('/organizations/acme/'))
+    expect(polled?.auth).toBe('Bearer tok')
+
+    seen.length = 0
+    await runShard(createFakeContext({ config: yaml, fetch }).ctx, 0)
+    expect(seen.map(s => s.url)).toEqual(['https://web.example.com/'])
+  })
+
   it('stays within the call budget for a full shard and never logs', async () => {
     const fake = createFakeContext({ config: monitorsYaml(monitorNames(5)) })
     const result = await runShard(fake.ctx, 0)

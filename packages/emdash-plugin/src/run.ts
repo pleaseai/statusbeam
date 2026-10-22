@@ -71,9 +71,9 @@ export async function runShard(ctx: RunContext, shard: number, options: ShardRun
     await recordConfigError(ctx, stored.issues, now())
     return idle(2)
   }
-  const { config, destinations } = stored
+  const { config, destinations, sentryToken } = stored
 
-  const pollable = pollableSites(config)
+  const pollable = pollableSites(config, { sentryToken })
   const reserved = reservedCallsFor(destinations.length)
   if (monitorsPerTask(reserved) < 1) {
     if (pollable.length === 0) {
@@ -96,7 +96,7 @@ export async function runShard(ctx: RunContext, shard: number, options: ShardRun
   let calls = 1
 
   const startedAt = now()
-  const results = await Promise.all(sites.map(site => probeSite(hostFetch, site, deadlineMs, () => now().getTime())))
+  const results = await Promise.all(sites.map(site => probeSite(hostFetch, site, deadlineMs, () => now().getTime(), sentryToken)))
   calls += sites.length
   const real = results.filter(r => !r.limit)
 

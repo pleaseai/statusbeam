@@ -47,10 +47,12 @@ export function probeSite(
   site: Site,
   deadlineMs = PROBE_DEADLINE_MS,
   now?: () => number,
+  sentryToken?: string,
 ): Promise<CheckResult> {
   return checkSite(site, {
     fetchImpl: (url, init) => withDeadline(fetchImpl(url, init), deadlineMs),
     classifyError: classifyHostError,
     ...(now ? { now } : {}),
+    ...(sentryToken ? { sentryToken } : {}),
   })
 }

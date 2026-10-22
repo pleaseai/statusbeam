@@ -181,7 +181,7 @@ export async function clearConfigError(ctx: Pick<PluginContext, 'kv'>): Promise<
 export type StoredConfig
   = | { status: 'absent' }
     | { status: 'invalid', issues: PluginIssue[] }
-    | { status: 'valid', config: StatusConfig, destinations: Destination[], issues: PluginIssue[] }
+    | { status: 'valid', config: StatusConfig, destinations: Destination[], issues: PluginIssue[], sentryToken?: string }
 
 /**
  * Read and re-validate the stored configuration with one `settings.list` call
@@ -198,5 +198,10 @@ export async function loadStoredConfig(ctx: Pick<PluginContext, 'settings'>): Pr
   const { destinations, secrets } = secretsFrom(values)
   const { parsed, issues } = analyze(yaml, secrets)
   const blocking = issues.filter(issue => issue.severity === 'error' && issue.code !== 'capacity')
-  return blocking.length > 0 || !parsed ? { status: 'invalid', issues } : { status: 'valid', config: parsed, destinations, issues }
+  if (blocking.length > 0 || !parsed) {
+    return { status: 'invalid', issues }
+  }
+  const token = values.get(SENTRY_TOKEN_SECRET_KEY)
+  const sentryToken = typeof token === 'string' && token.trim() !== '' ? token.trim() : undefined
+  return { status: 'valid', config: parsed, destinations, issues, ...(sentryToken ? { sentryToken } : {}) }
 }
