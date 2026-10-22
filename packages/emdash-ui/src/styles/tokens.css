@@ -33,6 +33,7 @@
 :where([data-sb-tone='maintenance']) {
   --sb-tone: var(--sb-maintenance);
 }
+:where([data-sb-tone='pending']),
 :where([data-sb-tone='unavailable']) {
   --sb-tone: var(--sb-nodata);
 }

@@ -1,5 +1,6 @@
 import type { SiteSummary } from './types'
 import { describe, expect, it } from 'bun:test'
+import { z } from 'zod'
 import { overallBadge, responseBadge, statusBadge, uptimeBadge } from './badge'
 import {
   buildSiteResponse,
@@ -62,6 +63,32 @@ describe('buildSiteResponse', () => {
 
   it('rejects a body with the wrong version', () => {
     expect(siteResponseSchema.safeParse({ ...buildSiteResponse(site), version: 2 }).success).toBe(false)
+  })
+})
+
+describe('a site not checked yet', () => {
+  const pending: SiteSummary = { ...site, slug: 'new', name: 'New', status: 'down', pending: true, responseTime: 0 }
+
+  it('is served with pending: true beside the placeholder down, and the schemas accept it', () => {
+    const body = JSON.parse(JSON.stringify(buildStatusResponse([site, pending], now)))
+    expect(statusResponseSchema.parse(body).sites[1]).toMatchObject({ slug: 'new', status: 'down', pending: true })
+    const one = JSON.parse(JSON.stringify(buildSiteResponse(pending)))
+    expect(siteResponseSchema.parse(one)).toMatchObject({ slug: 'new', status: 'down', pending: true })
+  })
+
+  it('is left out of the overall status, which is operational when every site is pending', () => {
+    expect(buildStatusResponse([site, pending], now).status).toBe('operational')
+    expect(buildStatusResponse([pending], now).status).toBe('operational')
+    expect(buildStatusResponse([pending, down], now).status).toBe('major_outage')
+  })
+
+  it('still parses under a consumer schema that predates pending, reading as down', () => {
+    // The v1 site shape before `pending`: a closed status enum, unknown keys stripped.
+    const legacySite = z.object({ slug: z.string(), status: z.enum(['up', 'degraded', 'down']) })
+    const legacy = z.object({ version: z.literal(1), sites: z.array(legacySite) })
+    const body = JSON.parse(JSON.stringify(buildStatusResponse([pending], now)))
+    expect(legacy.parse(body).sites).toEqual([{ slug: 'new', status: 'down' }])
+    expect(legacySite.parse(buildSiteResponse(pending))).toEqual({ slug: 'new', status: 'down' })
   })
 })
 

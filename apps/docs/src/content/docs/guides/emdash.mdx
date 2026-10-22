@@ -245,6 +245,13 @@ The engine serves public, unauthenticated GET routes under
 | `badge-uptime?slug=<slug>&period=<period>` | `/api/badge/<slug>/uptime.json` |
 | `badge-response-time?slug=<slug>` | `/api/badge/<slug>/response-time.json` |
 
+A monitor with no real result yet (one added since the last run, or a
+webhook-only Sentry monitor before its first event) is served as *not checked
+yet*: `"pending": true` beside a placeholder `"status": "down"`, as standalone
+serves it. The overall status ignores it, its badges read `not checked` in grey,
+the `@statusbeam/emdash-ui` components label it "Not checked yet", and its first
+real result sends no status-change notification.
+
 An unknown slug returns the same 404 body as standalone, and an invalid
 `period` falls back to `month`. Successful responses carry the standalone cache
 policy, `public, s-maxage=60, stale-while-revalidate=600`.

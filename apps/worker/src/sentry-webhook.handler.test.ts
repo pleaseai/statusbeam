@@ -141,6 +141,30 @@ describe('handleWebhook — sentry payload & ingest', () => {
     expect(summary.find(s => s.slug === 'api')?.status).toBe('down')
   })
 
+  it('serves a site with no result yet as pending, and its first real result clears it without a status change', async () => {
+    const { env, ctx, kv, waited } = makeEnv('s3cret')
+    // A pending summary for `api` (as the cron writes before its first event), then the first event lands.
+    kv.set('summary', JSON.stringify([{ slug: 'api', name: 'API', status: 'down', pending: true, responseTime: 0, uptimeDay: '100%', uptimeWeek: '100%', uptimeMonth: '100%', history: [] }]))
+    const res = await handleWebhook(post('/webhooks/sentry/api?token=s3cret', resolved), env, ctx)
+    expect(res.status).toBe(200)
+
+    // No notification and no cache purge: down → up from a placeholder is not a change.
+    expect(waited).toEqual([])
+    const summary = JSON.parse(kv.get('summary')!) as { slug: string, status: string, pending?: boolean }[]
+    expect(summary.find(s => s.slug === 'api')).toMatchObject({ status: 'up' })
+    expect(summary.find(s => s.slug === 'api')).not.toHaveProperty('pending')
+    // The untouched site has no result and no previous summary: not checked yet.
+    expect(summary.find(s => s.slug === 'website')).toMatchObject({ status: 'down', pending: true })
+  })
+
+  it('still reports a real down → up change from a checked summary', async () => {
+    const { env, ctx, kv, waited } = makeEnv('s3cret')
+    kv.set('summary', JSON.stringify([{ slug: 'api', name: 'API', status: 'down', responseTime: 0, uptimeDay: '100%', uptimeWeek: '100%', uptimeMonth: '100%', history: [] }]))
+    await handleWebhook(post('/webhooks/sentry/api?token=s3cret', resolved), env, ctx)
+    expect(waited.length).toBeGreaterThan(0)
+    await Promise.allSettled(waited)
+  })
+
   it('200s a resolved issue and records an up check row', async () => {
     const { env, ctx, inserted } = makeEnv('s3cret')
     const res = await handleWebhook(post('/webhooks/sentry/api?token=s3cret', resolved), env, ctx)

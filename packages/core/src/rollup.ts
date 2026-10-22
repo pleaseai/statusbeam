@@ -67,16 +67,17 @@ export function denseHistory(days: Map<string, DayStat> | undefined, now: Date):
 
 /**
  * Sites whose status flipped against the previous snapshot. A site with no
- * prior snapshot entry has nothing to compare to, so it never counts as changed.
+ * prior snapshot entry, or one not checked yet (`pending`, whose `down` is a
+ * placeholder), has nothing real to compare to, so it never counts as changed.
  */
 export function detectStatusChanges(
   results: CheckResult[],
-  previous: Map<string, Pick<SiteSummary, 'status'>>,
+  previous: Map<string, Pick<SiteSummary, 'status' | 'pending'>>,
 ): StatusChange[] {
   const changes: StatusChange[] = []
   for (const r of results) {
     const prior = previous.get(r.slug)
-    if (prior !== undefined && prior.status !== r.status) {
+    if (prior !== undefined && !prior.pending && prior.status !== r.status) {
       changes.push({ slug: r.slug, from: prior.status, to: r.status })
     }
   }
@@ -86,8 +87,10 @@ export function detectStatusChanges(
 /**
  * Build the snapshot the status page reads. `results` may cover only some sites
  * (a webhook updates one); a site absent from it falls back to its `previous`
- * summary value, then to `down`/`0`, so a partial batch never blanks untouched
- * sites. Trailing uptime windows are tail slices of the same dense history.
+ * summary value, so a partial batch never blanks untouched sites. A site with
+ * neither has not been checked yet: it is `pending` with a placeholder
+ * `down`/`0`, and stays pending until its first real result. Trailing uptime
+ * windows are tail slices of the same dense history.
  */
 export function buildSiteSummaries(input: {
   sites: StatusConfig['sites']
@@ -101,10 +104,12 @@ export function buildSiteSummaries(input: {
     const r = bySlug.get(site.slug)
     const prior = input.previous.get(site.slug)
     const history = denseHistory(input.historyBySlug.get(site.slug), input.now)
+    const pending = r === undefined && (prior === undefined || prior.pending === true)
     return {
       slug: site.slug,
       name: site.name,
       status: r?.status ?? prior?.status ?? 'down',
+      ...(pending ? { pending: true } : {}),
       responseTime: r?.responseTime ?? prior?.responseTime ?? 0,
       uptimeDay: formatUptime(windowUptime(history.slice(-1))),
       uptimeWeek: formatUptime(windowUptime(history.slice(-7))),

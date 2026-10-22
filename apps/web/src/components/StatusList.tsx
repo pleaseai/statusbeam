@@ -23,6 +23,9 @@ const STYLE = {
   maintenance: { dot: 'bg-status-maintenance', badge: 'border-status-maintenance/40 text-status-maintenance' },
 } as const
 
+// A site not checked yet (`pending`) has no real status: neutral styling, its own label.
+const PENDING_STYLE = { dot: 'bg-status-nodata', badge: 'border-status-nodata/40 text-muted-foreground' } as const
+
 /**
  * One status card row: name + rolled-up badge, a 90-day uptime timeline, and an
  * expandable response-time sparkline. Interactive (the breakdown tooltip and the
@@ -31,7 +34,7 @@ const STYLE = {
 function StatusRow({ site, locale, t }: Readonly<{ site: SiteSummary, locale: Locale, t: Dict }>) {
   const [open, setOpen] = useState(false)
   const severity = toSeverity(site.status)
-  const style = STYLE[severity]
+  const style = site.pending ? PENDING_STYLE : STYLE[severity]
   // Guard against stale KV snapshots written before these fields existed.
   const history = site.history ?? []
   const responseHistory = site.responseHistory ?? []
@@ -59,7 +62,7 @@ function StatusRow({ site, locale, t }: Readonly<{ site: SiteSummary, locale: Lo
             <TooltipContent>{breakdown}</TooltipContent>
           </Tooltip>
           <Badge variant="outline" className={style.badge}>
-            {t.severity[severity]}
+            {site.pending ? t.status.notChecked : t.severity[severity]}
           </Badge>
         </div>
       </div>

@@ -59,7 +59,8 @@ export interface Dict {
   /** Per-day timeline bucket label. */
   day: Record<DayKey, string>
   incidents: { heading: string, recentlyResolved: string, none: string }
-  status: { responseTime: string }
+  /** `notChecked` labels a site with no real result yet (`pending` in the contract). */
+  status: { responseTime: string, notChecked: string }
   chart: { avg: string, p95: string, responseTime: string, noData: string }
   /** Unit suffix for response-time figures (kept as the symbol across locales). */
   unit: { ms: string }
@@ -107,7 +108,7 @@ const en: Dict = {
     recentlyResolved: 'Recently resolved',
     none: 'No incidents reported in the last 90 days.',
   },
-  status: { responseTime: 'Response time' },
+  status: { responseTime: 'Response time', notChecked: 'Not checked yet' },
   chart: {
     avg: 'avg',
     p95: 'p95',
@@ -159,7 +160,7 @@ const zh: Dict = {
     recentlyResolved: '最近已解决',
     none: '过去 90 天内没有报告任何事件。',
   },
-  status: { responseTime: '响应时间' },
+  status: { responseTime: '响应时间', notChecked: '尚未检查' },
   chart: {
     avg: '平均',
     p95: 'p95',
@@ -211,7 +212,7 @@ const ja: Dict = {
     recentlyResolved: '最近解決済み',
     none: '過去90日間に報告されたインシデントはありません。',
   },
-  status: { responseTime: '応答時間' },
+  status: { responseTime: '応答時間', notChecked: '未確認' },
   chart: {
     avg: '平均',
     p95: 'p95',
@@ -263,7 +264,7 @@ const ko: Dict = {
     recentlyResolved: '최근 해결됨',
     none: '최근 90일간 보고된 인시던트가 없습니다.',
   },
-  status: { responseTime: '응답 시간' },
+  status: { responseTime: '응답 시간', notChecked: '확인 전' },
   chart: {
     avg: '평균',
     p95: 'p95',

@@ -53,7 +53,19 @@ export interface DayStat {
 export interface SiteSummary {
   slug: string
   name: string
+  /**
+   * Latest real status. A site not checked yet (see {@link SiteSummary.pending})
+   * carries `down` here so consumers that predate `pending` read it as before.
+   */
   status: CheckStatus
+  /**
+   * `true` when the site has no real result yet (never probed, or a
+   * webhook-only monitor before its first event): its `status` is not a real
+   * outcome, so it is shown as "not checked yet" and left out of the overall
+   * severity and of change detection. Omitted (never `false`) otherwise, so the
+   * serialized summary of a checked site is unchanged.
+   */
+  pending?: boolean
   responseTime: number
   /** Trailing uptime percentages as display strings, e.g. "99.98%". */
   uptimeDay: string
@@ -89,6 +101,15 @@ export function overallSeverity(statuses: CheckStatus[]): Severity {
     return 'degraded'
   }
   return 'operational'
+}
+
+/**
+ * Overall severity across sites, ignoring sites not checked yet: their `down`
+ * is a placeholder, not an observed outage. With every site pending (or none),
+ * the result is `operational`.
+ */
+export function overallSiteSeverity(sites: Array<Pick<SiteSummary, 'status' | 'pending'>>): Severity {
+  return overallSeverity(sites.filter(s => !s.pending).map(s => s.status))
 }
 
 /**

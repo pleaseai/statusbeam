@@ -154,3 +154,19 @@ describe('responseBadge', () => {
     })
   })
 })
+
+describe('badges for a site not checked yet', () => {
+  const pending = site({ status: 'down', pending: true, responseTime: 0 })
+
+  it('report "not checked" in grey instead of an outage', () => {
+    expect(statusBadge(pending)).toEqual({ schemaVersion: 1, label: 'API', message: 'not checked', color: 'lightgrey' })
+    expect(responseBadge(pending)).toEqual({ schemaVersion: 1, label: 'response time', message: 'not checked', color: 'lightgrey' })
+    expect(uptimeBadge(pending, 'week')).toEqual({ schemaVersion: 1, label: 'uptime', message: 'not checked', color: 'lightgrey' })
+  })
+
+  it('leave the site out of the overall badge', () => {
+    expect(overallBadge([site(), pending])).toEqual({ schemaVersion: 1, label: 'status', message: 'operational', color: 'brightgreen' })
+    expect(overallBadge([pending])).toMatchObject({ message: 'operational', color: 'brightgreen' })
+    expect(overallBadge([pending, site({ status: 'degraded' })])).toMatchObject({ message: 'degraded', color: 'yellow' })
+  })
+})

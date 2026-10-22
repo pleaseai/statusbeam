@@ -209,6 +209,37 @@ describe('the public status routes', () => {
     }
   })
 
+  it('serves a monitor not checked yet as pending, with a body equal to the standalone endpoint', async () => {
+    const yaml = `${YAML}\n  - name: Fresh\n    url: https://fresh.example.com/`
+    const fresh = validateConfig(yaml)
+    if (!fresh.ok) {
+      throw new Error('fixture configuration is invalid')
+    }
+    web.summary = summariesFromSnapshot(mergeSnapshots([{ key: 'snapshot:0', value: SNAPSHOT }]), fresh.config.sites, today)
+    const h = await newHost({ yaml })
+
+    const site = await (await pluginGet(h, routePaths.emdash.site('fresh'))).json()
+    expect(siteResponseSchema.parse(site)).toMatchObject({ slug: 'fresh', status: 'down', pending: true })
+    const badge = await (await pluginGet(h, routePaths.emdash.siteBadge('fresh'))).json()
+    expect(badge).toMatchObject({ message: 'not checked', color: 'lightgrey' })
+
+    const cases: Array<[string, WebHandler, string]> = [
+      [routePaths.emdash.status(), standalone.status, routePaths.standalone.status()],
+      [routePaths.emdash.badge(), standalone.badge, routePaths.standalone.badge()],
+      [routePaths.emdash.site('fresh'), standalone.site, routePaths.standalone.site('fresh')],
+      [routePaths.emdash.siteBadge('fresh'), standalone.siteBadge, routePaths.standalone.siteBadge('fresh')],
+      [routePaths.emdash.uptimeBadge('fresh', 'week'), standalone.uptime, routePaths.standalone.uptimeBadge('fresh', 'week')],
+      [routePaths.emdash.responseTimeBadge('fresh'), standalone.response, routePaths.standalone.responseTimeBadge('fresh')],
+    ]
+    for (const [pluginPath, handler, standalonePath] of cases) {
+      const slug = new URL(pluginPath, 'https://example.com').searchParams.get('slug') ?? ''
+      const expected = await standaloneGet(handler, standalonePath, slug)
+      const actual = await pluginGet(h, pluginPath)
+      expect(actual.status, pluginPath).toBe(200)
+      expect(normalize(await actual.text()), pluginPath).toBe(normalize(await expected.text()))
+    }
+  })
+
   it('answers an unknown slug with the standalone 404 body', async () => {
     const h = await newHost()
     const pairs: Array<[string, WebHandler, string]> = [

@@ -74,4 +74,48 @@ describe('detectStatusChanges', () => {
   it('treats a site with no prior snapshot as unchanged', () => {
     expect(detectStatusChanges([result('new', 'down')], new Map())).toEqual([])
   })
+
+  it('does not report the first real result after a pending summary as a change', () => {
+    const previous = new Map([['a', { status: 'down' as const, pending: true }]])
+    expect(detectStatusChanges([result('a', 'up')], previous)).toEqual([])
+  })
+})
+
+describe('buildSiteSummaries pending state', () => {
+  const now = new Date('2026-10-22T12:00:00Z')
+  const sites = [{ name: 'A', slug: 'a' }, { name: 'B', slug: 'b' }] as never
+  const build = (results: CheckResult[], previous: SiteSummary[]) => buildSiteSummaries({
+    sites,
+    results,
+    previous: new Map(previous.map(s => [s.slug, s])),
+    historyBySlug: new Map(),
+    now,
+  })
+  const up: CheckResult = { slug: 'a', status: 'up', code: 200, responseTime: 42, checkedAt: now.toISOString() }
+
+  it('marks a site with no result and no previous summary pending, with the placeholder down', () => {
+    const [, b] = build([up], [])
+    expect(b).toMatchObject({ slug: 'b', status: 'down', pending: true, responseTime: 0 })
+  })
+
+  it('keeps a pending site pending until a real result arrives, then clears it', () => {
+    const first = build([up], [])
+    const second = build([up], first)
+    expect(second[1]?.pending).toBe(true)
+    const third = build([{ ...up, slug: 'b', status: 'degraded' }], second)
+    expect(third[1]).toMatchObject({ slug: 'b', status: 'degraded' })
+    expect(third[1]).not.toHaveProperty('pending')
+  })
+
+  it('omits the key for a checked site, so its serialized summary is unchanged', () => {
+    const [a] = build([up], [])
+    expect(JSON.stringify(a)).not.toContain('pending')
+  })
+
+  it('keeps a site with a non-pending previous summary on that status', () => {
+    const prior: SiteSummary = { slug: 'b', name: 'B', status: 'up', responseTime: 9, uptimeDay: '100%', uptimeWeek: '100%', uptimeMonth: '100%', history: [] }
+    const [, b] = build([up], [prior])
+    expect(b).toMatchObject({ slug: 'b', status: 'up', responseTime: 9 })
+    expect(b).not.toHaveProperty('pending')
+  })
 })
