@@ -40,6 +40,7 @@ const nimbusConfig = defineNimbusConfig({
         items: [
           'guides/configuration',
           'guides/deployment',
+          'guides/emdash',
           'guides/private-pages',
         ],
       },

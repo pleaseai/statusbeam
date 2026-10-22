@@ -3,7 +3,7 @@
 ## Overview
 
 Bun-managed **Turborepo monorepo** targeting Cloudflare's edge platform.
-TypeScript throughout. Three workspaces under `apps/*` and `packages/*`.
+TypeScript throughout. Workspaces under `apps/*` and `packages/*`.
 
 ## Repository layout
 
@@ -46,6 +46,24 @@ TypeScript throughout. Three workspaces under `apps/*` and `packages/*`.
 - **Validation**: Zod `^4.4`.
 - **Config parsing**: `yaml`.
 - Pure, dependency-light shared library consumed by both apps.
+
+## EmDash distribution
+
+[EmDash](https://github.com/emdash-cms) is an Astro-based CMS (ADR-0004). StatusBeam
+ships two packages for it:
+
+- **`packages/emdash-plugin`** (`@statusbeam/emdash-plugin`) — the check engine as a
+  sandboxed EmDash plugin. `emdash-plugin build` bundles `@statusbeam/core` (a
+  devDependency) into `dist/`. Needs a sandbox runner (Worker Loader or the
+  Node/workerd runner).
+- **`packages/emdash-ui`** (`@statusbeam/emdash-ui`) — Astro status components that
+  read the public JSON of a standalone deployment or the plugin, plus an opt-in
+  Portable Text block. It ships `.astro`/`.ts` source with no build step.
+- **Tests**: the plugin's host tests run in workerd through vitest and
+  `@emdash-cms/plugin-test` (`bun run --cwd packages/emdash-plugin test:host`), not
+  under `bun test`. CI runs them after the build.
+- **`apps/emdash-demo`** is a private spike and reference site outside the root
+  workspace, with its own lockfile.
 
 ## Data & edge services (Cloudflare)
 
