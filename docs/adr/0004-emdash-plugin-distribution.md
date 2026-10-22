@@ -404,6 +404,22 @@ The minimum interval is 1 minute on Cloudflare, set by the site's `* * * * *` Cr
 Trigger. On Node it is about 1 s, from the scheduler's timer floor. The 5-minute cadence
 works in every mode.
 
+### Deadline follow-up on Worker Loader (2026-10-22, during implementation)
+
+A cron task on Worker Loader raced a fetch to the 120 s stream fixture against a 10 s
+plugin-side timer, then made two more probes and its closing KV write.
+
+| Cron hook timeout | Result |
+|---|---|
+| EmDash default (5 s) | `Hook timeout after 5000ms`; the host cancelled the pending fetch, and no later probe or write ran. |
+| `timeout: 25_000` in the hook config | The abandoned probe graded `down` (code 0) at 10 000 ms, both later probes reached the fixture, and the KV write landed (wall 10.0 s and 11.1 s over two runs). |
+
+An abandoned bridge fetch does not hold the invocation open, but EmDash's 5 s default
+hook timeout ends any cron run that waits longer. The engine therefore declares its
+`cron` hook with a 25 s timeout (`CRON_HOOK_TIMEOUT_MS`), which the plugin CLI writes into
+the manifest's hook entry. That covers the 10 s deadline and stays under the 30 s wall
+limit.
+
 ### Proposed verdict
 
 **Revise ADR-0004 before Phase 3; do not accept it as is.** _(Resolved 2026-10-22: the user chose a 10 s per-probe deadline graded `down`, up-front call budgeting in place of a recorded "skipped" outcome, and sharding each run across cron tasks. Context fact 1 and Decisions 1 and 4 now reflect them, and the ADR is Accepted.)_ The spike triggered the T001

@@ -29,6 +29,15 @@ export const SHARD_FIXED_CALLS = 5
 export const PROBE_DEADLINE_MS = 10_000
 
 /**
+ * Timeout for the `cron` hook. EmDash's default hook timeout is 5 s, which ends a
+ * shard whose slowest probe takes longer and drops all of its writes. A shard
+ * needs the probe deadline plus its reads and writes; Worker Loader's wall limit
+ * is 30 s. Measured on Worker Loader (2026-10-22): with this timeout a probe
+ * abandoned at 10 s is graded down and the run's later fetches and KV write land.
+ */
+export const CRON_HOOK_TIMEOUT_MS = 25_000
+
+/**
  * The scheduler claims at most this many due tasks per tick across the whole
  * site (`LIMIT 10` in `CronExecutor.tick`), and runs them one after another.
  */

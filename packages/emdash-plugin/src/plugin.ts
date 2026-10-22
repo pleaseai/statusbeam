@@ -1,6 +1,6 @@
 import type { SandboxedPlugin } from 'emdash/plugin'
 import { adminRoute } from './admin'
-import { PROBE_DEADLINE_MS } from './budget'
+import { CRON_HOOK_TIMEOUT_MS, PROBE_DEADLINE_MS } from './budget'
 import { publicRoutes } from './routes/public'
 import { webhookRoutes } from './routes/webhooks'
 import { runMaintenance, runShard } from './run'
@@ -30,15 +30,18 @@ const plugin: SandboxedPlugin = {
     'plugin:activate': async (_event, ctx) => {
       await reconcileShards(ctx)
     },
-    'cron': async (event, ctx) => {
-      if (event.name === MAINTENANCE_TASK) {
-        await runMaintenance(ctx)
-        return
-      }
-      const shard = parseShardTask(event.name)
-      if (shard !== null) {
-        await runShard(ctx, shard, { deadlineMs: deadlineFrom(event.data) })
-      }
+    'cron': {
+      timeout: CRON_HOOK_TIMEOUT_MS,
+      handler: async (event, ctx) => {
+        if (event.name === MAINTENANCE_TASK) {
+          await runMaintenance(ctx)
+          return
+        }
+        const shard = parseShardTask(event.name)
+        if (shard !== null) {
+          await runShard(ctx, shard, { deadlineMs: deadlineFrom(event.data) })
+        }
+      },
     },
   },
 }

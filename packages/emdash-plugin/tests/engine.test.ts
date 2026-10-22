@@ -5,7 +5,8 @@ import { readFileSync } from 'node:fs'
 import { buildSiteSummaries, groupDayStats } from '@statusbeam/core'
 import { describe, expect, it } from 'bun:test'
 import { applyResults, pruneExpiredBuckets, toDayCounts } from '../src/buckets'
-import { CALL_BUDGET, fitsBudget, MAX_SHARDS, monitorsPerTask, plannedCalls, reservedCallsFor, SCHEDULER_CLAIM_LIMIT } from '../src/budget'
+import { CALL_BUDGET, CRON_HOOK_TIMEOUT_MS, fitsBudget, MAX_SHARDS, monitorsPerTask, plannedCalls, PROBE_DEADLINE_MS, reservedCallsFor, SCHEDULER_CLAIM_LIMIT } from '../src/budget'
+import plugin from '../src/plugin'
 import { runShard } from '../src/run'
 import { MAINTENANCE_TASK, monitorsPerShard, pollableSites, reconcileShards, shardCountFor, shardSites } from '../src/shards'
 import { readSnapshot } from '../src/snapshot'
@@ -23,6 +24,16 @@ describe('the call budget model', () => {
 
   it('keeps the shard cap below the scheduler claim limit', () => {
     expect(MAX_SHARDS).toBeLessThan(SCHEDULER_CLAIM_LIMIT)
+  })
+})
+
+describe('the cron hook', () => {
+  it('outlasts the probe deadline and stays under the Worker Loader wall limit', () => {
+    // EmDash's default 5 s hook timeout would end a shard before a slow probe's 10 s deadline.
+    const cron = plugin.hooks?.cron as { timeout?: number }
+    expect(cron.timeout).toBe(CRON_HOOK_TIMEOUT_MS)
+    expect(CRON_HOOK_TIMEOUT_MS).toBeGreaterThan(PROBE_DEADLINE_MS)
+    expect(CRON_HOOK_TIMEOUT_MS).toBeLessThan(30_000)
   })
 })
 
