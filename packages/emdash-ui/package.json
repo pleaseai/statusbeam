@@ -1,7 +1,7 @@
 {
   "name": "@statusbeam/emdash-ui",
   "type": "module",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": false,
   "description": "Astro status components for EmDash sites: banner, 90-day uptime bars and per-site detail, rendered from the StatusBeam public JSON.",
   "license": "MIT",

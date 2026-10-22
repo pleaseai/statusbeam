@@ -1,7 +1,7 @@
 {
   "name": "@statusbeam/emdash-plugin",
   "type": "module",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": false,
   "description": "StatusBeam engine for EmDash — a sandboxed plugin that runs scheduled checks with the core engine.",
   "license": "MIT",
