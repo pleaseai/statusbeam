@@ -1,6 +1,6 @@
 import type { SiteResponse, StatusResponse } from '@statusbeam/core/contract'
 import { describe, expect, it } from 'bun:test'
-import { DEFAULT_TIMEOUT_MS, fetchSite, fetchStatus, loadStatus, siteUrl, statusUrl } from './client'
+import { DEFAULT_TIMEOUT_MS, fetchSite, fetchStatus, loadStatus, MAX_BODY_BYTES, siteUrl, statusUrl } from './client'
 
 const status: StatusResponse = {
   version: 1,
@@ -93,6 +93,21 @@ describe('read deadline', () => {
 
   it('defaults to a deadline', () => {
     expect(DEFAULT_TIMEOUT_MS).toBe(10_000)
+  })
+
+  it('refuses a body whose declared length is over MAX_BODY_BYTES without reading it', async () => {
+    let pulled = false
+    const huge = () => new Response(new ReadableStream({
+      pull() {
+        pulled = true
+      },
+    }, { highWaterMark: 0 }), { status: 200, headers: { 'content-length': String(MAX_BODY_BYTES + 1) } })
+    const result = await fetchStatus({ baseUrl: 'https://x.test' }, { fetch: stub(huge).fetch })
+    expect(result).toMatchObject({ ok: false, reason: 'contract', detail: `body of ${MAX_BODY_BYTES + 1} bytes exceeds the ${MAX_BODY_BYTES}-byte limit` })
+    expect(pulled).toBe(false)
+    // A body at the limit, or one without a declared length, is still read.
+    const exact = JSON.stringify(status)
+    expect(await fetchStatus({ baseUrl: 'https://x.test' }, { fetch: stub(() => new Response(exact, { headers: { 'content-length': String(exact.length) } })).fetch })).toMatchObject({ ok: true })
   })
 
   it('does not time out at once on an invalid or oversized timeoutMs', async () => {

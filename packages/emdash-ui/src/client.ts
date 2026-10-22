@@ -48,6 +48,13 @@ export type StatusResult<T> = Available<T> | Unavailable
  */
 export const DEFAULT_TIMEOUT_MS = 10_000
 
+/**
+ * Largest body a read accepts, by its declared `content-length`. Status bodies
+ * are a few KiB per site, so anything this large is a wrong or hostile source;
+ * refusing it before the read keeps the page render from buffering it.
+ */
+export const MAX_BODY_BYTES = 8 * 1024 * 1024
+
 export interface FetchOptions {
   /** Fetch implementation; defaults to the global `fetch`. */
   fetch?: typeof fetch
@@ -168,6 +175,11 @@ async function fetchContract<T>(url: string, schema: Schema<T>, options: FetchOp
     }
     if (!response.ok) {
       return unavailable(url, 'http', `HTTP ${response.status}`)
+    }
+    const declared = Number(response.headers.get('content-length'))
+    if (declared > MAX_BODY_BYTES) {
+      response.body?.cancel().catch(() => {})
+      return unavailable(url, 'contract', `body of ${declared} bytes exceeds the ${MAX_BODY_BYTES}-byte limit`)
     }
     let body: unknown
     try {
