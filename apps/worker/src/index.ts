@@ -1,6 +1,6 @@
 import type { Env } from './env'
 import type { NotificationMessage } from './notify'
-import { checkSite } from '@statusbeam/core'
+import { checkSite, selectPollSites } from '@statusbeam/core'
 import { ingest, loadConfig } from './ingest'
 import { consumeNotificationBatch } from './notify'
 import { handleWebhook } from './webhook'
@@ -29,23 +29,10 @@ import { handleWebhook } from './webhook'
 export default {
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     const config = await loadConfig(env)
-    // Skip webhook-only Sentry sites (a `check: sentry` site with no `sentry:`
-    // poll block, or no SENTRY_AUTH_TOKEN to authenticate the poll). Polling them
-    // would record a false `down` every tick and clobber the webhook-driven
+    // Skip webhook-only Sentry sites and token-less Sentry poll sites: polling
+    // them would record a false `down` every tick and clobber the webhook-driven
     // status; ingest preserves a skipped site's previous status instead.
-    const sites = config.sites.filter((site) => {
-      if (site.check !== 'sentry') {
-        return true
-      }
-      // A `sentry:` block declares intent to poll; a missing token then is a
-      // deploy/config mistake worth surfacing rather than skipping silently. A
-      // site with no `sentry:` block is webhook-only by design — skip it quietly.
-      if (site.sentry !== undefined && !env.SENTRY_AUTH_TOKEN) {
-        console.warn(`scheduled: sentry poll configured for "${site.slug}" but SENTRY_AUTH_TOKEN is missing; skipping poll`)
-        return false
-      }
-      return site.sentry !== undefined
-    })
+    const sites = selectPollSites(config.sites, { sentryToken: env.SENTRY_AUTH_TOKEN })
     const results = await Promise.all(
       sites.map(site => checkSite(site, { sentryToken: env.SENTRY_AUTH_TOKEN })),
     )
