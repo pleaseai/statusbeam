@@ -31,6 +31,10 @@ export async function ingest(
   results: CheckResult[],
   ctx: ExecutionContext,
 ): Promise<void> {
+  // Read the previous snapshot before inserting this batch, so the legacy
+  // placeholder check below sees only rows from earlier checks.
+  const previous = await markLegacyPlaceholders(env, await readSummary(env))
+
   // Persist every check row (time-series) in one batch.
   await env.DB.batch(
     results.map(r =>
@@ -42,7 +46,6 @@ export async function ingest(
   )
 
   // Detect status changes against the previous snapshot before overwriting it.
-  const previous = await readSummary(env)
   const changes = detectStatusChanges(results, previous)
 
   const now = new Date()
@@ -67,6 +70,35 @@ async function readSummary(env: Env): Promise<Map<string, SiteSummary>> {
   }
   const summary = JSON.parse(raw) as SiteSummary[]
   return new Map(summary.map(s => [s.slug, s]))
+}
+
+/**
+ * A snapshot written before `pending` existed gave a site never checked a
+ * placeholder `down`/`0` with no flag. Mark such an entry pending when the site
+ * has no row in `checks` at all: rows are never deleted, so none means no real
+ * result ever arrived. A real `down` with `responseTime: 0` (a webhook event)
+ * has its row and keeps its status, however old it is.
+ */
+async function markLegacyPlaceholders(env: Env, previous: Map<string, SiteSummary>): Promise<Map<string, SiteSummary>> {
+  const candidates = [...previous.values()]
+    .filter(s => !s.pending && s.status === 'down' && s.responseTime === 0)
+    .map(s => s.slug)
+  if (candidates.length === 0) {
+    return previous
+  }
+  // One index seek per candidate (idx_checks_slug_time), not a scan of the table.
+  const rows = await env.DB.prepare(
+    `SELECT value AS slug FROM json_each(?)
+     WHERE EXISTS (SELECT 1 FROM checks WHERE checks.slug = json_each.value)`,
+  ).bind(JSON.stringify(candidates)).all<{ slug: string }>()
+  const checked = new Set(rows.results.map(r => r.slug))
+  const marked = new Map(previous)
+  for (const slug of candidates) {
+    if (!checked.has(slug)) {
+      marked.set(slug, { ...previous.get(slug)!, pending: true })
+    }
+  }
+  return marked
 }
 
 /**

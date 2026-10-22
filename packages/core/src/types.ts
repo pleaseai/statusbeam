@@ -65,7 +65,7 @@ export interface SiteSummary {
    * severity and of change detection. Omitted (never `false`) otherwise, so the
    * serialized summary of a checked site is unchanged.
    */
-  pending?: boolean
+  pending?: true
   responseTime: number
   /** Trailing uptime percentages as display strings, e.g. "99.98%". */
   uptimeDay: string

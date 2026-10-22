@@ -21,6 +21,8 @@ import UptimeBars from './UptimeBars.astro'
  */
 type Props = SiteInput & { locale?: Locale }
 
+const NO_UPTIME = '—'
+
 const { locale = DEFAULT_LOCALE, ...input } = Astro.props
 const result = await loadSite(input)
 const t = getDict(locale)
@@ -28,7 +30,11 @@ const site = result.ok ? result.data : undefined
 const severity = site && toSeverity(site.status)
 // A site not checked yet carries a placeholder `down`: show its own label and a neutral tone, not an outage.
 const pending = site?.pending === true
-const uptime90 = site && formatUptime(windowUptime(site.history))
+// Its empty history reads as 100% in every uptime window: show no figure instead, as the uptime badge does.
+const uptime90 = site && (pending ? NO_UPTIME : formatUptime(windowUptime(site.history)))
+const uptimes = site && (pending
+  ? { day: NO_UPTIME, week: NO_UPTIME, month: NO_UPTIME, quarter: NO_UPTIME }
+  : { day: site.uptimeDay, week: site.uptimeWeek, month: site.uptimeMonth, quarter: uptime90 ?? '' })
 ---
 
 {!result.ok && <Unavailable result={result} locale={locale} />}
@@ -44,7 +50,7 @@ const uptime90 = site && formatUptime(windowUptime(site.history))
     </div>
     <UptimeBars result={result} locale={locale} />
     <p class="sb-meta">
-      <span>{t.breakdown({ day: site.uptimeDay, week: site.uptimeWeek, month: site.uptimeMonth, quarter: uptime90 ?? '' })}</span>
+      <span>{uptimes && t.breakdown(uptimes)}</span>
       {/* The current value stands alone: the plugin's summaries carry no responseHistory. */}
       {site.responseTime > 0 && (
         <span>{t.status.responseTime} · {site.responseTime} {t.unit.ms}</span>

@@ -76,7 +76,7 @@ describe('detectStatusChanges', () => {
   })
 
   it('does not report the first real result after a pending summary as a change', () => {
-    const previous = new Map([['a', { status: 'down' as const, pending: true }]])
+    const previous = new Map([['a', { status: 'down' as const, pending: true as const }]])
     expect(detectStatusChanges([result('a', 'up')], previous)).toEqual([])
   })
 })

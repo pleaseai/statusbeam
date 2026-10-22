@@ -25,6 +25,7 @@ const STYLE = {
 
 // A site not checked yet (`pending`) has no real status: neutral styling, its own label.
 const PENDING_STYLE = { dot: 'bg-status-nodata', badge: 'border-status-nodata/40 text-muted-foreground' } as const
+const NO_UPTIME = '—'
 
 /**
  * One status card row: name + rolled-up badge, a 90-day uptime timeline, and an
@@ -38,8 +39,11 @@ function StatusRow({ site, locale, t }: Readonly<{ site: SiteSummary, locale: Lo
   // Guard against stale KV snapshots written before these fields existed.
   const history = site.history ?? []
   const responseHistory = site.responseHistory ?? []
-  const uptime90 = formatUptime(windowUptime(history))
-  const breakdown = t.breakdown({ day: site.uptimeDay, week: site.uptimeWeek, month: site.uptimeMonth, quarter: uptime90 })
+  // A pending site's empty history reads as 100% in every uptime window: show no figure instead, as the uptime badge does.
+  const uptime90 = site.pending ? NO_UPTIME : formatUptime(windowUptime(history))
+  const breakdown = site.pending
+    ? t.breakdown({ day: NO_UPTIME, week: NO_UPTIME, month: NO_UPTIME, quarter: NO_UPTIME })
+    : t.breakdown({ day: site.uptimeDay, week: site.uptimeWeek, month: site.uptimeMonth, quarter: uptime90 })
   return (
     <div className="px-5 py-4">
       <div className="flex items-center justify-between">

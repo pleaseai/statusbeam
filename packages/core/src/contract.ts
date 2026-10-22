@@ -48,7 +48,7 @@ const dayStatSchema = z.object({
  * `true` when the site has no real result yet ("not checked yet"); omitted
  * otherwise. Its `status` is then a placeholder `down`, not an observed outage.
  */
-const pendingSchema = z.boolean().optional()
+const pendingSchema = z.literal(true).optional()
 
 const responsePointSchema = z.object({
   at: z.string(),
