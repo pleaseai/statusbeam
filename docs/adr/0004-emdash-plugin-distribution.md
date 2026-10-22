@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+Accepted (2026-10-22, revised after the probe-semantics spike; see Spike results)
 
 **Deciders:** StatusBeam maintainers
 
@@ -45,8 +45,10 @@ Five facts about StatusBeam and the EmDash host shape the decision:
    stops its latency timer when `fetch` resolves and never reads the body
    (`packages/core/src/check.ts:63-87`), so on the Worker it measures time to
    headers, while in the sandbox it measures time to the last body byte. A slow
-   body can push a healthy monitor to `degraded`; a body over 8 MiB or a response that
-   never completes fails as `down` (`code: 0`). Under-limit streaming responses are
+   body can push a healthy monitor to `degraded`; a body over 8 MiB fails as `down`
+   (`code: 0`). A response that never completes is not rejected at all: both sandbox
+   runners kill the whole invocation at 30 s, and in-process the fetch blocks (spike,
+   2026-10-22). Under-limit streaming responses are
    buffered successfully, but their latency is measured to the last body byte.
    The same monitor can therefore produce false outages
    and notifications when it moves to the plugin.
@@ -90,7 +92,12 @@ prevents that.
 Ship StatusBeam for EmDash as **two packages with one engine**:
 
 1. **`plugin-sandboxed` (registry) — the engine.** A `SandboxedPlugin` that owns:
-   - the `cron` hook running `checkSite` with `ctx.http.fetch`;
+   - the `cron` hook running `checkSite` with `ctx.http.fetch`. Each 5-minute run is
+     sharded across several cron tasks, because every bridge call (fetch, KV, storage,
+     settings, log) counts against Worker Loader's 10-call budget per invocation, which
+     leaves about 6 monitors per task. The shard count stays within the scheduler's
+     10-due-tasks-per-tick limit. Each task plans its bridge calls before spending any
+     and never starts a probe it cannot afford;
    - check history in `ctx.storage`, the current snapshot in `ctx.kv`;
    - status-change notifications (Slack / webhooks), tokens in encrypted `ctx.settings`;
    - public JSON and shields.io badge routes, plus public webhook routes for
@@ -141,8 +148,17 @@ Ship StatusBeam for EmDash as **two packages with one engine**:
    `ctx.http.fetch` rejects because of the buffering limit, the engine records the
    probe as unsupported rather than `down`, leaves it out of status and uptime
    rollups, sends no status-change notification for it, and shows a persistent
-   warning on that monitor. It does not silently switch a configured `GET` to
-   `HEAD`, which would change the check.
+   warning on that monitor. The rejection carries no error code, so the engine
+   matches it by message text, before treating any other rejection as a network
+   failure. It does not silently switch a configured `GET` to `HEAD`, which would
+   change the check. Every probe also runs under a 10 s plugin-side deadline; a probe
+   that misses it grades `down` (`code: 0`), like a network failure, so one
+   never-completing response cannot end the invocation and lose the other probes.
+   Subrequest, CPU, and wall-time limits cannot be recorded after they hit (later
+   bridge calls fail, and CPU or wall-time kills never reach the plugin), so the
+   engine budgets calls up front instead. A run that a platform limit still kills
+   writes nothing, which leaves the last snapshot, and every monitor's status,
+   unchanged.
 
 Because of the wire contract (Decision 3), the render package can point its base
 URL at either source:
@@ -390,7 +406,7 @@ works in every mode.
 
 ### Proposed verdict
 
-**Revise ADR-0004 before Phase 3; do not accept it as is.** The spike triggered the T001
+**Revise ADR-0004 before Phase 3; do not accept it as is.** _(Resolved 2026-10-22: the user chose a 10 s per-probe deadline graded `down`, up-front call budgeting in place of a recorded "skipped" outcome, and sharding each run across cron tasks. Context fact 1 and Decisions 1 and 4 now reflect them, and the ADR is Accepted.)_ The spike triggered the T001
 STOP condition: one mode, and in one case every mode, contradicts the probe contract.
 The user should review these findings before the ADR status changes. The confirmations
 and contradictions:

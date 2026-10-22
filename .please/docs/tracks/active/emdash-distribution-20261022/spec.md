@@ -9,8 +9,8 @@ product_spec_domain: distribution/emdash
 ## Overview
 
 StatusBeam gains a second distribution channel inside [EmDash](https://github.com/emdash-cms)
-sites, as decided in ADR-0004 (`docs/adr/0004-emdash-plugin-distribution.md`, still
-Proposed). It ships as two packages with one check engine:
+sites, as decided in ADR-0004 (`docs/adr/0004-emdash-plugin-distribution.md`,
+Accepted after the Phase 1 spike). It ships as two packages with one check engine:
 
 - **Engine plugin** — an EmDash plugin installed from the registry that runs scheduled checks,
   keeps history and the current snapshot, sends status-change notifications, serves the public
@@ -52,12 +52,12 @@ standalone StatusBeam, edited on a plugin admin page that validates before savin
 
 **Phase 3 — engine plugin**
 
-- [ ] FR-8: run scheduled checks for every configured monitor inside the plugin and keep check history and the current status snapshot in plugin-owned storage
+- [ ] FR-8: run scheduled checks for every configured monitor inside the plugin, sharding each run's monitors across separate scheduled tasks so every task stays within one invocation's limits, and keep check history and the current status snapshot in plugin-owned storage
 - [ ] FR-9: compute 90-day per-day uptime from plugin storage with the same results as the standalone rollup for the same check history
 - [ ] FR-10: send Slack and generic-webhook notifications when a monitor's status changes
 - [ ] FR-11: accept Statuspage and Sentry inbound webhooks on public endpoints authenticated by a shared secret token
 - [ ] FR-12: show a current-status summary widget on the EmDash admin dashboard
-- [ ] FR-13: record a probe that fails because of a runtime limit rather than the target (as unsupported when the response exceeds the body-size limit, and as skipped when the run hits the subrequest or CPU-time limit), exclude it from status and uptime rollups and from notifications, and show a persistent warning on that monitor naming the limit
+- [ ] FR-13: record a probe whose response exceeds the body-size limit as unsupported, exclude it from status and uptime rollups and from notifications, and show a persistent warning on that monitor naming the limit; plan each scheduled task's calls before it starts so it never begins a probe it cannot afford, and leave every monitor unchanged when the runtime still ends a task early
 
 **Phase 4 — monitor configuration**
 
@@ -78,7 +78,7 @@ standalone StatusBeam, edited on a plugin admin page that validates before savin
 ### Non-functional Requirements
 
 - [ ] NFR-1: keep the render library and the content block limited to the public status data — no scheduled work, no storage, and no access to engine state
-- [ ] NFR-2: keep the engine plugin within the Cloudflare runner's per-invocation limits at the monitor count FR-3 establishes
+- [ ] NFR-2: keep every scheduled task within the Cloudflare runner's per-invocation limits, with no more monitors per task than FR-3 measured
 - [ ] NFR-3: verify contract parity at the HTTP level, comparing the plugin's endpoint responses with the standalone endpoints rather than only the data before it is serialized
 - [ ] NFR-4: convey status in the render library with a label or icon alongside color, using the existing severity tokens (WCAG 2.1 AA)
 - [ ] NFR-5: reuse the core check engine and configuration schema without forking them
@@ -94,9 +94,9 @@ standalone StatusBeam, edited on a plugin admin page that validates before savin
 - [ ] AC-007 (FR-11): If no webhook secret is configured, then the system shall reject every inbound webhook request.
 - [ ] AC-008 (FR-11): If an inbound webhook request carries a token that does not match the configured secret, then the system shall reject it without changing any monitor's status.
 - [ ] AC-009 (FR-13): When a probe fails because the response exceeds the body-size limit, the system shall mark that probe unsupported.
-- [ ] AC-010 (FR-13): When a probe fails because the run hit the subrequest or CPU-time limit, the system shall mark that probe skipped.
-- [ ] AC-011 (FR-13): If a probe is marked unsupported or skipped, then the system shall not send a status-change notification for that monitor.
-- [ ] AC-012 (FR-13): If a probe is marked unsupported or skipped, then the system shall leave that monitor's status and uptime unchanged.
+- [ ] AC-010 (FR-13): The system shall assign each scheduled task no more monitors than its call budget covers, counting probes, notification deliveries, and storage calls.
+- [ ] AC-011 (FR-13): If a probe is marked unsupported, then the system shall not send a status-change notification for that monitor.
+- [ ] AC-012 (FR-13): If a probe is marked unsupported, or the runtime ends its scheduled task early, then the system shall leave that monitor's status and uptime unchanged.
 - [ ] AC-013 (FR-13): The system shall not switch a monitor configured for GET to HEAD to stay under the body-size limit.
 - [ ] AC-014 (FR-15): When an administrator saves a configuration that fails the core schema, the system shall show every validation issue with the path of the offending field.
 - [ ] AC-015 (FR-15): When an administrator saves a configuration that fails the core schema, the system shall keep the previously saved configuration.
@@ -105,7 +105,7 @@ standalone StatusBeam, edited on a plugin admin page that validates before savin
 - [ ] AC-018 (FR-18): When a configuration sets notification delivery to queue, the system shall reject it as unsupported by the plugin.
 - [ ] AC-019 (FR-18): When a configuration includes a TCP or SSL monitor, the system shall save it and show a warning that the plugin checks it over HTTP.
 - [ ] AC-020 (FR-18): When a configuration includes a Sentry monitor with a poll backstop but no Sentry token is set, the system shall save it and show a warning that the backstop cannot run.
-- [ ] AC-021 (FR-18): When a configuration has more monitors than one scheduled run can probe, the system shall save it and show a capacity warning.
+- [ ] AC-021 (FR-18): When a configuration has more monitors than the scheduled tasks of one run can probe together, the system shall save it and show a capacity warning.
 - [ ] AC-022 (FR-19): When a configuration includes a Slack or generic-webhook URL in the YAML, the system shall reject it with an error that points to the encrypted notification settings.
 - [ ] AC-023 (FR-20): If the stored configuration fails validation during a scheduled run, then the system shall skip that run's checks without changing any monitor's status.
 - [ ] AC-024 (FR-20): If the stored configuration fails validation during a scheduled run, then the system shall show a persistent error on the admin page until a valid configuration is saved.
@@ -115,6 +115,7 @@ standalone StatusBeam, edited on a plugin admin page that validates before savin
 - [ ] AC-028 (FR-23): The installation guide shall state that the engine plugin needs a sandbox runner.
 - [ ] AC-029 (FR-23): The installation guide shall state that running the engine plugin in-process is a trust decision that gives up isolation and resource limits.
 - [ ] AC-030 (FR-23): The installation guide shall state which deployment shape keeps checks and the status page independent of a CMS or host outage.
+- [ ] AC-031 (FR-8): When a monitored endpoint has not finished its response within 10 seconds, the system shall grade that probe down and go on to the task's remaining monitors.
 
 ## Out of Scope
 

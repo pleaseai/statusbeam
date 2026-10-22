@@ -55,7 +55,7 @@ Considered and not built (beyond the spec's Out of Scope):
 
 **Plugin storage.** History is kept as per-day count buckets `{up, degraded, down, total}` per `(slug, date)` in `ctx.storage`, pruned past 90 days, and the snapshot lives in `ctx.kv`. Raw checks would be about 26k rows per monitor over 90 days, too many to query under 50 ms of CPU. Standalone's D1 `GROUP BY` and the plugin buckets feed the same core rollup.
 
-**Limit outcomes.** Core's `CheckResult` gains an optional `limit` field, set when the injected fetch throws an error with a limit marker (body / subrequests / cpu). `CheckStatus` stays closed. The plugin maps body limits to unsupported and subrequest or CPU limits to skipped. The marker's form follows how T001 finds each runner reports a limit.
+**Limit outcomes.** Core's `CheckResult` gains an optional `limit` field, set to `body` when the injected fetch throws an error whose message contains the host's body-limit text (T001: limit errors are plain `Error`s, told apart only by message). `CheckStatus` stays closed, and the plugin maps `limit: body` to unsupported. Subrequest, CPU and wall-time limits are not recorded as outcomes: CPU and wall kills never reach the plugin, so each run is sharded across cron tasks of about 6 monitors, each task budgets its calls (probes, notifications, kv/storage, log) before it starts, and a killed task writes nothing. Each probe has a 10 s plugin-side deadline graded `down` with code 0, so one hung target cannot stall the task.
 
 **Config.** The YAML is one plain setting written with `compareAndSet`. The loaded revision sits in `ctx.kv` per user (no hidden field in Block Kit). The four secrets are `secret` settings fields, and generic-webhook URLs go one per line. Plugin-only rules run after `configSchema.safeParse`, which keeps plugin policy out of core.
 
@@ -67,7 +67,7 @@ Considered and not built (beyond the spec's Out of Scope):
 
 **Phase 1 — spike**
 
-- [ ] T001 [SPIKE] Run the probe-semantics spike in all three execution modes and record the results in ADR-0004 (file: docs/adr/0004-emdash-plugin-distribution.md) [FR-1, FR-2, FR-3, FR-4, FR-5, AC-001, AC-002, AC-003, AC-004]
+- [x] T001 [SPIKE] Run the probe-semantics spike in all three execution modes and record the results in ADR-0004 (file: docs/adr/0004-emdash-plugin-distribution.md) [FR-1, FR-2, FR-3, FR-4, FR-5, AC-001, AC-002, AC-003, AC-004]
   Validation: ADR-0004 gains a results table per mode covering: the >8 MiB, slow-body and streaming fixtures (AC-001, AC-002); whether a body, subrequest or CPU-limit rejection is distinguishable from a network error and how it surfaces (FR-2); probes finished per run past the subrequest cap, including notification deliveries and config re-validation (AC-003, FR-3); and the cron minimum interval (FR-4). It ends in either Accepted or a revision of the affected decisions and spec phases (AC-004, FR-5). The harness (`apps/emdash-demo` plus fixtures) is committed with a README that reproduces each run.
   Method: manual runs on Worker Loader, the Node/workerd runner and in-process (`plugins: []`), recorded in the ADR.
   STOP: a mode contradicts the probe contract, the cadence or capacity is unworkable, or a runner is unavailable on the account. Report to the user before marking the ADR.
@@ -83,11 +83,11 @@ Considered and not built (beyond the spec's Out of Scope):
 
 **Phase 3 — engine plugin**
 
-- [ ] T004 Scaffold the sandboxed engine plugin and run scheduled checks into day buckets and a snapshot (file: packages/emdash-plugin/src/plugin.ts) (depends on T001, T003) [FR-8, FR-9, NFR-2]
-  Validation: a cron run checks every configured monitor through `ctx.http.fetch`, updates the per-day buckets and snapshot, and prunes buckets older than 90 days. 90-day per-day uptime from the buckets equals the standalone rollup for the same check history (FR-8, FR-9). Webhook-only Sentry monitors are not polled. Runs beyond the per-run capacity follow T001's decision (split or cap), so no run exceeds the runner limits (NFR-2).
+- [ ] T004 Scaffold the sandboxed engine plugin and run sharded scheduled checks into day buckets and a snapshot (file: packages/emdash-plugin/src/plugin.ts) (depends on T001, T003) [FR-8, FR-9, NFR-2, AC-031]
+  Validation: a cron run checks every configured monitor through `ctx.http.fetch`, updates the per-day buckets and snapshot, and prunes buckets older than 90 days. 90-day per-day uptime from the buckets equals the standalone rollup for the same check history (FR-8, FR-9). Webhook-only Sentry monitors are not polled. Each run is sharded across cron tasks of at most the per-task monitor count T001 measured, every monitor is covered once per cadence, and no task exceeds the runner limits (NFR-2). A target that has not finished within 10 s is graded `down` and the task moves on to its remaining monitors (AC-031).
   Method: `bun test packages/emdash-plugin` with `createPluginTestHost` and `host.http.respond`
-- [ ] T005 Send status-change notifications and grade runtime-limit failures as unsupported or skipped (file: packages/emdash-plugin/src/run.ts) (depends on T004) [FR-10, FR-13, AC-009, AC-010, AC-011, AC-012, AC-013]
-  Validation: A status change posts to the Slack and generic-webhook URLs held in secret settings fields this task declares (FR-10), and delivery logs never contain a full URL. A body-limit failure marks the probe unsupported (AC-009); a subrequest- or CPU-limit failure marks it skipped (AC-010). Neither notifies (AC-011) nor changes status or uptime (AC-012), and the monitor shows a persistent warning naming the limit. A GET monitor is never retried as HEAD (AC-013). Standalone results are unaffected by the new core `limit` field.
+- [ ] T005 Send status-change notifications, mark body-limit failures unsupported, and budget each task's calls up front (file: packages/emdash-plugin/src/run.ts) (depends on T004) [FR-10, FR-13, AC-009, AC-010, AC-011, AC-012, AC-013]
+  Validation: A status change posts to the Slack and generic-webhook URLs held in secret settings fields this task declares (FR-10), and delivery logs never contain a full URL. A body-limit failure, recognised by the host's message text, marks the probe unsupported (AC-009), sends no notification (AC-011), changes no status or uptime (AC-012), and the monitor shows a persistent warning naming the limit. Each task's planned calls (probes, notification deliveries, kv/storage, log) fit its budget before it starts (AC-010), and a task the runtime ends early leaves every monitor unchanged (AC-012). A GET monitor is never retried as HEAD (AC-013). Standalone results are unaffected by the new core `limit` field.
   Method: `bun test packages/emdash-plugin packages/core`
 - [ ] T006 Serve the public status and badge endpoints as raw routes with HTTP-level parity against standalone (file: packages/emdash-plugin/src/routes/public.ts) (depends on T002, T004) [FR-7, NFR-3, AC-005, AC-006]
   Validation: The plugin status endpoint returns an unwrapped body the contract accepts (AC-005). The badge endpoints return valid shields.io bodies (AC-006). For the same snapshot, every plugin endpoint's response body equals the standalone endpoint's, with `generatedAt` normalized (NFR-3). Successful GETs carry the route's `cacheControl`. An unknown slug returns the standalone 404 body. An invalid `period` falls back to `month` as standalone does.
@@ -99,7 +99,7 @@ Considered and not built (beyond the spec's Out of Scope):
 **Phase 4 — monitor configuration**
 
 - [ ] T008 Validate the YAML with plugin-only rules, keep secrets in encrypted settings, and gate each scheduled run on re-validation (file: packages/emdash-plugin/src/config.ts) (depends on T004) [FR-14, FR-18, FR-19, FR-20, AC-018, AC-019, AC-020, AC-021, AC-022, AC-023, AC-024]
-  Validation: The YAML is validated by the core schema (FR-14). `delivery: queue` is an error (AC-018). TCP/SSL monitors warn (AC-019). A Sentry poll with no token warns (AC-020). Too many monitors for one run warns (AC-021). A Slack or webhook URL in the YAML is an error pointing to the encrypted settings (AC-022). Duplicate slugs are an error. A generic-webhook secret line that is not a URL is reported, not dropped. A run whose stored config fails validation checks nothing and changes no status (AC-023), and records an error that stays until a valid save (AC-024).
+  Validation: The YAML is validated by the core schema (FR-14). `delivery: queue` is an error (AC-018). TCP/SSL monitors warn (AC-019). A Sentry poll with no token warns (AC-020). More monitors than one run's sharded tasks can probe warns (AC-021). A Slack or webhook URL in the YAML is an error pointing to the encrypted settings (AC-022). Duplicate slugs are an error. A generic-webhook secret line that is not a URL is reported, not dropped. A run whose stored config fails validation checks nothing and changes no status (AC-023), and records an error that stays until a valid save (AC-024).
   Method: `bun test packages/emdash-plugin`
 - [ ] T009 Build the administrator-only Block Kit config page and the status dashboard widget (file: packages/emdash-plugin/src/admin.ts) (depends on T008) [FR-12, FR-15, FR-16, FR-17, AC-014, AC-015, AC-016, AC-017, AC-025, AC-026]
   Validation: Saving an invalid config shows every issue with its path (AC-014) and keeps the stored one (AC-015). A save after someone else's save is refused with a reload message (AC-016). A non-administrator is refused on every page action (AC-017). Validate checks without saving (FR-16). Test site shows graded status and latency (AC-025) and writes no history or status (AC-026). The run-time error from T008 shows as a banner. A YAML too large for a Block Kit string is refused with a message, not truncated. The widget shows overall status and per-severity counts (FR-12).
@@ -136,7 +136,7 @@ Considered and not built (beyond the spec's Out of Scope):
 ## Verification
 
 - [ ] `bun run lint`, `bun run typecheck`, `bun run build` and `bun test` are green after every task, with the standalone tests unmodified through T002–T003.
-- [ ] The ADR-0004 spike results (T001) are reviewed with the user before T004 starts.
+- [x] The ADR-0004 spike results (T001) are reviewed with the user before T004 starts.
 - [ ] `apps/emdash-demo` runs the full install: the engine through a sandbox runner, the components on a page, and the block in a post.
 
 ## Review Focus
@@ -149,6 +149,8 @@ Considered and not built (beyond the spec's Out of Scope):
 
 ## Progress
 
+- [x] (2026-10-22 18:40 KST) T001 Run the probe-semantics spike in all three execution modes and record the results in ADR-0004 — `fbbf425`, `29f7dc6`, ADR accepted in this commit
+  Evidence: `apps/emdash-demo/results/2026-10-22/` holds the per-mode runs; ADR-0004 "Spike results (2026-10-22)" records buffering and the 8 MiB limit in all modes, the 30 s invocation kill (in-process blocks), message-only limit errors, the 10-call Worker Loader bridge budget (~6 monitors per invocation), per-task budgets for separate cron tasks, and a 1-minute cron floor. Status set to Accepted after the user chose a 10 s deadline graded down, up-front budgeting, and sharding.
 - [x] (2026-10-22 16:20 KST) T002 Define the public status contract in core and serve the standalone endpoints from it — `9bb4c21`
   Evidence: `bun test` → 324 pass, 0 fail; `contract.test.ts` asserts each body equals the legacy payload with only `version: 1` prepended, parses under its schema, and the path map yields both flavors; `grep -c yaml packages/core/dist/contract.js` → 0; `bun run build`/`typecheck`/`lint` green in the track tree.
 - [x] (2026-10-22 16:24 KST) T003 Move the rollup, change detection, poll selection, notification delivery, webhook helpers and config issue list into core — `16c71b5`
@@ -159,6 +161,9 @@ Considered and not built (beyond the spec's Out of Scope):
 - 2026-10-22: Architecture follows ADR-0004 as amended in #99. No competing architect pass, because the spec leaves no strategy open.
 - 2026-10-22: Plan review (deep, 6 lenses) applied 6 fixes: notification secret fields owned by T005, URL-free delivery logs, webhook/cron bucket race, webhook rejection order under host-parsed input, a runnable parity method, and component checks via the demo site.
 - 2026-10-22: The plan has 12 tasks covering two packages. The single-track ruling was made at spec review (the user kept one track), so the Phase 4 scope prompt was not repeated.
+
+- 2026-10-22: After the spike, the user chose a 10 s per-probe deadline graded `down`, budgeting calls before each task instead of recording a skipped outcome, and sharding each run across cron tasks. AC-010/011/012/021 were reworded and AC-031 added; T004, T005 and T008 follow.
+- 2026-10-22: The engine stays a sandboxed plugin; only the optional Portable Text block needs a native entry point. A native engine is not registry-installable, runs with full site authority, and in-process mode was measured on Node only.
 
 ## Surprises & Discoveries
 
