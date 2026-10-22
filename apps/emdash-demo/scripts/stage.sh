@@ -10,7 +10,8 @@
 #
 # The copy uses `rsync --delete`, so the target must be a directory this script
 # staged before (it carries a .statusbeam-stage marker), a new directory, or an
-# empty one. The source tree, its ancestors and its descendants are refused.
+# empty one. The source tree, its ancestors and its descendants are refused,
+# and so is any path with a `.` or `..` component.
 # Usage: scripts/stage.sh [target-dir]
 set -euo pipefail
 
@@ -23,6 +24,14 @@ if [[ ! -f "$here/probe/dist/plugin.mjs" ]]; then
   exit 1
 fi
 
+# A `.` or `..` component would let a path through the checks below as one
+# directory and then land on another once `mkdir -p` creates its missing parts.
+case "/$target/" in
+  */./* | */../*)
+    echo "refusing to stage into $target: give a path without . or .. components" >&2
+    exit 1
+    ;;
+esac
 if [[ -e "$target" && ! -d "$target" ]]; then
   echo "refusing to stage into $target: it is not a directory" >&2
   exit 1
