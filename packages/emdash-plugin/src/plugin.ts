@@ -16,9 +16,9 @@ function deadlineFrom(data: Record<string, unknown> | undefined): number {
 /**
  * The StatusBeam engine as a sandboxed EmDash plugin (ADR-0004).
  *
- * Seams for later tasks: notifications (T005) extend `runShard`; the public
- * routes (T006) read `readSnapshot` and the buckets; webhooks (T007) and the
- * admin page (T009) add `routes`, and T009 calls `reconcileShards` after a save.
+ * Seams for later tasks: the public routes (T006) read `readSnapshot` (history
+ * included) and serve `summariesFromSnapshot`; webhooks (T007) and the admin
+ * page (T009) add `routes`, and T009 calls `reconcileShards` after a save.
  */
 const plugin: SandboxedPlugin = {
   hooks: {

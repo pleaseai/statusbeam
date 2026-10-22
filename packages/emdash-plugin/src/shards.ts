@@ -1,8 +1,8 @@
 import type { Site, StatusConfig } from '@statusbeam/core'
 import type { PluginContext } from 'emdash/plugin'
 import { selectPollSites } from '@statusbeam/core'
-import { CALL_BUDGET, MAX_SHARDS, monitorsPerTask, SHARD_RESERVED_CALLS } from './budget'
-import { readConfig } from './settings'
+import { CALL_BUDGET, MAX_SHARDS, monitorsPerTask, reservedCallsFor } from './budget'
+import { readSettings } from './settings'
 
 /** Cadence of every shard task (FR-4: the 5-minute cadence works in all three execution modes). */
 export const SHARD_SCHEDULE = '*/5 * * * *'
@@ -23,9 +23,9 @@ export function parseShardTask(name: string): number | null {
   return match ? Number(match[1]) : null
 }
 
-/** Monitors per shard under the current call budget. */
-export function monitorsPerShard(): number {
-  return monitorsPerTask(SHARD_RESERVED_CALLS)
+/** Monitors per shard under the call budget, once each of `destinations` notification destinations has its call reserved. */
+export function monitorsPerShard(destinations = 0): number {
+  return monitorsPerTask(reservedCallsFor(destinations))
 }
 
 /**
@@ -38,9 +38,17 @@ export function pollableSites(config: Pick<StatusConfig, 'sites'>, options: { se
     .sort((a, b) => (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0))
 }
 
-/** Shard tasks needed for `monitors` pollable monitors: `ceil(n / per-task)`, capped at {@link MAX_SHARDS}. */
-export function shardCountFor(monitors: number): number {
-  return Math.min(MAX_SHARDS, Math.ceil(monitors / monitorsPerShard()))
+/**
+ * Shard tasks needed for `monitors` pollable monitors: `ceil(n / per-task)`,
+ * capped at {@link MAX_SHARDS}. When the destinations leave no call for a probe,
+ * one shard still runs to record the capacity error.
+ */
+export function shardCountFor(monitors: number, destinations = 0): number {
+  const perShard = monitorsPerShard(destinations)
+  if (monitors === 0) {
+    return 0
+  }
+  return perShard < 1 ? 1 : Math.min(MAX_SHARDS, Math.ceil(monitors / perShard))
 }
 
 /**
@@ -48,8 +56,8 @@ export function shardCountFor(monitors: number): number {
  * slugs from the sorted list, so each pollable monitor is in exactly one shard.
  * Monitors beyond `MAX_SHARDS * monitorsPerShard()` fall in no shard.
  */
-export function shardSites(sorted: Site[], shard: number): Site[] {
-  const size = monitorsPerShard()
+export function shardSites(sorted: Site[], shard: number, destinations = 0): Site[] {
+  const size = monitorsPerShard(destinations)
   return sorted.slice(shard * size, (shard + 1) * size)
 }
 
@@ -104,7 +112,7 @@ export interface ReconcileResult {
  * shard tasks (and the maintenance task), cancel the surplus ones. Idempotent.
  *
  * It spends at most `budget` bridge calls (default {@link CALL_BUDGET}): one to
- * read the configuration, one to list tasks, then one per schedule or cancel.
+ * read the settings (the configuration and the destinations that size the shards), one to list tasks, then one per schedule or cancel.
  * Missing tasks go first so coverage comes before cleanup. Call it from
  * `plugin:activate` and after a configuration save.
  */
@@ -117,9 +125,9 @@ export async function reconcileShards(
     throw new Error('ctx.cron is unavailable')
   }
   const budget = options.budget ?? CALL_BUDGET
-  const config = await readConfig(ctx)
+  const { config, destinations } = await readSettings(ctx)
   const monitors = config ? pollableSites(config).length : 0
-  const shards = config ? shardCountFor(monitors) : null
+  const shards = config ? shardCountFor(monitors, destinations.length) : null
   const plan = planReconcile(shards, await cron.list())
 
   const scheduled: string[] = []
@@ -146,6 +154,6 @@ export async function reconcileShards(
     scheduled,
     cancelled,
     deferred: plan.schedule.length + plan.cancel.length - scheduled.length - cancelled.length,
-    uncovered: Math.max(0, monitors - MAX_SHARDS * monitorsPerShard()),
+    uncovered: Math.max(0, monitors - MAX_SHARDS * monitorsPerShard(destinations.length)),
   }
 }

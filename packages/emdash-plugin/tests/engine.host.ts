@@ -50,22 +50,22 @@ describe('a shard cron task', () => {
 
   it('probes exactly its shard monitors through ctx.http.fetch and writes buckets plus its own snapshot', async () => {
     const h = await newHost(config(names))
-    for (const name of names.slice(0, 6)) {
+    for (const name of names.slice(0, 5)) {
       await h.http.respond(`https://${name}.example.com/`, new Response('ok', { status: 200 }))
     }
 
     await h.transport.invokeHook('cron', cron('check-0', { shard: 0 }))
 
-    expect(h.http.requests().map(r => r.url).sort()).toEqual(names.slice(0, 6).map(n => `https://${n}.example.com/`))
+    expect(h.http.requests().map(r => r.url).sort()).toEqual(names.slice(0, 5).map(n => `https://${n}.example.com/`))
     expect(h.http.requests().every(r => r.method === 'GET')).toBe(true)
 
     const rows = await bucketRows(h)
-    expect(rows.map(r => r.slug).sort()).toEqual(names.slice(0, 6))
+    expect(rows.map(r => r.slug).sort()).toEqual(names.slice(0, 5))
     expect(rows.every(r => r.date === today() && r.up === 1 && r.total === 1)).toBe(true)
 
     const snapshot = await h.inspect.kv.get<ShardSnapshot>('snapshot:0')
-    expect(snapshot?.results.map(r => r.slug).sort()).toEqual(names.slice(0, 6))
-    expect(snapshot?.results.every(r => r.status === 'up' && r.code === 200)).toBe(true)
+    expect(snapshot?.monitors.map(m => m.slug).sort()).toEqual(names.slice(0, 5))
+    expect(snapshot?.monitors.every(m => m.result?.status === 'up' && m.result.code === 200)).toBe(true)
     expect(await h.inspect.kv.get('snapshot:1')).toBeNull()
   })
 
@@ -127,6 +127,25 @@ describe('a shard cron task', () => {
   })
 })
 
+describe('notifications through the runtime host', () => {
+  it('reads the encrypted secret settings and posts a status change to them', async () => {
+    const h = await newHost(config(['m01']))
+    await h.fixtures.plugin.setting('slackWebhookUrl', 'https://hooks.example.com/services/SECRET')
+    await h.http.respond('https://m01.example.com/', new Response('ok', { status: 200 }))
+    await h.http.respond('https://hooks.example.com/services/SECRET', new Response('ok', { status: 200 }))
+
+    await h.transport.invokeHook('cron', cron('check-0', { shard: 0 }))
+    await h.http.respond('https://m01.example.com/', new Response('boom', { status: 500 }))
+    await h.transport.invokeHook('cron', cron('check-0', { shard: 0 }))
+
+    const posts = h.http.requests().filter(r => r.method === 'POST')
+    expect(posts.map(r => r.url)).toEqual(['https://hooks.example.com/services/SECRET'])
+    const snapshot = await h.inspect.kv.get<ShardSnapshot>('snapshot:0')
+    expect(snapshot?.deliveries).toEqual([{ kind: 'slack', target: 'hooks.example.com/…', ok: true, status: 200 }])
+    expect(JSON.stringify(snapshot)).not.toContain('SECRET')
+  })
+})
+
 describe('the maintenance cron task', () => {
   it('prunes buckets older than 90 days and keeps those inside the window', async () => {
     const h = await newHost(config(['m01']))
@@ -143,7 +162,7 @@ describe('the maintenance cron task', () => {
 })
 
 describe('shard reconciliation on activate', () => {
-  it('schedules ceil(n / 6) shard tasks on the 5-minute cadence, plus the maintenance task', async () => {
+  it('schedules ceil(n / 5) shard tasks on the 5-minute cadence, plus the maintenance task', async () => {
     const names = Array.from({ length: 14 }, (_, i) => `m${String(i).padStart(2, '0')}`)
     const h = await newHost(config(names))
 

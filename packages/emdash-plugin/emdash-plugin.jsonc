@@ -13,6 +13,23 @@
   "capabilities": ["network:request:unrestricted"],
   "allowedHosts": [],
 
+  // Notification destinations live in encrypted settings, never in the YAML: a webhook URL embeds
+  // its credential. The scheduled run reads them with the configuration in one `settings.list`.
+  "admin": {
+    "settingsSchema": {
+      "slackWebhookUrl": {
+        "type": "secret",
+        "label": "Slack webhook URL",
+        "description": "Incoming-webhook URL. Status changes post here."
+      },
+      "webhookUrls": {
+        "type": "secret",
+        "label": "Generic webhook URLs",
+        "description": "One URL per line, or separated by commas or spaces. Each receives the status-change JSON."
+      }
+    }
+  },
+
   // One document per (slug, UTC day): `{ slug, date, up, degraded, down, total }`, id `slug:date`.
   // `date` alone serves the retention prune; `[slug, date]` serves one monitor's history.
   "storage": {

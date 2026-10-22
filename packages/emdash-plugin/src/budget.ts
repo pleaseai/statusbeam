@@ -8,9 +8,10 @@
  * `settings` and `cron` calls are assumed to count too (unverified), so the
  * model counts them.
  *
- * Every number the scheduling code needs derives from this module, so a later
- * task that spends more calls per run (T005 reserves notification deliveries
- * and a snapshot read) changes one argument instead of a constant.
+ * A shard task spends its budget on three things: a fixed overhead, one call per
+ * configured notification destination (reserved in every shard, whether or not a
+ * status changed), and one probe per monitor. Every number the scheduling code
+ * needs derives from this module.
  */
 
 /** Bridge calls one invocation may make before the host starts rejecting them. */
@@ -18,12 +19,13 @@ export const CALL_BUDGET = 10
 
 /**
  * Calls every shard task spends regardless of its monitor count:
- * read the configuration (1), read today's buckets (1), write the buckets with
- * one `putMany` (1), write the shard snapshot (1).
+ * read the settings (1: `settings.list` returns the configuration and the
+ * encrypted secrets together), read today's buckets (1), read the snapshots (1),
+ * write the buckets with one `putMany` (1), write the shard snapshot (1).
  */
-export const SHARD_FIXED_CALLS = 4
+export const SHARD_FIXED_CALLS = 5
 
-/** Plugin-side deadline for one probe, so a never-completing response cannot end the invocation (ADR-0004 Decision 4). */
+/** Plugin-side deadline for one probe or delivery, so a never-completing response cannot end the invocation (ADR-0004 Decision 4). */
 export const PROBE_DEADLINE_MS = 10_000
 
 /**
@@ -39,13 +41,16 @@ export const SCHEDULER_CLAIM_LIMIT = 10
 export const MAX_SHARDS = 8
 
 /**
- * Calls each shard task sets aside for work beyond probing and the fixed calls.
- * Zero until status-change notifications exist (T005 raises it by the snapshot
- * read plus the deliveries it budgets).
+ * Calls a shard task sets aside for notifications: at most one delivery per
+ * destination per run, carrying every status change of that shard. The call is
+ * reserved in every shard, so a shard never has to choose between a probe and
+ * an alert.
  */
-export const SHARD_RESERVED_CALLS = 0
+export function reservedCallsFor(destinations: number): number {
+  return Math.max(0, destinations)
+}
 
-/** Probes one task can afford once `reservedCalls` are set aside for other work (notifications, a snapshot read). */
+/** Probes one task can afford once `reservedCalls` are set aside for other work (notification deliveries). */
 export function monitorsPerTask(reservedCalls = 0): number {
   return Math.max(0, CALL_BUDGET - SHARD_FIXED_CALLS - reservedCalls)
 }

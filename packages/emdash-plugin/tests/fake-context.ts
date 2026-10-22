@@ -6,7 +6,11 @@ export type FakeFetch = (url: string, init?: RequestInit) => Promise<Response>
 export interface FakeContextOptions {
   /** The YAML under the `config` settings key. */
   config?: string
+  /** Other settings keys, such as the encrypted secret fields. */
+  settings?: Record<string, unknown>
   fetch?: FakeFetch
+  /** Throws on the bridge call for which this returns true (its label and zero-based index), as a runtime that ends the task would. */
+  failOn?: (label: string, index: number) => boolean
   buckets?: DayBucket[]
   tasks?: Array<{ name: string, schedule: string }>
 }
@@ -31,11 +35,15 @@ function matches(row: DayBucket, where: Where | undefined): boolean {
 export function createFakeContext(options: FakeContextOptions = {}) {
   const bridgeCalls: string[] = []
   const track = <T>(label: string, fn: () => T): T => {
+    const index = bridgeCalls.length
     bridgeCalls.push(label)
+    if (options.failOn?.(label, index)) {
+      throw new Error(`runtime ended the task at ${label}`)
+    }
     return fn()
   }
 
-  const settings = new Map<string, unknown>()
+  const settings = new Map<string, unknown>(Object.entries(options.settings ?? {}))
   if (options.config !== undefined) {
     settings.set('config', options.config)
   }
@@ -64,6 +72,7 @@ export function createFakeContext(options: FakeContextOptions = {}) {
     settings: {
       get: async (key: string) => track('settings.get', () => (settings.has(key) ? settings.get(key) : null)),
       set: async (key: string, value: unknown) => track('settings.set', () => void settings.set(key, value)),
+      list: async (prefix = '') => track('settings.list', () => [...settings].filter(([key]) => key.startsWith(prefix)).map(([key, value]) => ({ key, value }))),
     },
     kv: {
       get: async (key: string) => track('kv.get', () => (kv.has(key) ? kv.get(key) : null)),
