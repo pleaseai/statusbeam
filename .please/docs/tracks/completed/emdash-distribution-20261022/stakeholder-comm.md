@@ -16,7 +16,7 @@ Hello. The EmDash distribution requested in #100 is now implemented and ready fo
 
 **What to expect**:
 - Installation and operation are covered in the docs under Guides → EmDash.
-- The plugin needs an EmDash sandbox runner.
+- The plugin is meant to run under an EmDash sandbox runner. It can also run in-process without one, but that gives it your site's full authority and drops the sandbox's isolation and resource limits.
 - Each check has a 10-second limit and an 8 MiB response limit.
 - With Slack notifications on, about 32 monitors can be checked every five minutes. Larger setups should use the standalone deployment.
 - If your status page must stay up while your CMS is down, point the components at a standalone deployment instead of the plugin.

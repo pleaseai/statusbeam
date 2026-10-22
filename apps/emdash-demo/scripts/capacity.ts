@@ -22,11 +22,23 @@ if (!base || queries.length === 0) {
 
 const ROUTE = `${base.replace(/\/$/, '')}/_emdash/api/plugins/statusbeam-spike-probe/capacity`
 
+/** Client deadline per query, as in run-spike.ts, so a stalled site cannot hang the run. */
+const CALL_TIMEOUT_MS = 150_000
+
 for (const query of queries) {
   const started = performance.now()
-  const res = await fetch(`${ROUTE}?${query}&tag=adhoc`)
+  let res: Response
+  let text: string
+  try {
+    res = await fetch(`${ROUTE}?${query}&tag=adhoc`, { signal: AbortSignal.timeout(CALL_TIMEOUT_MS) })
+    text = await res.text()
+  }
+  catch (err) {
+    // A transport failure or the deadline: report it for this query and go on to the next.
+    console.log(query, 0, `${Math.round(performance.now() - started)}ms`, `client error: ${String(err)}`)
+    continue
+  }
   const ms = Math.round(performance.now() - started)
-  const text = await res.text()
   let body: { success?: boolean, data?: { steps: Step[] } } | undefined
   try {
     body = JSON.parse(text)

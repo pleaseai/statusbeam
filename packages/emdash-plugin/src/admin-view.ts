@@ -15,8 +15,42 @@ export const CONFIG_PAGE = '/config'
 /** Id of the dashboard widget (`admin.widgets`); the host loads it as page `widget:{id}`. */
 export const STATUS_WIDGET = 'status'
 
-/** The single submit of the configuration form. */
+/** The single submit of the configuration form. Its `action_id` also carries the loaded revision (see {@link runActionId}). */
 export const RUN_ACTION = 'run'
+
+/**
+ * The form's submit `action_id`, carrying the settings revision the form was
+ * rendered with: Block Kit has no hidden field, but a form submit echoes its
+ * `action_id`, which may be any string (only the 64 KiB string limit applies).
+ * So each browser tab saves against the revision it loaded. The revision is
+ * opaque, so it is JSON-encoded and then URI-encoded: `run:%22r3%22`, or
+ * `run:null` when no configuration was stored. An unknown revision (`undefined`)
+ * leaves the bare {@link RUN_ACTION}, which a save refuses until a reload.
+ */
+export function runActionId(revision: string | null | undefined): string {
+  return revision === undefined ? RUN_ACTION : `${RUN_ACTION}:${encodeURIComponent(JSON.stringify(revision))}`
+}
+
+/**
+ * Parse a submit `action_id`: `null` when it is not the configuration form's
+ * submit, otherwise the revision it carries (`undefined` when it carries none
+ * or an unreadable one).
+ */
+export function parseRunActionId(actionId: string): { revision: string | null | undefined } | null {
+  if (actionId === RUN_ACTION) {
+    return { revision: undefined }
+  }
+  if (!actionId.startsWith(`${RUN_ACTION}:`)) {
+    return null
+  }
+  try {
+    const revision: unknown = JSON.parse(decodeURIComponent(actionId.slice(RUN_ACTION.length + 1)))
+    return { revision: typeof revision === 'string' || revision === null ? revision : undefined }
+  }
+  catch {
+    return { revision: undefined }
+  }
+}
 
 /** Button that reloads the page and the stored revision. */
 export const RELOAD_ACTION = 'reload'
@@ -77,6 +111,8 @@ export interface ConfigPageState {
   snapshotNotes?: string[]
   /** Re-keys the form so the host remounts it with these initial values. */
   formKey: string
+  /** The settings revision a save from this form compares against; `undefined` when unknown (see {@link runActionId}). */
+  revision?: string | null
 }
 
 /** Split lines into texts below the chunk size, so no single string nears the Block Kit limit. */
@@ -183,7 +219,7 @@ export function configPage(state: ConfigPageState): Block[] {
           condition: { field: 'operation', eq: 'test' },
         },
       ],
-      submit: { label: 'Run', action_id: RUN_ACTION },
+      submit: { label: 'Run', action_id: runActionId(state.revision) },
     },
     {
       type: 'context',
@@ -219,35 +255,46 @@ export function refusal(): BlockResponse {
 /** The severities `toSeverity` and `overallSeverity` produce. */
 type CheckSeverity = 'operational' | 'degraded' | 'major_outage'
 
+/** Monitors without a real result yet: counted apart, never as an outage. */
+const NOT_CHECKED_LABEL = 'Not checked yet'
+
 const SEVERITY_LABELS: Record<CheckSeverity, string> = {
   operational: 'Operational',
   degraded: 'Degraded',
   major_outage: 'Major outage',
 }
 
-/** The dashboard widget: overall status and how many monitors are at each severity (FR-12). */
-export function statusWidget(summaries: SiteSummary[] | null, updatedAt: string | null): Block[] {
+/**
+ * The dashboard widget: overall status and how many monitors are at each
+ * severity (FR-12). `summaries` cover the monitors with a real result;
+ * `unchecked` counts the rest (never probed yet, beyond what the scheduled
+ * tasks can probe, or only ever hitting a host limit). They are shown as "Not
+ * checked yet" and never as an outage.
+ */
+export function statusWidget(summaries: SiteSummary[] | null, updatedAt: string | null, unchecked = 0): Block[] {
   if (summaries === null) {
     return [{ type: 'empty', title: 'No valid configuration', description: 'Open the StatusBeam page to add monitors.' }]
   }
-  if (summaries.length === 0) {
+  const total = summaries.length + unchecked
+  if (total === 0) {
     return [{ type: 'empty', title: 'No monitors', description: 'The configuration lists no sites.' }]
   }
   const counts: Record<CheckSeverity, number> = { operational: 0, degraded: 0, major_outage: 0 }
   for (const summary of summaries) {
     counts[toSeverity(summary.status) as CheckSeverity] += 1
   }
-  const overall = overallSeverity(summaries.map(summary => summary.status))
+  const overall = summaries.length > 0 ? overallSeverity(summaries.map(summary => summary.status)) as CheckSeverity : null
+  const items = (Object.keys(SEVERITY_LABELS) as CheckSeverity[]).map(severity => ({ label: SEVERITY_LABELS[severity], value: counts[severity] }))
   return [
     {
       type: 'banner',
-      variant: overall === 'operational' ? 'default' : overall === 'degraded' ? 'alert' : 'error',
-      title: `Overall: ${SEVERITY_LABELS[overall as CheckSeverity]}`,
-      description: `${summaries.length} monitor${summaries.length === 1 ? '' : 's'}`,
+      variant: overall === null || overall === 'operational' ? 'default' : overall === 'degraded' ? 'alert' : 'error',
+      title: `Overall: ${overall === null ? NOT_CHECKED_LABEL : SEVERITY_LABELS[overall]}`,
+      description: `${total} monitor${total === 1 ? '' : 's'}`,
     },
     {
       type: 'stats',
-      items: (Object.keys(SEVERITY_LABELS) as CheckSeverity[]).map(severity => ({ label: SEVERITY_LABELS[severity], value: counts[severity] })),
+      items: unchecked > 0 ? [...items, { label: NOT_CHECKED_LABEL, value: unchecked }] : items,
     },
     { type: 'context', text: updatedAt ? `Last check ${updatedAt}` : 'No check has run yet.' },
   ]

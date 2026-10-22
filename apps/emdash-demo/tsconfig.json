@@ -3,5 +3,7 @@
   "compilerOptions": {
     "types": ["node", "@cloudflare/workers-types"]
   },
-  "include": ["src", "probe/src", "fixtures/src", "scripts", ".astro/types.d.ts", "emdash-env.d.ts"]
+  "include": ["src", "probe/src", "fixtures/src", "scripts", ".astro/types.d.ts", "emdash-env.d.ts"],
+  // Bun-only script (`Bun.serve`); this app does not install Bun's types. Run it with `bun`, which needs none.
+  "exclude": ["scripts/status-fixture.ts"]
 }

@@ -97,10 +97,15 @@ async function route(req: Request, ctx: ExecutionContext): Promise<Response> {
     return new Response(null, { status: 204 })
   }
 
-  // An arbitrary status code, for "target error" grading.
+  // An arbitrary status code, for "target error" grading. `Response` accepts
+  // 200-599 only, and a null-body status must not carry a body.
   const status = /^\/status\/(\d{3})$/.exec(path)
   if (status) {
-    return new Response(`status ${status[1]}`, { status: Number(status[1]) })
+    const code = Number(status[1])
+    if (code < 200 || code > 599) {
+      return new Response(`status ${code} cannot be served; use 200-599`, { status: 400 })
+    }
+    return new Response([204, 205, 304].includes(code) ? null : `status ${code}`, { status: code })
   }
 
   return new Response('not found', { status: 404 })

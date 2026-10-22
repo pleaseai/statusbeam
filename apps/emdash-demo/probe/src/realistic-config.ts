@@ -1,7 +1,7 @@
 /**
  * A realistic `status.config.yml` for the FR-20 re-validation cost measurement:
- * 25 monitors that mix every check kind the plugin would accept, plus a
- * notifications block and a theme. `parseConfig` runs YAML parsing and the full
+ * 25 monitors that mix the http, statuspage, incidentio, sentry and aigateway
+ * check kinds (no tcp or ssl), plus a notifications block and a theme. `parseConfig` runs YAML parsing and the full
  * zod schema (including the per-site superRefine and slug transform) over it.
  */
 const kinds = [

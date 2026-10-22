@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted (2026-10-22, revised after the probe-semantics spike; see Spike results)
+Accepted
+
+Accepted on 2026-10-22, after the probe-semantics spike revised it (see Spike results).
 
 **Deciders:** StatusBeam maintainers
 
@@ -386,6 +388,10 @@ The capacity math has these terms:
   - a fixed `k` of about 4 calls: read the config and the snapshot, write the buckets
     with one `putMany`, and write the snapshot.
 - The 10-call budget therefore fits at most about 6 monitors with no notifications.
+  _(Implemented, 2026-10-22: the shipped engine also reads every shard snapshot with one
+  `kv.list` and today's buckets with one `getMany`, so `k` is 5 (`SHARD_FIXED_CALLS`).
+  A shard fits 5 monitors with no notifications and 4 with Slack alone; see the
+  capacity table in the EmDash guide.)_
 
 A run must be split across invocations. The cron executor gives each due task its own
 invocation, but it claims at most 10 due tasks per tick across the whole site
@@ -420,12 +426,14 @@ hook timeout ends any cron run that waits longer. The engine therefore declares 
 the manifest's hook entry. That covers the 10 s deadline and stays under the 30 s wall
 limit.
 
-### Proposed verdict
+### Spike verdict
 
-**Revise ADR-0004 before Phase 3; do not accept it as is.** _(Resolved 2026-10-22: the user chose a 10 s per-probe deadline graded `down`, up-front call budgeting in place of a recorded "skipped" outcome, and sharding each run across cron tasks. Context fact 1 and Decisions 1 and 4 now reflect them, and the ADR is Accepted.)_ The spike triggered the T001
-STOP condition: one mode, and in one case every mode, contradicts the probe contract.
-The user should review these findings before the ADR status changes. The confirmations
-and contradictions:
+The spike triggered the T001 STOP condition: one mode, and in one case every mode,
+contradicted the probe contract as first written, so ADR-0004 was revised before Phase 3.
+On 2026-10-22 the user chose a 10 s per-probe deadline graded `down`, up-front call
+budgeting in place of a recorded "skipped" outcome, and sharding each run across cron
+tasks. Context fact 1 and Decisions 1 and 4 reflect those choices, and the ADR was then
+Accepted. The findings that drove the revision:
 
 - **Confirmed.** Buffering, the 8 MiB limit, and latency measured to the full body hold
   in all three modes, in-process included. The open question about in-process buffering

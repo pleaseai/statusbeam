@@ -5,8 +5,8 @@ import { describe, expect, it } from 'bun:test'
 import { CALL_BUDGET } from '../src/budget'
 import { classifyHostError, probeSite } from '../src/probe'
 import { runShard } from '../src/run'
-import { parseUrlList } from '../src/settings'
-import { readSnapshot, summariesFromSnapshot } from '../src/snapshot'
+import { destinationsFrom, parseUrlList } from '../src/settings'
+import { mergeSnapshots, readSnapshot, summariesFromSnapshot } from '../src/snapshot'
 import { createFakeContext, monitorNames, monitorsYaml } from './fake-context'
 
 const BODY_LIMIT = 'Plugin HTTP response body exceeds the 8388608 byte limit'
@@ -62,6 +62,24 @@ describe('the host body-limit classifier', () => {
     const refused = await probeSite(() => Promise.reject(new Error('connection refused')), site)
     expect(refused.limit).toBeUndefined()
   })
+
+  it('never hands the host fetch an AbortSignal, for a sentry poll or an aigateway monitor', async () => {
+    const sentry = siteSchema.parse({ name: 'Errors', url: 'https://errors.example.com/', check: 'sentry', sentry: { org: 'acme' } })
+    const gateway = siteSchema.parse({ name: 'Model', check: 'aigateway', aigateway: { provider: 'vercel', model: 'anthropic/claude-opus-4.5' } })
+    const inits: Array<RequestInit | undefined> = []
+    const hostFetch = async (_url: string, init?: RequestInit) => {
+      inits.push(init)
+      return new Response('[]', { status: 200 })
+    }
+    await probeSite(hostFetch, sentry, 1000, undefined, 'tok')
+    await probeSite(hostFetch, gateway, 1000)
+    expect(inits).toHaveLength(2)
+    for (const init of inits) {
+      expect(init).toBeDefined()
+      expect('signal' in (init as RequestInit)).toBe(false)
+      expect(init?.method).toBe('GET')
+    }
+  })
 })
 
 describe('a body-limit failure', () => {
@@ -110,6 +128,24 @@ describe('a body-limit failure', () => {
     expect(recovered?.warning).toBeUndefined()
     expect(recovered?.result).toMatchObject({ status: 'up' })
     expect(fake.rows.get('big:2026-10-22')).toMatchObject({ up: 1, total: 1 })
+  })
+
+  it('leaves a monitor whose only probes hit the limit out of the public summaries, instead of reporting it down', async () => {
+    const at = '2026-10-22T10:05:00.000Z'
+    const warning = { limit: 'body' as const, since: at, lastSeen: at }
+    const snapshot: ShardSnapshot = {
+      version: 2,
+      shard: 0,
+      updatedAt: at,
+      deliveries: [],
+      monitors: [
+        { slug: 'big', result: null, days: [], totals: {}, warning },
+        { slug: 'old', result: { slug: 'old', status: 'up', code: 200, responseTime: 40, checkedAt: '2026-10-22T10:00:00.000Z' }, days: [], totals: {}, warning },
+      ],
+    }
+    const sites = ['big', 'old', 'new'].map(name => siteSchema.parse({ name, url: `https://${name}.example.com/` }))
+    const summaries = summariesFromSnapshot(mergeSnapshots([{ key: 'snapshot:0', value: snapshot }]), sites, new Date(at))
+    expect(summaries.map(s => [s.slug, s.status])).toEqual([['old', 'up'], ['new', 'down']])
   })
 
   it('does not compare a limit result for change detection, so a recovery to the same status sends nothing', async () => {
@@ -221,8 +257,19 @@ describe('status-change notifications', () => {
     expect(fake.bridgeCalls.filter(call => call.startsWith('log.'))).toEqual([])
   })
 
-  it('collapses a repeated URL and counts, without keeping, an entry that is not a URL', () => {
-    expect(parseUrlList(`${HOOK_A}\n${HOOK_A}, not-a-url ftp://x.example.com/`)).toEqual({ urls: [HOOK_A, HOOK_A], invalid: 2 })
+  it('collapses a repeated URL into one destination, across both secret settings too', () => {
+    const repeated = destinationsFrom(new Map([['webhookUrls', `${HOOK_A}\n${HOOK_A}`]]))
+    expect(repeated).toEqual({ destinations: [{ kind: 'webhook', url: HOOK_A }], invalid: 0 })
+    const across = destinationsFrom(new Map([['slackWebhookUrl', SLACK], ['webhookUrls', `${SLACK}\n${HOOK_A}`]]))
+    expect(across.destinations).toEqual([{ kind: 'slack', url: SLACK }, { kind: 'webhook', url: HOOK_A }])
+  })
+
+  it('counts, without keeping, an entry that is not a URL', () => {
+    expect(parseUrlList(`${HOOK_A}, not-a-url ftp://x.example.com/`)).toEqual({ urls: [HOOK_A], invalid: 2 })
+    expect(destinationsFrom(new Map([['webhookUrls', `${HOOK_A} not-a-url`], ['slackWebhookUrl', `nope ${SLACK}`]]))).toEqual({
+      destinations: [{ kind: 'slack', url: SLACK }, { kind: 'webhook', url: HOOK_A }],
+      invalid: 2,
+    })
   })
 })
 
@@ -261,6 +308,15 @@ describe('the per-task call budget', () => {
     expect(w.requests).toEqual([])
     expect(fake.bridgeCalls).toEqual(['settings.list', 'kv.set'])
     expect((await readSnapshot(fake.ctx)).capacityErrors).toHaveLength(1)
+  })
+
+  it('stops reporting a capacity error once a shard runs normally, including one left by a shard the configuration no longer has', async () => {
+    const shard = (n: number, updatedAt: string, capacityError?: string): ShardSnapshot => ({ version: 2, shard: n, updatedAt, monitors: [], deliveries: [], ...(capacityError ? { capacityError } : {}) })
+    const obsolete = { key: 'snapshot:3', value: shard(3, '2026-10-22T09:00:00.000Z', '9 destinations leave no call') }
+    const current = { key: 'snapshot:0', value: shard(0, '2026-10-22T10:00:00.000Z', '5 destinations leave no call') }
+    expect(mergeSnapshots([obsolete, current]).capacityErrors).toEqual(['5 destinations leave no call'])
+    const fixed = { key: 'snapshot:0', value: shard(0, '2026-10-22T10:05:00.000Z') }
+    expect(mergeSnapshots([obsolete, fixed]).capacityErrors).toEqual([])
   })
 })
 
@@ -314,27 +370,89 @@ describe('the snapshot history', () => {
     expect(days[0]?.date).toBe('2026-07-26')
     expect(days.at(-3)).toEqual({ date: '2026-10-21', status: null, uptime: 1 })
   })
+})
 
-  it('keeps a monitor that moved between shards on its previous result and history', async () => {
+describe('a configuration change that moves a monitor between shards', () => {
+  it('keeps its history and previous result when the old shard runs first, and delivers its status change from the new one', async () => {
     const w = world()
-    const c = clock()
-    const fake = createFakeContext({ config: monitorsYaml(['a', 'b']), fetch: w.fetch })
-    await runShard(fake.ctx, 0, { now: c.now })
-    // The monitor list grows: `b` now sorts into a different shard than the one that stored it.
-    const grown = createFakeContext({ config: monitorsYaml(['a', 'b']), fetch: w.fetch })
-    for (const [key, value] of fake.kv) {
-      const snapshot = value as ShardSnapshot
-      grown.kv.set(key === 'snapshot:0' ? 'snapshot:3' : key, { ...snapshot, shard: 3 })
-    }
-    for (const [id, bucket] of fake.rows) {
-      grown.rows.set(id, bucket)
-    }
-    w.down.add('b')
-    c.set('2026-10-22T10:05:00.000Z')
-    await runShard(grown.ctx, 0, { now: c.now })
+    const c = clock('2026-10-21T10:00:00.000Z')
+    // One destination leaves four monitors per shard: `echo` is the last of shard 0.
+    const before = ['beta', 'charlie', 'delta', 'echo', 'foxtrot', 'golf', 'hotel']
+    const fake = createFakeContext({ config: monitorsYaml(before), settings: SECRETS.slack, fetch: w.fetch })
+    const runs: Array<{ calls: number, planned: number }> = []
+    const run = async (shard: number) => runs.push(await runShard(fake.ctx, shard, { now: c.now }))
+    await run(0)
+    await run(1)
+    c.set('2026-10-22T10:00:00.000Z')
+    await run(0)
+    await run(1)
+    expect((fake.kv.get('snapshot:0') as ShardSnapshot).monitors.map(m => m.slug)).toContain('echo')
 
-    const b = (await readSnapshot(grown.ctx)).monitors.get('b')
-    expect(b?.result).toMatchObject({ status: 'down' })
-    expect(b?.days.at(-1)).toEqual({ date: '2026-10-22', status: 'down', uptime: 0.5 })
+    // `alpha` sorts first, so `echo` moves to shard 1; it also goes down in the same window.
+    fake.setConfig(monitorsYaml(['alpha', ...before]))
+    w.down.add('echo')
+    c.set('2026-10-22T10:05:00.000Z')
+    await run(0)
+    const old = fake.kv.get('snapshot:0') as ShardSnapshot
+    expect(old.monitors.map(m => m.slug)).toEqual(['alpha', 'beta', 'charlie', 'delta'])
+    expect(old.handoff?.map(m => m.slug)).toEqual(['echo'])
+
+    // Between the two runs the public summary still shows the monitor and its history.
+    const sites = ['alpha', ...before].map(name => siteSchema.parse({ name, url: `https://${name}.example.com/` }))
+    const between = summariesFromSnapshot(await readSnapshot(fake.ctx), sites, c.now()).find(s => s.slug === 'echo')
+    expect(between?.status).toBe('up')
+    expect(between?.history.filter(day => day.status !== null).map(day => day.date)).toEqual(['2026-10-21', '2026-10-22'])
+
+    c.set('2026-10-22T10:10:00.000Z')
+    await run(1)
+    const echo = (fake.kv.get('snapshot:1') as ShardSnapshot).monitors.find(m => m.slug === 'echo')
+    expect(echo?.result).toMatchObject({ status: 'down' })
+    expect(echo?.days.at(-2)).toEqual({ date: '2026-10-21', status: 'up', uptime: 1 })
+    expect(echo?.days.at(-1)).toEqual({ date: '2026-10-22', status: 'down', uptime: 0.5 })
+    const slack = w.posts().map(post => (post.body as { text: string }).text)
+    expect(slack).toHaveLength(1)
+    expect(slack[0]).toContain('*echo*: up → down')
+
+    // The new owner has written it, so the old shard stops carrying it.
+    c.set('2026-10-22T10:15:00.000Z')
+    await run(0)
+    expect((fake.kv.get('snapshot:0') as ShardSnapshot).handoff).toBeUndefined()
+    expect((await readSnapshot(fake.ctx)).monitors.get('echo')?.result).toMatchObject({ status: 'down' })
+
+    for (const result of runs) {
+      expect(result.calls).toBeLessThanOrEqual(result.planned)
+      expect(result.calls).toBeLessThanOrEqual(CALL_BUDGET)
+    }
+  })
+
+  it('also keeps them when the new shard runs first, and then the old shard carries nothing', async () => {
+    const w = world()
+    const c = clock('2026-10-21T10:00:00.000Z')
+    const before = ['beta', 'charlie', 'delta', 'echo', 'foxtrot', 'golf', 'hotel']
+    const fake = createFakeContext({ config: monitorsYaml(before), settings: SECRETS.slack, fetch: w.fetch })
+    await runShard(fake.ctx, 0, { now: c.now })
+    await runShard(fake.ctx, 1, { now: c.now })
+
+    fake.setConfig(monitorsYaml(['alpha', ...before]))
+    w.down.add('echo')
+    c.set('2026-10-22T10:05:00.000Z')
+    await runShard(fake.ctx, 1, { now: c.now })
+    const echo = (fake.kv.get('snapshot:1') as ShardSnapshot).monitors.find(m => m.slug === 'echo')
+    expect(echo?.days.at(-2)).toEqual({ date: '2026-10-21', status: 'up', uptime: 1 })
+    expect(w.posts().map(post => (post.body as { text: string }).text)).toEqual([expect.stringContaining('*echo*: up → down')])
+
+    c.set('2026-10-22T10:10:00.000Z')
+    await runShard(fake.ctx, 0, { now: c.now })
+    expect((fake.kv.get('snapshot:0') as ShardSnapshot).handoff).toBeUndefined()
+    expect((await readSnapshot(fake.ctx)).monitors.get('echo')?.result).toMatchObject({ status: 'down' })
+  })
+
+  it('lets the real owner win over a handoff, whatever their updatedAt order', () => {
+    const state = (slug: string, status: 'up' | 'down', checkedAt: string) => ({ slug, result: { slug, status, code: 200, responseTime: 1, checkedAt }, days: [], totals: {} })
+    const handoff: ShardSnapshot = { version: 2, shard: 0, updatedAt: '2026-10-22T10:20:00.000Z', monitors: [], handoff: [state('echo', 'up', '2026-10-22T10:00:00.000Z')], deliveries: [] }
+    const owner: ShardSnapshot = { version: 2, shard: 1, updatedAt: '2026-10-22T10:10:00.000Z', monitors: [state('echo', 'down', '2026-10-22T10:10:00.000Z')], deliveries: [] }
+    const merged = mergeSnapshots([{ key: 'snapshot:0', value: handoff }, { key: 'snapshot:1', value: owner }])
+    expect(merged.polled.get('echo')?.result).toMatchObject({ status: 'down' })
+    expect(merged.results.get('echo')).toMatchObject({ status: 'down' })
   })
 })

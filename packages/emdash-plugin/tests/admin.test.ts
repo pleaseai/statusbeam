@@ -4,7 +4,7 @@ import type { ShardSnapshot } from '../src/snapshot'
 import { validateBlockResponse } from '@emdash-cms/blocks/server'
 import { describe, expect, it } from 'bun:test'
 import { adminHandler } from '../src/admin'
-import { MAX_YAML_BYTES } from '../src/admin-view'
+import { MAX_YAML_BYTES, parseRunActionId, runActionId } from '../src/admin-view'
 import { CALL_BUDGET } from '../src/budget'
 import { CONFIG_ERROR_KEY } from '../src/config'
 import { createFakeContext, monitorsYaml } from './fake-context'
@@ -25,7 +25,8 @@ function call(fake: Fake, input: unknown, ...rest: [user?: Caller]): Promise<Blo
 }
 
 const pageLoad = { type: 'page_load', page: '/config' }
-const submit = (values: Record<string, unknown>) => ({ type: 'form_submit', action_id: 'run', page: '/config', values })
+/** A submit of the configuration form; `actionId` is the form's submit id, which carries the revision it was loaded with. */
+const submit = (values: Record<string, unknown>, actionId = 'run') => ({ type: 'form_submit', action_id: actionId, page: '/config', values })
 
 /** Every response must be a response the host's Block Kit validator accepts, or the page fails to render. */
 function expectValid(response: BlockResponse): void {
@@ -43,6 +44,11 @@ function formOf(response: BlockResponse) {
     throw new Error('no form in the response')
   }
   return form
+}
+
+/** Load the page as `user` (an administrator by default), as one browser tab does, and return its form's submit id. */
+async function loadForm(fake: Fake, ...rest: [user?: Caller]): Promise<string> {
+  return formOf(await call(fake, pageLoad, ...rest)).submit.action_id
 }
 
 const WRITE_CALLS = /^(?:settings\.(?:set|compareAndSet|delete)|kv\.(?:set|delete)|storage\.|cron\.(?:schedule|cancel))/
@@ -84,15 +90,16 @@ describe('the administrator gate (AC-017)', () => {
 })
 
 describe('the configuration page', () => {
-  it('shows the stored YAML in one multiline field and records the loaded revision for this user only', async () => {
+  it('shows the stored YAML in one multiline field and carries the loaded revision in the form itself, with no write', async () => {
     const fake = createFakeContext({ config: OLD })
     const response = await call(fake, pageLoad)
     expectValid(response)
     const form = formOf(response)
     expect(form.fields[0]).toMatchObject({ type: 'text_input', action_id: 'yaml', multiline: true, initial_value: OLD })
-    expect(form.submit.action_id).toBe('run')
-    expect(fake.kv.get('admin:rev:admin-1')).toEqual({ revision: 'r0' })
-    expect(fake.bridgeCalls).toEqual(['settings.getVersioned', 'kv.set', 'kv.get', 'kv.list'])
+    expect(form.submit.action_id).toBe(runActionId('r0'))
+    expect(parseRunActionId(form.submit.action_id)).toEqual({ revision: 'r0' })
+    expect(fake.kv.size).toBe(0)
+    expect(fake.bridgeCalls).toEqual(['settings.getVersioned', 'kv.get', 'kv.list'])
   })
 
   it('shows the run-time error from the scheduled run as a persistent banner, and body-limit notes briefly', async () => {
@@ -109,7 +116,7 @@ describe('the configuration page', () => {
       updatedAt: '2026-10-22T10:00:00.000Z',
       deliveries: [],
       capacityError: '3 notification destinations leave no call for a probe',
-      monitors: [{ slug: 'alpha', result: null, days: [], warning: { limit: 'body', since: '2026-10-21T00:00:00.000Z', lastSeen: '2026-10-22T00:00:00.000Z' } }],
+      monitors: [{ slug: 'alpha', result: null, days: [], totals: {}, warning: { limit: 'body', since: '2026-10-21T00:00:00.000Z', lastSeen: '2026-10-22T00:00:00.000Z' } }],
     }
     fake.kv.set('snapshot:0', snapshot)
     const response = await call(fake, pageLoad)
@@ -174,9 +181,9 @@ describe('Save (FR-15)', () => {
 
   it('shows every issue with its path and keeps the stored configuration (AC-014, AC-015)', async () => {
     const fake = createFakeContext({ config: OLD })
-    await call(fake, pageLoad)
+    const form = await loadForm(fake)
     fake.bridgeCalls.length = 0
-    const response = await call(fake, submit({ yaml: invalid, operation: 'save' }))
+    const response = await call(fake, submit({ yaml: invalid, operation: 'save' }, form))
     expectValid(response)
     const text = allText(response)
     expect(text).toContain('Error at sites[0].url')
@@ -190,8 +197,8 @@ describe('Save (FR-15)', () => {
 
   it('shows every plugin-rule error with its path too', async () => {
     const fake = createFakeContext({ config: OLD })
-    await call(fake, pageLoad)
-    const response = await call(fake, submit({ yaml: pluginInvalid, operation: 'save' }))
+    const form = await loadForm(fake)
+    const response = await call(fake, submit({ yaml: pluginInvalid, operation: 'save' }, form))
     expect(allText(response)).toContain('Error at sites[1].slug')
     expect(allText(response)).toContain('Error at notifications.delivery')
     expect(fake.settings.get('config')).toBe(OLD)
@@ -209,22 +216,24 @@ describe('Save (FR-15)', () => {
   it('writes with compareAndSet against the loaded revision, schedules the shards, clears the run-time error and stays in budget', async () => {
     const fake = createFakeContext({ config: OLD })
     fake.kv.set(CONFIG_ERROR_KEY, { version: 1, recordedAt: '2026-10-22T00:00:00.000Z', issues: [] })
-    await call(fake, pageLoad)
+    const form = await loadForm(fake)
     fake.bridgeCalls.length = 0
 
-    const response = await call(fake, submit({ yaml: NEW, operation: 'save' }))
+    const response = await call(fake, submit({ yaml: NEW, operation: 'save' }, form))
     expectValid(response)
     expect(fake.settings.get('config')).toBe(NEW)
     expect(response.toast).toMatchObject({ type: 'success', message: 'Configuration saved' })
     expect(fake.kv.has(CONFIG_ERROR_KEY)).toBe(false)
     expect([...fake.tasks.keys()].sort()).toEqual(['check-0', 'maintenance'])
     expect(fake.bridgeCalls.length).toBeLessThanOrEqual(CALL_BUDGET)
-    expect(fake.bridgeCalls.slice(0, 4)).toEqual(['settings.list', 'kv.get', 'settings.compareAndSet', 'kv.set'])
+    expect(fake.bridgeCalls.slice(0, 2)).toEqual(['settings.list', 'settings.compareAndSet'])
+    expect(fake.bridgeCalls.filter(c => c === 'kv.get' || c === 'kv.set')).toEqual([])
     expect(fake.bridgeCalls.some(c => c.startsWith('log.') || c.startsWith('storage.'))).toBe(false)
 
-    // The new revision is recorded, so a second save from the same page needs no reload.
-    fake.bridgeCalls.length = 0
-    const again = await call(fake, submit({ yaml: OLD, operation: 'save' }))
+    // The saved form comes back carrying the new revision, so a second save from the same page needs no reload.
+    const saved = formOf(response).submit.action_id
+    expect(parseRunActionId(saved)).toEqual({ revision: 'r1' })
+    const again = await call(fake, submit({ yaml: OLD, operation: 'save' }, saved))
     expect(fake.settings.get('config')).toBe(OLD)
     expect(again.toast?.type).toBe('success')
   })
@@ -232,30 +241,34 @@ describe('Save (FR-15)', () => {
   it('stays within the budget when a save must schedule a full set of shards, and reports what it deferred', async () => {
     const names = Array.from({ length: 40 }, (_, i) => `m${String(i).padStart(2, '0')}`)
     const fake = createFakeContext({ config: OLD })
-    await call(fake, pageLoad)
+    const form = await loadForm(fake)
     fake.bridgeCalls.length = 0
-    const response = await call(fake, submit({ yaml: monitorsYaml(names), operation: 'save' }))
+    const response = await call(fake, submit({ yaml: monitorsYaml(names), operation: 'save' }, form))
     expect(fake.bridgeCalls.length).toBeLessThanOrEqual(CALL_BUDGET)
     expect(fake.settings.get('config')).toBe(monitorsYaml(names))
     expect(allText(response)).toContain('Some scheduled tasks are still pending')
+    // Nine operations (maintenance first, then 8 shards); this save had calls for 5 of them.
+    expect(allText(response)).toContain('4 scheduling operations did not fit')
+    expect([...fake.tasks.keys()]).toEqual(['maintenance', 'check-0', 'check-1', 'check-2', 'check-3'])
     // A second save finishes the schedule.
-    await call(fake, submit({ yaml: monitorsYaml(names), operation: 'save' }))
+    const second = await call(fake, submit({ yaml: monitorsYaml(names), operation: 'save' }, formOf(response).submit.action_id))
     expect(fake.bridgeCalls.length).toBeLessThanOrEqual(CALL_BUDGET * 2)
-    expect([...fake.tasks.keys()].filter(n => n.startsWith('check-')).length).toBeGreaterThan(3)
+    expect(allText(second)).not.toContain('Some scheduled tasks are still pending')
+    expect([...fake.tasks.keys()].sort()).toEqual(['check-0', 'check-1', 'check-2', 'check-3', 'check-4', 'check-5', 'check-6', 'check-7', 'maintenance'])
   })
 
   it('refuses a save after someone else\'s save, keeps their configuration and says to reload (AC-016)', async () => {
     const fake = createFakeContext({ config: OLD })
-    await call(fake, pageLoad)
-    await call(fake, pageLoad, otherAdmin)
+    const myForm = await loadForm(fake)
+    const theirForm = await loadForm(fake, otherAdmin)
     // The other administrator saves first.
-    const theirs = await call(fake, submit({ yaml: NEW, operation: 'save' }), otherAdmin)
+    const theirs = await call(fake, submit({ yaml: NEW, operation: 'save' }, theirForm), otherAdmin)
     expect(theirs.toast?.type).toBe('success')
     expect(fake.settings.get('config')).toBe(NEW)
 
     fake.bridgeCalls.length = 0
     const mine = monitorsYaml(['alpha', 'delta'])
-    const response = await call(fake, submit({ yaml: mine, operation: 'save' }))
+    const response = await call(fake, submit({ yaml: mine, operation: 'save' }, myForm))
     expectValid(response)
     expect(fake.settings.get('config')).toBe(NEW)
     expect(fake.bridgeCalls).toContain('settings.compareAndSet')
@@ -265,25 +278,50 @@ describe('Save (FR-15)', () => {
     expect(fake.bridgeCalls.length).toBeLessThanOrEqual(CALL_BUDGET)
     expect(fake.bridgeCalls.filter(c => c === 'cron.schedule' || c === 'cron.cancel')).toEqual([])
 
-    // Reload picks up the current revision, after which the save goes through.
-    await call(fake, { type: 'block_action', action_id: 'reload', page: '/config' })
-    const retry = await call(fake, submit({ yaml: mine, operation: 'save' }))
+    // The refused form keeps its old revision, so saving it again is refused again.
+    const resubmitted = await call(fake, submit({ yaml: mine, operation: 'save' }, formOf(response).submit.action_id))
+    expect(allText(resubmitted)).toContain('Reload to see the current configuration')
+    expect(fake.settings.get('config')).toBe(NEW)
+
+    // Reload re-renders the form with the current revision, after which the save goes through.
+    const reloaded = await call(fake, { type: 'block_action', action_id: 'reload', page: '/config' })
+    const retry = await call(fake, submit({ yaml: mine, operation: 'save' }, formOf(reloaded).submit.action_id))
     expect(retry.toast?.type).toBe('success')
     expect(fake.settings.get('config')).toBe(mine)
   })
 
-  it('refuses a save from a page that was never loaded', async () => {
+  it('refuses a save from an older tab of the same administrator after a newer tab saved', async () => {
+    const fake = createFakeContext({ config: OLD })
+    const tab1 = await loadForm(fake)
+    const tab2 = await loadForm(fake)
+    const second = await call(fake, submit({ yaml: NEW, operation: 'save' }, tab2))
+    expect(second.toast?.type).toBe('success')
+
+    const first = await call(fake, submit({ yaml: monitorsYaml(['alpha', 'delta']), operation: 'save' }, tab1))
+    expectValid(first)
+    expect(allText(first)).toContain('Reload to see the current configuration')
+    expect(first.toast).toMatchObject({ type: 'error' })
+    expect(fake.settings.get('config')).toBe(NEW)
+  })
+
+  it('refuses a save from a page that was never loaded, or whose form carries no readable revision', async () => {
     const fake = createFakeContext({ config: OLD })
     const response = await call(fake, submit({ yaml: NEW, operation: 'save' }))
     expect(fake.settings.get('config')).toBe(OLD)
     expect(allText(response)).toContain('Reload')
+    for (const actionId of ['run:', 'run:%7B', `run:${encodeURIComponent('{"r":1}')}`]) {
+      const unreadable = await call(fake, submit({ yaml: NEW, operation: 'save' }, actionId))
+      expect(allText(unreadable)).toContain('Reload to see the current configuration')
+    }
+    expect(fake.settings.get('config')).toBe(OLD)
+    expect(fake.bridgeCalls).not.toContain('settings.compareAndSet')
   })
 
   it('creates the first configuration only while none exists', async () => {
     const fake = createFakeContext()
-    await call(fake, pageLoad)
-    expect(fake.kv.get('admin:rev:admin-1')).toEqual({ revision: null })
-    const saved = await call(fake, submit({ yaml: NEW, operation: 'save' }))
+    const form = await loadForm(fake)
+    expect(parseRunActionId(form)).toEqual({ revision: null })
+    const saved = await call(fake, submit({ yaml: NEW, operation: 'save' }, form))
     expect(saved.toast?.type).toBe('success')
     expect(fake.settings.get('config')).toBe(NEW)
   })
@@ -332,6 +370,41 @@ describe('Test site (FR-17)', () => {
     expect(fake.bridgeCalls.filter(c => c === 'http.fetch')).toHaveLength(1)
   })
 
+  it('polls a Sentry monitor with the stored token, and refuses a webhook-only one or a missing token without probing', async () => {
+    const yaml = [
+      'name: Test',
+      'sites:',
+      '  - name: polled',
+      '    check: sentry',
+      '    url: https://polled.example.com/',
+      '    sentry:',
+      '      org: acme',
+      '  - name: hooked',
+      '    check: sentry',
+      '    url: https://hooked.example.com/',
+    ].join('\n')
+    const seen: Array<{ url: string, auth: string | null }> = []
+    const fetch = async (url: string, init?: RequestInit) => {
+      seen.push({ url, auth: new Headers(init?.headers).get('authorization') })
+      return new Response('[]', { status: 200 })
+    }
+    const withToken = createFakeContext({ config: yaml, settings: { sentryToken: ' tok ' }, fetch })
+    const polled = await call(withToken, submit({ yaml, operation: 'test', slug: 'polled' }))
+    expectValid(polled)
+    expect(JSON.stringify(polled.blocks.find(block => block.type === 'fields'))).toContain('{"label":"Status","value":"up"}')
+    expect(seen).toEqual([{ url: expect.stringContaining('/api/0/organizations/acme/issues/'), auth: 'Bearer tok' }])
+
+    const hooked = await call(withToken, submit({ yaml, operation: 'test', slug: 'hooked' }))
+    expectValid(hooked)
+    expect(allText(hooked)).toContain('Webhook-only Sentry monitors cannot be tested here')
+    const noToken = createFakeContext({ config: yaml, fetch })
+    const missing = await call(noToken, submit({ yaml, operation: 'test', slug: 'polled' }))
+    expect(allText(missing)).toContain('Set the Sentry token to test this monitor')
+    expect(seen).toHaveLength(1)
+    expect(withToken.bridgeCalls.filter(c => c === 'http.fetch')).toHaveLength(1)
+    expect(noToken.bridgeCalls.filter(c => c === 'http.fetch')).toEqual([])
+  })
+
   it('refuses an unknown slug, a blank slug and a missing configuration without probing', async () => {
     const fake = createFakeContext({ config: OLD })
     expect(allText(await call(fake, submit({ yaml: OLD, operation: 'test', slug: 'nope' })))).toContain('No monitor has the slug')
@@ -353,6 +426,7 @@ describe('the dashboard widget (FR-12)', () => {
       slug,
       result: { slug, status, code: status === 'down' ? 503 : 200, responseTime: 20, checkedAt: '2026-10-22T10:00:00.000Z' },
       days: [],
+      totals: {},
     })),
   })
   const widget = { type: 'page_load', page: 'widget:status' }
@@ -369,6 +443,26 @@ describe('the dashboard widget (FR-12)', () => {
       type: 'stats',
       items: [{ label: 'Operational', value: 2 }, { label: 'Degraded', value: 1 }, { label: 'Major outage', value: 1 }],
     })
+  })
+
+  it('counts monitors with no result yet as not checked, never as an outage', async () => {
+    const fake = createFakeContext({ config: monitorsYaml(['a', 'b', 'c', 'd']) })
+    const snap = snapshot({ a: 'up', b: 'up' })
+    snap.monitors.push({ slug: 'c', result: null, days: [], totals: {}, warning: { limit: 'body', since: '2026-10-22T10:00:00.000Z', lastSeen: '2026-10-22T10:00:00.000Z' } })
+    fake.kv.set('snapshot:0', snap)
+    const response = await call(fake, widget)
+    expectValid(response)
+    expect(response.blocks[0]).toMatchObject({ type: 'banner', variant: 'default', title: 'Overall: Operational', description: '4 monitors' })
+    expect(response.blocks[1]).toEqual({
+      type: 'stats',
+      items: [{ label: 'Operational', value: 2 }, { label: 'Degraded', value: 0 }, { label: 'Major outage', value: 0 }, { label: 'Not checked yet', value: 2 }],
+    })
+
+    const none = createFakeContext({ config: monitorsYaml(['a', 'b']) })
+    none.kv.set('snapshot:0', { ...snapshot({}), updatedAt: '2026-10-22T10:00:00.000Z' })
+    const unchecked = await call(none, widget)
+    expect(unchecked.blocks[0]).toMatchObject({ variant: 'default', title: 'Overall: Not checked yet', description: '2 monitors' })
+    expect(allText(unchecked)).not.toContain('"label":"Major outage","value":1')
   })
 
   it('shows an operational overall status when every monitor is up', async () => {

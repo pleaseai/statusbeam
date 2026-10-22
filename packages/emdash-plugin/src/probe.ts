@@ -35,8 +35,21 @@ export function classifyHostError(error: unknown): 'body' | undefined {
 }
 
 /**
+ * The fetch init without `signal`. Core's Sentry and AI Gateway checkers pass
+ * `AbortSignal.timeout(...)`, which the bridge cannot carry; {@link withDeadline}
+ * is the timeout here instead.
+ */
+function withoutSignal(init: RequestInit | undefined): RequestInit | undefined {
+  if (!init || !('signal' in init)) {
+    return init
+  }
+  const { signal: _signal, ...rest } = init
+  return rest
+}
+
+/**
  * Run one check through the core engine with `ctx.http.fetch` injected and a
- * deadline on the fetch. A miss rejects inside `checkSite`, which grades it
+ * deadline on the fetch (any `signal` in the init is dropped first). A miss rejects inside `checkSite`, which grades it
  * `down` with `code: 0` exactly like a network failure. A body-limit rejection
  * comes back with `limit: 'body'`: the host's cap ended the request, so the
  * result says nothing about the target. The method is never rewritten: a
@@ -50,7 +63,7 @@ export function probeSite(
   sentryToken?: string,
 ): Promise<CheckResult> {
   return checkSite(site, {
-    fetchImpl: (url, init) => withDeadline(fetchImpl(url, init), deadlineMs),
+    fetchImpl: (url, init) => withDeadline(fetchImpl(url, withoutSignal(init)), deadlineMs),
     classifyError: classifyHostError,
     ...(now ? { now } : {}),
     ...(sentryToken ? { sentryToken } : {}),

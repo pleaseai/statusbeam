@@ -7,10 +7,12 @@ import '../styles/tokens.css'
 import Unavailable from './Unavailable.astro'
 
 /**
- * 90-day uptime bar timeline for one site. Mirrors apps/web's UptimeTimeline:
- * the strip is one image whose accessible name carries the 90-day uptime, and
- * each bar's `title` names the day and its status in text, so no day is
- * conveyed by color alone. Static HTML, no client JS.
+ * 90-day uptime bar timeline for one site. Looks like apps/web's
+ * UptimeTimeline: each bar's `title` names the day and its status in text, so
+ * no day is conveyed by color alone. For assistive tech the strip is a list
+ * named by the 90-day uptime, with the same day text visually hidden in each
+ * bar, since a `title` inside an image role is not exposed. Static HTML, no
+ * client JS.
  *
  * Pass `baseUrl` + `slug` (plus `flavor` for an EmDash plugin source) to fetch,
  * or a `result` from `fetchSite` to reuse one request.
@@ -27,20 +29,20 @@ const uptime = formatUptime(windowUptime(history))
 {result.ok
   ? (
       <div class="statusbeam sb-bars">
-        <div class="sb-strip" role="img" aria-label={t.timeline.ariaUptime(uptime)}>
+        {/* `role="list"` keeps the list semantics that some browsers drop once list-style is removed. */}
+        <ul class="sb-strip" role="list" aria-label={t.timeline.ariaUptime(uptime)}>
           {history.map((d) => {
             const key: DayKey = d.status ?? 'nodata'
             // Only real (non-nodata) days carry an uptime figure in the tooltip.
             const uptimeSuffix = d.status !== null ? ` · ${formatUptime(d.uptime)}` : ''
+            const label = `${formatDay(d.date, locale)} — ${t.day[key]}${uptimeSuffix}`
             return (
-              <span
-                class="sb-bar"
-                data-sb-day={key}
-                title={`${formatDay(d.date, locale)} — ${t.day[key]}${uptimeSuffix}`}
-              />
+              <li class="sb-bar" data-sb-day={key} title={label}>
+                <span class="sb-hidden">{label}</span>
+              </li>
             )
           })}
-        </div>
+        </ul>
         <div class="sb-axis">
           <span>{t.timeline.windowStart(90)}</span>
           <span>{t.timeline.today}</span>
@@ -55,6 +57,20 @@ const uptime = formatUptime(windowUptime(history))
     align-items: stretch;
     gap: 1px;
     height: 2.25rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .sb-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
   }
   .sb-bar {
     flex: 1 1 0;

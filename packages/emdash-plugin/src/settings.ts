@@ -1,13 +1,6 @@
-import type { StatusConfig } from '@statusbeam/core'
-import type { PluginContext } from 'emdash/plugin'
-import { validateConfig } from '@statusbeam/core'
-
 /**
- * The plain settings key that holds the monitor configuration as YAML.
- *
- * Seam for T008: it adds plugin-only validation and the admin error state, and
- * gates each run on them. Until then the scheduled run only needs "a valid
- * configuration, or nothing".
+ * The plain settings key that holds the monitor configuration as YAML. Every
+ * reader validates it with the plugin rules (`config.ts`) before using it.
  */
 export const CONFIG_SETTINGS_KEY = 'config'
 
@@ -27,17 +20,6 @@ export const SENTRY_TOKEN_SECRET_KEY = 'sentryToken'
 export interface Destination {
   kind: 'slack' | 'webhook'
   url: string
-}
-
-export interface PluginSettings {
-  /** The validated configuration, or `null` when it is absent or invalid. */
-  config: StatusConfig | null
-  /** Notification destinations from the secret settings. */
-  destinations: Destination[]
-  /** Secret entries that are not http(s) URLs. They are not delivered to; T008 reports them. */
-  invalidDestinations: number
-  /** The shared webhook token, or `null` when unset (the webhook routes then reject everything). */
-  webhookSecret: string | null
 }
 
 /** Whether `entry` is an http(s) URL, the only kind a destination can be. */
@@ -66,40 +48,18 @@ export function parseUrlList(value: unknown): { urls: string[], invalid: number 
   return { urls, invalid }
 }
 
-/** Destinations held in the secret settings; a repeated URL is one destination. */
+/**
+ * Destinations held in the secret settings. A repeated URL is one destination,
+ * across both settings too: a URL set as the Slack webhook and listed in the
+ * webhook URLs is posted to once, as Slack. Only the first Slack URL is used.
+ */
 export function destinationsFrom(values: Map<string, unknown>): { destinations: Destination[], invalid: number } {
   const slack = parseUrlList(values.get(SLACK_SECRET_KEY))
   const webhooks = parseUrlList(values.get(WEBHOOKS_SECRET_KEY))
+  const slackUrls = slack.urls.slice(0, 1)
   const destinations: Destination[] = [
-    ...slack.urls.slice(0, 1).map(url => ({ kind: 'slack' as const, url })),
-    ...[...new Set(webhooks.urls)].map(url => ({ kind: 'webhook' as const, url })),
+    ...slackUrls.map(url => ({ kind: 'slack' as const, url })),
+    ...[...new Set(webhooks.urls)].filter(url => !slackUrls.includes(url)).map(url => ({ kind: 'webhook' as const, url })),
   ]
   return { destinations, invalid: slack.invalid + webhooks.invalid + Math.max(0, slack.urls.length - 1) }
-}
-
-function configFrom(yaml: unknown): StatusConfig | null {
-  if (typeof yaml !== 'string' || yaml.trim() === '') {
-    return null
-  }
-  const validation = validateConfig(yaml)
-  return validation.ok ? validation.config : null
-}
-
-/**
- * Read the configuration and the notification secrets with one `settings.list`
- * call (the bridge decrypts secret fields there). An absent or invalid
- * configuration gives `config: null`: callers then check nothing and write
- * nothing, so no monitor's status changes.
- */
-export async function readSettings(ctx: Pick<PluginContext, 'settings'>): Promise<PluginSettings> {
-  const entries = await ctx.settings.list()
-  const values = new Map(entries.map(entry => [entry.key, entry.value]))
-  const { destinations, invalid } = destinationsFrom(values)
-  const secret = values.get(WEBHOOK_SECRET_KEY)
-  return {
-    config: configFrom(values.get(CONFIG_SETTINGS_KEY)),
-    destinations,
-    invalidDestinations: invalid,
-    webhookSecret: typeof secret === 'string' && secret !== '' ? secret : null,
-  }
 }

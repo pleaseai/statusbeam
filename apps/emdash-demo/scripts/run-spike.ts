@@ -32,14 +32,17 @@ const CAPACITY: Array<[string, Record<string, number | string>]> = [
   ['n8+log4', { n: 8, logs: 4 }],
 ]
 
-/** parseConfig iterations per invocation, for the FR-20 CPU budget. */
-const CPU = [1, 5, 10, 25, 50, 100]
+/** parseConfig iterations per invocation, for the FR-20 CPU budget; the upper counts find where an invocation's CPU limit ends it. */
+const CPU = [1, 5, 10, 25, 50, 100, 1000, 1500, 2000, 2500]
+
+/** Client deadline per call: above the 120 s `stream-120s` fixture, so that case reports the host's outcome rather than the client's timeout. */
+const CALL_TIMEOUT_MS = 150_000
 
 async function call(route: string, query: Record<string, number | string>): Promise<unknown> {
   const url = `${ROUTES}/${route}?${new URLSearchParams(Object.entries(query).map(([k, v]) => [k, String(v)]))}`
   const started = performance.now()
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(90_000) })
+    const res = await fetch(url, { signal: AbortSignal.timeout(CALL_TIMEOUT_MS) })
     const text = await res.text()
     let body: unknown = text
     try {

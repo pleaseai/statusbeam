@@ -3,7 +3,7 @@ import type { PluginContext } from 'emdash/plugin'
 import type { Destination } from './settings'
 import { validateConfig } from '@statusbeam/core'
 import { MAX_SHARDS } from './budget'
-import { CONFIG_SETTINGS_KEY, destinationsFrom, isHttpUrl, SENTRY_TOKEN_SECRET_KEY, SLACK_SECRET_KEY, WEBHOOKS_SECRET_KEY } from './settings'
+import { CONFIG_SETTINGS_KEY, destinationsFrom, isHttpUrl, parseUrlList, SENTRY_TOKEN_SECRET_KEY, SLACK_SECRET_KEY, WEBHOOK_SECRET_KEY, WEBHOOKS_SECRET_KEY } from './settings'
 import { monitorsPerShard, pollableSites, shardCountFor } from './shards'
 
 export { SENTRY_TOKEN_SECRET_KEY } from './settings'
@@ -35,6 +35,8 @@ export interface SecretsView {
   sentryToken: boolean
   /** Entries of the secret URL settings that are not http(s) URLs: the field and the 1-based line, never the text. */
   invalidEntries: Array<{ field: string, line: number }>
+  /** Valid URLs in the Slack setting after the first, which receive nothing: the setting takes one URL. */
+  extraSlackUrls: number
 }
 
 function invalidEntriesOf(field: string, value: unknown): SecretsView['invalidEntries'] {
@@ -54,6 +56,7 @@ export function secretsFrom(values: Map<string, unknown>): { secrets: SecretsVie
     secrets: {
       destinations: destinations.length,
       sentryToken: typeof token === 'string' && token.trim() !== '',
+      extraSlackUrls: Math.max(0, parseUrlList(values.get(SLACK_SECRET_KEY)).urls.length - 1),
       invalidEntries: [
         ...invalidEntriesOf(SLACK_SECRET_KEY, values.get(SLACK_SECRET_KEY)),
         ...invalidEntriesOf(WEBHOOKS_SECRET_KEY, values.get(WEBHOOKS_SECRET_KEY)),
@@ -65,11 +68,19 @@ export function secretsFrom(values: Map<string, unknown>): { secrets: SecretsVie
 const NOT_YAML = 'Notification URLs belong in the encrypted plugin settings, not in the YAML'
 
 function secretIssues(secrets: SecretsView): PluginIssue[] {
-  return secrets.invalidEntries.map(({ field, line }) => ({
+  const issues: PluginIssue[] = secrets.invalidEntries.map(({ field, line }) => ({
     severity: 'warning',
     path: field,
     message: `Line ${line} of the ${field} setting holds an entry that is not an http(s) URL. It receives no notifications.`,
   }))
+  if (secrets.extraSlackUrls > 0) {
+    issues.push({
+      severity: 'warning',
+      path: SLACK_SECRET_KEY,
+      message: `The ${SLACK_SECRET_KEY} setting holds ${secrets.extraSlackUrls + 1} URLs, but only the first receives notifications. Move the others to the "${WEBHOOKS_SECRET_KEY}" setting or remove them.`,
+    })
+  }
+  return issues
 }
 
 interface Analysis {
@@ -124,7 +135,8 @@ function analyze(yaml: string, secrets: SecretsView): Analysis {
     }
   })
 
-  const monitors = pollableSites(config).length
+  // Count what the run and the reconcile will poll: Sentry poll monitors count only while a token is set.
+  const monitors = pollableSites(config, { sentryToken: secrets.sentryToken ? 'set' : undefined }).length
   if (monitors > 0 && monitorsPerShard(secrets.destinations) < 1) {
     error('notifications', `${secrets.destinations} notification destinations leave no call for a probe in a run. Remove destinations from the encrypted settings.`, 'capacity')
   }
@@ -190,7 +202,11 @@ export type StoredConfig
  * run still records it as a capacity error in the snapshot.
  */
 export async function loadStoredConfig(ctx: Pick<PluginContext, 'settings'>): Promise<StoredConfig> {
-  const values = new Map((await ctx.settings.list()).map(entry => [entry.key, entry.value]))
+  return storedConfigFrom(new Map((await ctx.settings.list()).map(entry => [entry.key, entry.value])))
+}
+
+/** {@link loadStoredConfig} over a `settings.list` result the caller already holds. Pure. */
+function storedConfigFrom(values: Map<string, unknown>): StoredConfig {
   const yaml = values.get(CONFIG_SETTINGS_KEY)
   if (typeof yaml !== 'string' || yaml.trim() === '') {
     return { status: 'absent' }
@@ -204,4 +220,37 @@ export async function loadStoredConfig(ctx: Pick<PluginContext, 'settings'>): Pr
   const token = values.get(SENTRY_TOKEN_SECRET_KEY)
   const sentryToken = typeof token === 'string' && token.trim() !== '' ? token.trim() : undefined
   return { status: 'valid', config: parsed, destinations, issues, ...(sentryToken ? { sentryToken } : {}) }
+}
+
+export interface PluginSettings {
+  /** The configuration a run would use, or `null` when it is absent or fails validation (see {@link loadStoredConfig}). */
+  config: StatusConfig | null
+  /** Notification destinations from the secret settings. */
+  destinations: Destination[]
+  /** Secret entries that are not http(s) URLs. They are not delivered to; the admin page reports them. */
+  invalidDestinations: number
+  /** The shared webhook token, or `null` when unset (the webhook routes then reject everything). */
+  webhookSecret: string | null
+}
+
+/**
+ * Read the configuration and the notification secrets with one `settings.list`
+ * call (the bridge decrypts secret fields there). The configuration is gated
+ * exactly as the scheduled run gates it: core schema plus the plugin rules, so
+ * the public and webhook routes never serve or route a configuration the run
+ * refuses. An absent or rejected configuration gives `config: null`: callers
+ * then check nothing and write nothing, so no monitor's status changes.
+ */
+export async function readSettings(ctx: Pick<PluginContext, 'settings'>): Promise<PluginSettings> {
+  const entries = await ctx.settings.list()
+  const values = new Map(entries.map(entry => [entry.key, entry.value]))
+  const { destinations, invalid } = destinationsFrom(values)
+  const stored = storedConfigFrom(values)
+  const secret = values.get(WEBHOOK_SECRET_KEY)
+  return {
+    config: stored.status === 'valid' ? stored.config : null,
+    destinations,
+    invalidDestinations: invalid,
+    webhookSecret: typeof secret === 'string' && secret !== '' ? secret : null,
+  }
 }

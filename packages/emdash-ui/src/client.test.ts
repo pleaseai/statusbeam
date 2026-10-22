@@ -1,6 +1,6 @@
 import type { SiteResponse, StatusResponse } from '@statusbeam/core/contract'
 import { describe, expect, it } from 'bun:test'
-import { fetchSite, fetchStatus, loadStatus, siteUrl, statusUrl } from './client'
+import { DEFAULT_TIMEOUT_MS, fetchSite, fetchStatus, loadStatus, siteUrl, statusUrl } from './client'
 
 const status: StatusResponse = {
   version: 1,
@@ -36,6 +36,7 @@ const json = (body: unknown, init?: ResponseInit) => new Response(JSON.stringify
 describe('url builders', () => {
   it('builds standalone URLs, tolerating a trailing slash', () => {
     expect(statusUrl({ baseUrl: 'https://statusbeam.dev/' })).toBe('https://statusbeam.dev/api/status.json')
+    expect(statusUrl({ baseUrl: 'https://statusbeam.dev/sub///' })).toBe('https://statusbeam.dev/sub/api/status.json')
     expect(siteUrl({ baseUrl: 'https://statusbeam.dev', flavor: 'standalone' }, 'a b')).toBe('https://statusbeam.dev/api/status/a%20b.json')
   })
 
@@ -79,6 +80,53 @@ describe('fetchStatus / fetchSite', () => {
     })
     const result = await fetchSite({ baseUrl: 'https://x.test' }, 'api', { fetch: failing.fetch })
     expect(result).toMatchObject({ ok: false, reason: 'network', detail: 'fetch failed', url: 'https://x.test/api/status/api.json' })
+  })
+})
+
+describe('read deadline', () => {
+  /** A 200 whose body stream sends the opening of a JSON document and then never ends. */
+  const stalledBody = () => new Response(new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode('{"version":1,'))
+    },
+  }), { status: 200 })
+
+  it('defaults to a deadline', () => {
+    expect(DEFAULT_TIMEOUT_MS).toBe(10_000)
+  })
+
+  it('yields unavailable (network) when the body never ends past timeoutMs', async () => {
+    const started = Date.now()
+    const result = await fetchStatus({ baseUrl: 'https://x.test' }, { fetch: stub(stalledBody).fetch, timeoutMs: 50 })
+    expect(Date.now() - started).toBeLessThan(2000)
+    expect(result).toMatchObject({ ok: false, reason: 'network', detail: 'read exceeded the 50 ms deadline' })
+  })
+
+  it('yields unavailable (network) when the request never answers past timeoutMs', async () => {
+    const result = await fetchSite({ baseUrl: 'https://x.test' }, 'api', { fetch: stub(() => new Promise<Response>(() => {})).fetch, timeoutMs: 50 })
+    expect(result).toMatchObject({ ok: false, reason: 'network', detail: 'read exceeded the 50 ms deadline' })
+  })
+
+  it('still honours a caller abort before the deadline, during the body read', async () => {
+    const caller = new AbortController()
+    const pending = fetchStatus({ baseUrl: 'https://x.test' }, { fetch: stub(stalledBody).fetch, signal: caller.signal, timeoutMs: 60_000 })
+    setTimeout(() => caller.abort(new Error('page request cancelled')), 20)
+    const started = Date.now()
+    expect(await pending).toMatchObject({ ok: false, reason: 'network', detail: 'page request cancelled' })
+    expect(Date.now() - started).toBeLessThan(2000)
+  })
+
+  it('passes the fetch a signal that aborts with the caller', async () => {
+    const caller = new AbortController()
+    let seen: AbortSignal | undefined
+    const impl = (async (_input: string | URL | Request, init?: RequestInit) => {
+      seen = init?.signal ?? undefined
+      return json(status)
+    }) as typeof fetch
+    expect(await fetchStatus({ baseUrl: 'https://x.test' }, { fetch: impl, signal: caller.signal })).toMatchObject({ ok: true })
+    expect(seen?.aborted).toBe(false)
+    caller.abort()
+    expect(seen?.aborted).toBe(true)
   })
 })
 

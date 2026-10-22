@@ -30,8 +30,10 @@ not change the versions that `apps/web` and `apps/docs` resolve.
 `src/pages/status.astro` renders the `@statusbeam/emdash-ui` components, imported by
 relative path from `packages/emdash-ui`. By default it reads the standalone deployment at
 `https://demo.statusbeam.dev`; set `STATUSBEAM_BASE_URL` at build time to point it at another
-standalone deployment. `/status?source=plugin` reads this site's own StatusBeam plugin
-routes instead.
+standalone deployment. `/status?source=plugin` points the components at this site's own
+StatusBeam plugin routes, but this demo does not register the StatusBeam engine plugin
+(`@statusbeam/emdash-plugin`), so that path shows the components' unavailable state until
+the engine plugin is registered.
 
 ```sh
 STATUSBEAM_BASE_URL=http://127.0.0.1:4420 bun run build:in-process
@@ -49,12 +51,25 @@ is not part of the root workspace.
 
 Use a copy of the whole repository outside any checkout (see step 3 below), then run the
 fixture server and the Node in-process dev server. The dev server is needed because the
-`/_emdash/api/auth/dev-bypass` sign-in only exists in development.
+`/_emdash/api/auth/dev-bypass` sign-in only exists in development. A copy made by
+`scripts/stage.sh` does not work here: it holds only this app, without the package sources.
 
 ```sh
 bun scripts/status-fixture.ts 4420 &
 STATUSBEAM_BLOCK=1 SPIKE_MODE=in-process npx astro dev --host 127.0.0.1 --port 4410
 ```
+
+The posts page needs a post to render. The seed creates the `posts` collection but no post,
+so create one:
+
+1. Sign in through the development bypass:
+   `http://127.0.0.1:4410/_emdash/api/auth/dev-bypass?redirect=/_emdash/admin`.
+2. In the admin, add a post with the slug `status-demo` and insert a "Status" block. Set
+   "Status source URL" to `http://127.0.0.1:4420` and "Source type" to "Standalone" (the
+   fixture serves the standalone routes), then publish the post. The block accepts a
+   localhost or private source only on a development server such as this one; a
+   production build refuses it.
+3. Open `http://127.0.0.1:4410/posts/status-demo`.
 
 ## Probe routes
 
@@ -74,8 +89,8 @@ Fixture names: `ok`, `status-503`, `nxdomain`, `big-7mib`, `big-9mib`, `slow-hea
 
 ## Reproduce the runs
 
-You need Bun, Node 22 or later, and Wrangler logged in to a Cloudflare account on the
-Workers paid plan (Worker Loader is paid-only).
+You need Bun, Node 22 or later, `rsync` (used by `scripts/stage.sh`), and Wrangler logged
+in to a Cloudflare account on the Workers paid plan (Worker Loader is paid-only).
 
 1. Build the monorepo once, then install the app and build the probe:
 
@@ -94,7 +109,12 @@ Workers paid plan (Worker Loader is paid-only).
    ```
 
 3. Stage one copy of the site per mode, because each mode needs its own build in
-   `dist/`. The script copies the site and the built probe, then runs `bun install`:
+   `dist/`. The script copies the site and the built probe, then runs `bun install`.
+   A staged copy serves the probe spike only: it leaves out `src/pages/status.astro`,
+   which imports the monorepo packages by relative path, and `STATUSBEAM_BLOCK=1` does
+   not build there. The target must be new, empty, or a directory the script staged
+   before (it writes a `.statusbeam-stage` marker), because the copy deletes whatever
+   else is in it; the script refuses the source tree and its ancestors.
 
    ```sh
    scripts/stage.sh /tmp/spike-wl
@@ -109,9 +129,9 @@ Workers paid plan (Worker Loader is paid-only).
    `Tsconfig not found astro/tsconfigs/strict`. The same lookup breaks the `apps/web`
    build in such a worktree.
 
-4. Worker Loader mode. Create the D1 database, put its id in `wrangler.jsonc`, then
-   create the R2 bucket and deploy. Wrangler provisions the `SESSION` KV namespace on
-   the first deploy.
+4. Worker Loader mode. Create the D1 database, replace `<your-d1-database-id>` in
+   `wrangler.jsonc` with the id it prints, then create the R2 bucket and deploy.
+   Wrangler provisions the `SESSION` KV namespace on the first deploy.
 
    ```sh
    cd /tmp/spike-wl
@@ -124,7 +144,9 @@ Workers paid plan (Worker Loader is paid-only).
    it, a fetch from the site Worker to the fixture Worker on the same `workers.dev`
    subdomain returns 404 instead of reaching the fixture.
 
-5. Node modes. Build and start each staged copy on its own port:
+5. Node modes. Build and start each staged copy on its own port. Each server keeps
+   running in the foreground, so start each one in its own terminal (or append `&` to
+   run it in the background), then run step 6 from a third terminal:
 
    ```sh
    cd /tmp/spike-workerd && bun run build:workerd && PORT=4401 HOST=127.0.0.1 bun run start

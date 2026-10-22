@@ -9,7 +9,8 @@
     {
       "binding": "DB",
       "database_name": "statusbeam-emdash-spike",
-      "database_id": "c22e9fd7-164b-49fb-a365-f8478092e080"
+      // Replace with the id `wrangler d1 create statusbeam-emdash-spike` prints (README.md, step 4).
+      "database_id": "<your-d1-database-id>"
     }
   ],
   "r2_buckets": [

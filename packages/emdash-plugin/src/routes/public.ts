@@ -2,7 +2,7 @@ import type { SiteSummary } from '@statusbeam/core'
 import type { PluginContext, RouteEntry } from 'emdash/plugin'
 import { buildSiteResponse, buildStatusResponse, overallBadge, parsePeriod, responseBadge, statusBadge, uptimeBadge } from '@statusbeam/core'
 import { pluginResponse, pluginRoute } from 'emdash/plugin'
-import { readSettings } from '../settings'
+import { readSettings } from '../config'
 import { readSnapshot, summariesFromSnapshot } from '../snapshot'
 
 /**

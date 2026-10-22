@@ -6,8 +6,8 @@
   "depends": [],
   "conflicts": [],
   "traces": [],
-  "created_at": "2026-10-22T11:16:17.725Z",
-  "updated_at": "2026-10-22T11:16:17.725Z",
+  "created_at": "2026-10-22T11:33:21.358Z",
+  "updated_at": "2026-10-22T11:33:21.358Z",
   "source_tracks": [
     "emdash-distribution-20261022"
   ],
@@ -133,13 +133,23 @@
           "then": [
             "return a body that is a valid shields.io endpoint response"
           ]
+        },
+        {
+          "name": "If a client requests the plugin's uptime badge with an invalid or absent `period`, then the system shall return the monthly uptime badge, as the standalone endpoint does.",
+          "given": [],
+          "when": [
+            "a client requests the plugin's uptime badge with an invalid or absent `period`"
+          ],
+          "then": [
+            "return the monthly uptime badge, as the standalone endpoint does"
+          ]
         }
       ]
     },
     {
       "id": "REQ-008",
       "kind": "functional",
-      "statement": "run scheduled checks for every configured monitor inside the plugin, sharding each run's monitors across separate scheduled tasks so every task stays within one invocation's limits, and keep check history and the current status snapshot in plugin-owned storage",
+      "statement": "run scheduled checks inside the plugin for every configured poll monitor within the plugin's scheduled capacity (webhook-only Sentry monitors take their status from inbound webhooks, and monitors beyond capacity are named by the AC-021 warning), sharding each run's monitors across separate scheduled tasks so every task stays within one invocation's limits, and keep check history and the current status snapshot in plugin-owned storage",
       "source_tracks": [
         "emdash-distribution-20261022"
       ],

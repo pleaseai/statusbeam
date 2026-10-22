@@ -6,7 +6,7 @@ import { runMaintenance, runShard } from '../src/run'
 import { reconcileShards } from '../src/shards'
 import { createFakeContext, monitorNames, monitorsYaml } from './fake-context'
 
-const NONE: SecretsView = { destinations: 0, sentryToken: false, invalidEntries: [] }
+const NONE: SecretsView = { destinations: 0, sentryToken: false, invalidEntries: [], extraSlackUrls: 0 }
 const VALID = monitorsYaml(['alpha', 'beta'])
 
 function yamlWith(sites: string[]): string {
@@ -63,6 +63,15 @@ describe('validatePluginConfig', () => {
     expect(over.issues[0]?.message).toContain('probes 40')
     expect(over.issues[0]?.message).toContain('5 would go unchecked')
 
+    // Sentry poll monitors count once a token is set, as the run and the reconcile schedule them.
+    const sentryPolls = monitorNames(5).map(name => `  - name: s${name}\n    check: sentry\n    url: https://s.example.com/\n    sentry:\n      org: acme`)
+    const mixed = `${monitorsYaml(monitorNames(40))}\n${sentryPolls.join('\n')}`
+    expect(issuesOf(mixed, NONE, 'warning').filter(issue => issue.path === 'sites')).toEqual([])
+    const counted = issuesOf(mixed, { ...NONE, sentryToken: true })
+    expect(counted).toEqual([expect.objectContaining({ severity: 'warning', path: 'sites' })])
+    expect(counted[0]?.message).toContain('45 monitors are pollable')
+    expect(counted[0]?.message).toContain('5 would go unchecked')
+
     const withDestinations = issuesOf(monitorsYaml(monitorNames(17)), { ...NONE, destinations: 3 })
     expect(withDestinations[0]?.message).toContain('probes 16')
     expect(withDestinations[0]?.message).toContain('1 would go unchecked')
@@ -102,6 +111,16 @@ describe('validatePluginConfig', () => {
     expect(result.issues.map(i => [i.severity, i.path])).toEqual([['warning', 'slackWebhookUrl'], ['warning', 'webhookUrls'], ['warning', 'webhookUrls']])
     expect(result.issues[1]?.message).toContain('Line 2')
     expect(JSON.stringify(result.issues)).not.toContain('TOKEN123')
+  })
+
+  it('warns, without quoting them, about Slack URLs past the first, which receive nothing', () => {
+    const { secrets } = secretsFrom(new Map<string, unknown>([['slackWebhookUrl', 'https://hooks.slack.com/a/SECRET1\nhttps://hooks.slack.com/b/SECRET2 https://hooks.slack.com/c/SECRET3']]))
+    expect(secrets.extraSlackUrls).toBe(2)
+    expect(secrets.invalidEntries).toEqual([])
+    const result = validatePluginConfig(VALID, secrets)
+    expect(result.ok).toBe(true)
+    expect(result.issues).toEqual([expect.objectContaining({ severity: 'warning', path: 'slackWebhookUrl', message: expect.stringContaining('holds 3 URLs, but only the first') })])
+    expect(JSON.stringify(result.issues)).not.toContain('SECRET')
   })
 })
 

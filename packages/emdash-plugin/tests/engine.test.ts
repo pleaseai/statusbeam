@@ -68,7 +68,7 @@ describe('runShard', () => {
     const seen: Array<{ url: string, auth: string | null }> = []
     const fetch = async (url: string, init?: RequestInit) => {
       seen.push({ url, auth: new Headers(init?.headers).get('authorization') })
-      return new Response(url.includes('sentry.io') ? '[]' : 'ok', { status: 200 })
+      return new Response(new URL(url).hostname === 'sentry.io' ? '[]' : 'ok', { status: 200 })
     }
 
     await runShard(createFakeContext({ config: yaml, settings: { sentryToken: 'tok' }, fetch }).ctx, 0)
@@ -199,12 +199,21 @@ describe('reconcileShards', () => {
     expect(result.shards).toBe(MAX_SHARDS)
     expect(result.uncovered).toBe(60 - MAX_SHARDS * 5)
     expect(fake.bridgeCalls.length).toBeLessThanOrEqual(CALL_BUDGET)
-    expect([...fake.tasks.keys()].filter(n => n.startsWith('check-'))).toHaveLength(MAX_SHARDS)
+    // The maintenance task goes first, so the one deferred operation is the last shard, which maintenance finishes.
+    expect([...fake.tasks.keys()]).toEqual([MAINTENANCE_TASK, ...Array.from({ length: MAX_SHARDS - 1 }, (_, i) => `check-${i}`)])
     expect(result.deferred).toBe(1)
 
     const again = await reconcileShards(createFakeContext({ config: monitorsYaml(monitorNames(60)), tasks: [...fake.tasks.values()] }).ctx)
     expect(again.deferred).toBe(0)
-    expect(again.scheduled).toEqual([MAINTENANCE_TASK])
+    expect(again.scheduled).toEqual([`check-${MAX_SHARDS - 1}`])
+  })
+
+  it('schedules the maintenance task on a first activation that needs every shard', async () => {
+    const fake = createFakeContext({ config: monitorsYaml(monitorNames(MAX_SHARDS * 5)) })
+    const activate = plugin.hooks?.['plugin:activate'] as (event: unknown, ctx: unknown) => Promise<void>
+    await activate({}, fake.ctx)
+    expect(fake.tasks.has(MAINTENANCE_TASK)).toBe(true)
+    expect(fake.bridgeCalls.length).toBeLessThanOrEqual(CALL_BUDGET)
   })
 
   it('cancels surplus shards when the monitor count drops and leaves them alone for an unusable configuration', async () => {
@@ -223,7 +232,7 @@ describe('readSnapshot', () => {
   it('merges the shard snapshots, with the newest snapshot winning for a monitor in two of them', async () => {
     const fake = createFakeContext()
     const result = (slug: string, status: CheckResult['status'], checkedAt: string): CheckResult => ({ slug, status, code: 200, responseTime: 1, checkedAt })
-    const monitor = (r: CheckResult) => ({ slug: r.slug, result: r, days: [] })
+    const monitor = (r: CheckResult) => ({ slug: r.slug, result: r, days: [], totals: {} })
     const shard = (n: number, updatedAt: string, results: CheckResult[]): ShardSnapshot => ({ version: 2, shard: n, updatedAt, monitors: results.map(monitor), deliveries: [] })
     fake.kv.set('snapshot:0', shard(0, '2026-10-22T10:05:00.000Z', [result('a', 'up', '2026-10-22T10:05:00.000Z'), result('b', 'down', '2026-10-22T10:00:00.000Z')]))
     fake.kv.set('snapshot:1', shard(1, '2026-10-22T10:10:00.000Z', [result('b', 'up', '2026-10-22T10:10:00.000Z')]))

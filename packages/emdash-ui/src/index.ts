@@ -16,7 +16,7 @@ export type {
   Unavailable,
   UnavailableReason,
 } from './client'
-export { fetchSite, fetchStatus, siteUrl, statusUrl } from './client'
+export { DEFAULT_TIMEOUT_MS, fetchSite, fetchStatus, siteUrl, statusUrl } from './client'
 export { default as SiteDetail } from './components/SiteDetail.astro'
 export { default as StatusBanner } from './components/StatusBanner.astro'
 export { default as UptimeBars } from './components/UptimeBars.astro'

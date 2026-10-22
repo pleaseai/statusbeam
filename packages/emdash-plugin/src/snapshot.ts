@@ -34,9 +34,10 @@ export interface MonitorState {
   /**
    * Checks counted behind each day in `days`, by date. A shard's state counts
    * polls and a webhook state counts webhook events, so the merge can add the
-   * two sources exactly. Absent in state written before this field existed.
+   * two sources exactly. Every writer sets it; state read back without it
+   * (written before the field existed) is read as `{}` (see {@link mergeSnapshots}).
    */
-  totals?: Record<string, number>
+  totals: Record<string, number>
   warning?: MonitorWarning
 }
 
@@ -50,6 +51,13 @@ export interface ShardSnapshot {
   /** ISO time the shard finished its run. */
   updatedAt: string
   monitors: MonitorState[]
+  /**
+   * Monitors a configuration change moved out of this shard whose new shard has
+   * not run since: their last state, carried until the new owner writes them
+   * into its own `monitors` (see {@link handoffFor}). Absent in snapshots written
+   * before this field existed.
+   */
+  handoff?: MonitorState[]
   /** The notification deliveries of this run, with redacted targets. */
   deliveries: DeliveryOutcome[]
   /** Set when the destinations leave this shard no call for a single probe; it probed nothing. */
@@ -108,7 +116,12 @@ export interface MergedSnapshot {
   results: Map<string, CheckResult>
   /** The newest `updatedAt` of any shard or webhook snapshot, or `null` before the first. */
   updatedAt: string | null
-  /** Capacity errors the shards recorded. */
+  /**
+   * The capacity error in effect: the newest one any shard recorded, unless a
+   * shard has completed a normal run since, which shows the destinations fit
+   * again. At most one entry, so a snapshot left behind by a shard the
+   * configuration no longer has never keeps reporting an old error.
+   */
   capacityErrors: string[]
   /** Poll-only state per slug (newest shard wins): what a shard run carries over, so it never absorbs webhook counts. */
   polled: Map<string, MonitorState>
@@ -123,6 +136,15 @@ function isSnapshot(value: unknown): value is ShardSnapshot {
 function isWebhookSnapshot(value: unknown): value is WebhookSnapshot {
   const candidate = value as WebhookSnapshot
   return typeof value === 'object' && value !== null && candidate.version === 2 && candidate.webhook === true && typeof candidate.monitor === 'object' && candidate.monitor !== null
+}
+
+/** State written before `totals` existed reads as having no counts, so every later step can rely on the field. */
+function monitorWithTotals(monitor: MonitorState): MonitorState {
+  return monitor.totals ? monitor : { ...monitor, totals: {} }
+}
+
+function withTotals(snapshot: ShardSnapshot): ShardSnapshot {
+  return { ...snapshot, monitors: snapshot.monitors.map(monitorWithTotals), ...(snapshot.handoff ? { handoff: snapshot.handoff.map(monitorWithTotals) } : {}) }
 }
 
 const SEVERITY: Record<CheckStatus, number> = { up: 0, degraded: 1, down: 2 }
@@ -141,11 +163,20 @@ function combineMonitors(polled: MonitorState, pushed: MonitorState, now: Date):
   const days = new Map<string, DayStat>()
   const totals: Record<string, number> = {}
   const polledDays = new Map(polled.days.filter(stat => stat.status !== null).map(stat => [stat.date, stat]))
+  // A day only one source counted keeps that source's count, so the merged state still adds up exactly.
+  const keepTotal = (date: string, source: MonitorState) => {
+    const total = source.totals[date]
+    if (total !== undefined) {
+      totals[date] = total
+    }
+  }
   for (const stat of pushed.days.filter(stat => stat.status !== null)) {
     const other = polledDays.get(stat.date)
-    const [a, b] = [polled.totals?.[stat.date], pushed.totals?.[stat.date]]
+    const [a, b] = [polled.totals[stat.date], pushed.totals[stat.date]]
     if (!other || a === undefined || b === undefined) {
       days.set(stat.date, other ?? stat)
+      keepTotal(stat.date, other ? polled : pushed)
+      polledDays.delete(stat.date)
       continue
     }
     const total = a + b
@@ -157,6 +188,7 @@ function combineMonitors(polled: MonitorState, pushed: MonitorState, now: Date):
   }
   for (const [date, stat] of polledDays) {
     days.set(date, stat)
+    keepTotal(date, polled)
   }
   const merged: MonitorState = { slug: polled.slug, result, days: denseHistory(days, now), totals }
   if (polled.warning) {
@@ -167,8 +199,11 @@ function combineMonitors(polled: MonitorState, pushed: MonitorState, now: Date):
 
 /**
  * Merge shard and webhook snapshots into one view. When a monitor appears in
- * more than one shard snapshot, which happens briefly after a configuration
- * change moves it between shards, the newest snapshot wins. A monitor that also
+ * more than one shard snapshot's `monitors`, which happens briefly after a
+ * configuration change moves it between shards, the newest snapshot wins. A
+ * `handoff` entry stands in for a monitor only while no snapshot holds it in
+ * `monitors`: a real owner always wins over a handoff, whatever the order of
+ * their `updatedAt`. A monitor that also
  * has a webhook snapshot is then combined with it (see {@link combineMonitors}),
  * and a webhook-only monitor is taken from its webhook snapshot. Pure; shared by
  * the scheduled run and the webhook (to find each monitor's previous state
@@ -177,17 +212,24 @@ function combineMonitors(polled: MonitorState, pushed: MonitorState, now: Date):
 export function mergeSnapshots(entries: KvEntry[]): MergedSnapshot {
   const byAge = (a: { updatedAt: string }, b: { updatedAt: string }): number => (a.updatedAt < b.updatedAt ? -1 : a.updatedAt > b.updatedAt ? 1 : 0)
   const values = entries.map(entry => entry.value)
-  const snapshots = values.filter(isSnapshot).sort(byAge)
-  const webhooks = values.filter(isWebhookSnapshot).sort(byAge)
+  const snapshots = values.filter(isSnapshot).map(withTotals).sort(byAge)
+  const webhooks = values.filter(isWebhookSnapshot).map(webhook => ({ ...webhook, monitor: monitorWithTotals(webhook.monitor) })).sort(byAge)
   const polled = new Map<string, MonitorState>()
   const pushed = new Map<string, MonitorState>()
-  const capacityErrors: string[] = []
+  // `snapshots` is oldest first, so the last one decides whether a capacity error is still in effect.
+  const capacityError = snapshots.at(-1)?.capacityError
+  const capacityErrors = capacityError ? [capacityError] : []
   for (const snapshot of snapshots) {
-    if (snapshot.capacityError) {
-      capacityErrors.push(snapshot.capacityError)
-    }
     for (const monitor of snapshot.monitors) {
       polled.set(monitor.slug, monitor)
+    }
+  }
+  const owned = new Set(polled.keys())
+  for (const snapshot of snapshots) {
+    for (const monitor of snapshot.handoff ?? []) {
+      if (!owned.has(monitor.slug)) {
+        polled.set(monitor.slug, monitor)
+      }
     }
   }
   for (const webhook of webhooks) {
@@ -207,6 +249,35 @@ export function mergeSnapshots(entries: KvEntry[]): MergedSnapshot {
     }
   }
   return { monitors, results, updatedAt, capacityErrors, polled, pushed }
+}
+
+/**
+ * The handoff shard `shard` writes next to its `monitors`. A configuration
+ * change can move a monitor to another shard, and each shard rewrites only its
+ * own key with only its current monitors. If the old shard runs first, the
+ * monitor's state would vanish before the new shard reads it, losing its
+ * history and the previous result its change detection compares against. So
+ * the old shard keeps carrying a monitor that was in its previous snapshot
+ * (`monitors` or `handoff`), is no longer among `siteSlugs`, is still among
+ * `pollableSlugs`, and is in no other shard snapshot's `monitors`. Once the new
+ * owner has written it, the next run drops it. Pure; works on the `entries`
+ * the run has already listed, so it costs no bridge call.
+ */
+export function handoffFor(entries: KvEntry[], shard: number, siteSlugs: Set<string>, pollableSlugs: Set<string>): MonitorState[] {
+  const own = entries.find(entry => entry.key === snapshotKey(shard))?.value
+  if (!isSnapshot(own)) {
+    return []
+  }
+  const ownedElsewhere = new Set(entries
+    .filter(entry => entry.key !== snapshotKey(shard) && isSnapshot(entry.value))
+    .flatMap(entry => (entry.value as ShardSnapshot).monitors.map(monitor => monitor.slug)))
+  const carried = new Map<string, MonitorState>()
+  for (const monitor of [...(own.handoff ?? []), ...own.monitors]) {
+    if (!siteSlugs.has(monitor.slug) && pollableSlugs.has(monitor.slug) && !ownedElsewhere.has(monitor.slug)) {
+      carried.set(monitor.slug, monitor)
+    }
+  }
+  return [...carried.values()]
 }
 
 /**
@@ -262,13 +333,21 @@ export function advanceMonitor(
 /**
  * Turn the merged snapshot into the `SiteSummary`s the status endpoints serve:
  * status and latency from each monitor's latest real result, per-day, week and
- * month uptime from its day stats. A monitor with no real result yet reads as
- * core's default (`down`); its warning is on `merged.monitors`.
+ * month uptime from its day stats. A monitor whose every probe so far hit a host
+ * limit has a warning and no real result; it is left out, since core would read
+ * it as `down` and show an outage nobody observed. A monitor with a warning and
+ * an earlier real result keeps showing that result, and a monitor with neither
+ * (not probed yet) reads as core's default (`down`). Warnings are on
+ * `merged.monitors`.
  */
 export function summariesFromSnapshot(merged: MergedSnapshot, sites: Site[], now: Date): SiteSummary[] {
   const historyBySlug = new Map<string, Map<string, DayStat>>()
   for (const [slug, monitor] of merged.monitors) {
     historyBySlug.set(slug, new Map(monitor.days.filter(stat => stat.status !== null).map(stat => [stat.date, stat])))
   }
-  return buildSiteSummaries({ sites, results: [...merged.results.values()], previous: new Map(), historyBySlug, now })
+  const graded = sites.filter((site) => {
+    const monitor = merged.monitors.get(site.slug)
+    return !(monitor?.warning && !merged.results.has(site.slug))
+  })
+  return buildSiteSummaries({ sites: graded, results: [...merged.results.values()], previous: new Map(), historyBySlug, now })
 }

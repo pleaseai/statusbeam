@@ -42,7 +42,8 @@ const uptime90 = site && formatUptime(windowUptime(site.history))
     <UptimeBars result={result} locale={locale} />
     <p class="sb-meta">
       <span>{t.breakdown({ day: site.uptimeDay, week: site.uptimeWeek, month: site.uptimeMonth, quarter: uptime90 ?? '' })}</span>
-      {(site.responseHistory?.length ?? 0) > 0 && (
+      {/* The current value stands alone: the plugin's summaries carry no responseHistory. */}
+      {site.responseTime > 0 && (
         <span>{t.status.responseTime} · {site.responseTime} {t.unit.ms}</span>
       )}
     </p>

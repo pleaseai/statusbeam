@@ -36,7 +36,8 @@ function newContext(settings: Record<string, unknown> = { webhookSecret: SECRET 
 interface Call {
   provider?: 'statuspage' | 'sentry'
   method?: string
-  slug?: string
+  /** `null` leaves the `slug` query parameter out entirely. */
+  slug?: string | null
   token?: string | null
   body?: unknown
   rawBody?: string
@@ -45,7 +46,9 @@ interface Call {
 
 async function post(ctx: PluginContext, call: Call = {}): Promise<{ status: number, text: string | null }> {
   const query = new URLSearchParams()
-  query.set('slug', call.slug ?? 'web')
+  if (call.slug !== null) {
+    query.set('slug', call.slug ?? 'web')
+  }
   if (call.token !== null) {
     query.set('token', call.token ?? SECRET)
   }
@@ -112,6 +115,7 @@ describe('webhook routing after a valid token', () => {
     const cases: Call[] = [
       { slug: 'nope' },
       { slug: '' },
+      { slug: null },
       { provider: 'sentry', slug: 'web' },
       { provider: 'statuspage', slug: 'errors', body: { action: 'created' } },
       { provider: 'statuspage', slug: 'plain' },
@@ -124,12 +128,29 @@ describe('webhook routing after a valid token', () => {
     expect(fake.rows.size + fake.kv.size).toBe(0)
   })
 
+  it('returns 404 for a monitor of a configuration the plugin rules reject, as the scheduled run refuses it too', async () => {
+    // Core accepts duplicate slugs; the plugin does not, so no route may act on this configuration.
+    const duplicate = `${CONFIG}\n  - name: web\n    check: statuspage\n    url: https://other.example.com/`
+    const fake = createFakeContext({ config: duplicate, settings: { webhookSecret: SECRET } })
+    expect(await post(fake.ctx, { body: DOWN })).toEqual({ status: 404, text: 'Unknown site' })
+    expect(fake.bridgeCalls).toEqual(['settings.list'])
+    expect(fake.rows.size + fake.kv.size).toBe(0)
+  })
+
   it('answers invalid JSON and a wrong-shaped payload with 400, and an event for another component with 204, writing nothing', async () => {
     const fake = newContext()
     expect((await post(fake.ctx, { rawBody: '{oops' })).status).toBe(400)
     expect((await post(fake.ctx, { body: { page: 7 } })).status).toBe(400)
     expect((await post(fake.ctx, { body: {} })).status).toBe(204)
     expect(fake.rows.size + fake.kv.size).toBe(0)
+
+    // A component site receives every component's events; one about another component is ignored.
+    const component = createFakeContext({ config: CONFIG.replace('    url: https://status.example.com/', '    url: https://status.example.com/\n    component: API'), settings: { webhookSecret: SECRET } })
+    const other = { component: { id: 'db1', name: 'Database', status: 'major_outage' } }
+    expect(await post(component.ctx, { body: other })).toEqual({ status: 204, text: null })
+    expect(component.rows.size + component.kv.size).toBe(0)
+    // The same event about the configured component is graded, so the 204 above is the component filter.
+    expect((await post(component.ctx, { body: { component: { id: 'api1', name: 'API', status: 'major_outage' } } })).status).toBe(200)
   })
 })
 

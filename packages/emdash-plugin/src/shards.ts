@@ -75,17 +75,18 @@ export interface ReconcilePlan {
  * Diff the wanted tasks against the existing ones. `shards` is the number of
  * shard tasks wanted, or `null` to leave shard tasks alone (no usable
  * configuration). A task whose cadence changed is scheduled again. The
- * maintenance task is always wanted. Cancels come last: they are only cleanup.
+ * maintenance task is always wanted, and comes first: it finishes whatever a
+ * budget-limited reconcile defers, so it must never be the operation deferred.
+ * Cancels come last: they are only cleanup.
  */
 export function planReconcile(shards: number | null, existing: TaskView[]): ReconcilePlan {
   const byName = new Map(existing.map(task => [task.name, task.schedule]))
-  const wanted: ReconcilePlan['schedule'] = []
+  const wanted: ReconcilePlan['schedule'] = [{ name: MAINTENANCE_TASK, schedule: MAINTENANCE_SCHEDULE }]
   if (shards !== null) {
     for (let shard = 0; shard < shards; shard++) {
       wanted.push({ name: shardTaskName(shard), schedule: SHARD_SCHEDULE, data: { shard } })
     }
   }
-  wanted.push({ name: MAINTENANCE_TASK, schedule: MAINTENANCE_SCHEDULE })
   const schedule = wanted.filter(task => byName.get(task.name) !== task.schedule)
   const cancel = shards === null
     ? []
@@ -114,7 +115,7 @@ export interface ReconcileResult {
  * It spends at most `budget` bridge calls (default {@link CALL_BUDGET}): one to
  * read the settings (the configuration and the destinations that size the shards), one to list tasks, one to record or clear the
  * configuration error when the configuration is invalid or `clearConfigError` is set, then one per schedule or cancel.
- * Missing tasks go first so coverage comes before cleanup. Call it from
+ * The maintenance task goes first, then the missing shard tasks, so coverage comes before cleanup. Call it from
  * `plugin:activate`, and after a successful configuration save with `{ clearConfigError: true }`.
  */
 export async function reconcileShards(

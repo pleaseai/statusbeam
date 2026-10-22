@@ -5,8 +5,8 @@ import { detectStatusChanges, gradeWebhookPayload, timingSafeEqual, webhookProvi
 import { pluginResponse } from 'emdash/plugin'
 import { applyResults, bucketId, bucketsOf } from '../buckets'
 import { CALL_BUDGET, PROBE_DEADLINE_MS } from '../budget'
+import { readSettings } from '../config'
 import { buildMessages, deliver } from '../notify'
-import { readSettings } from '../settings'
 import { advanceMonitor, listSnapshots, mergeSnapshots, writeWebhookSnapshot } from '../snapshot'
 
 /**

@@ -33,7 +33,7 @@ describe('the public routes\' bridge calls', () => {
     shard,
     updatedAt: '2026-10-22T00:00:00.000Z',
     deliveries: [],
-    monitors: slugs.map(slug => ({ slug, result: { slug, status: 'up', code: 200, responseTime: 10, checkedAt: '2026-10-22T00:00:00.000Z' }, days: [] })),
+    monitors: slugs.map(slug => ({ slug, result: { slug, status: 'up', code: 200, responseTime: 10, checkedAt: '2026-10-22T00:00:00.000Z' }, days: [], totals: {} })),
   })
 
   const invocations: Array<[string, Record<string, string>]> = [
@@ -62,8 +62,10 @@ describe('the public routes\' bridge calls', () => {
   })
 
   it('need one call for an absent or invalid configuration, and never throw', async () => {
-    for (const config of ['', 'name: Test\nsites: [oops']) {
-      const fake = createFakeContext({ config })
+    // `undefined` builds the context without the config option: no setting at all.
+    for (const config of [undefined, '', 'name: Test\nsites: [oops']) {
+      const fake = config === undefined ? createFakeContext() : createFakeContext({ config })
+      expect(fake.settings.has('config')).toBe(config !== undefined)
       for (const [name, input] of invocations) {
         fake.bridgeCalls.length = 0
         const response = await handlerOf(name)({ input, request }, fake.ctx) as { status: number }
@@ -71,5 +73,29 @@ describe('the public routes\' bridge calls', () => {
         expect(fake.bridgeCalls).toEqual(['settings.list'])
       }
     }
+  })
+})
+
+describe('a configuration the plugin rules reject', () => {
+  // Core accepts it; the plugin refuses duplicate slugs, so the scheduled run never uses it.
+  const duplicate = ['name: Test', 'sites:', '  - name: api', '    url: https://one.example.com/', '  - name: api', '    url: https://two.example.com/'].join('\n')
+
+  it('is served exactly like an absent configuration, even with a snapshot for its monitors', async () => {
+    const rejected = createFakeContext({ config: duplicate })
+    await rejected.ctx.kv.set('snapshot:0', {
+      version: 2,
+      shard: 0,
+      updatedAt: '2026-10-22T00:00:00.000Z',
+      deliveries: [],
+      monitors: [{ slug: 'api', result: { slug: 'api', status: 'down', code: 500, responseTime: 10, checkedAt: '2026-10-22T00:00:00.000Z' }, days: [], totals: {} }],
+    } satisfies ShardSnapshot)
+    const absent = createFakeContext()
+    for (const [name, input] of [['status', {}], ['badge', {}], ['status', { slug: 'api' }], ['badge-response-time', { slug: 'api' }]] as const) {
+      const served = await handlerOf(name)({ input, request }, rejected.ctx) as { status: number, body: unknown }
+      const empty = await handlerOf(name)({ input, request }, absent.ctx) as { status: number, body: unknown }
+      expect(served.status, `${name} ${JSON.stringify(input)}`).toBe(empty.status)
+      expect(JSON.stringify(served.body).replace(/"generatedAt":"[^"]*"/, '')).toBe(JSON.stringify(empty.body).replace(/"generatedAt":"[^"]*"/, ''))
+    }
+    expect(JSON.stringify(((await handlerOf('status')({ input: {}, request }, rejected.ctx)) as { body: unknown }).body)).toContain('\\"sites\\":[]')
   })
 })

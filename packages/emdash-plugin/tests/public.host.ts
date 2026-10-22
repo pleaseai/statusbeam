@@ -3,7 +3,7 @@ import type { SiteSummary } from '@statusbeam/core'
 import type { MonitorState, ShardSnapshot } from '../src/snapshot'
 import { createPluginRuntimeTestHost } from '@emdash-cms/plugin-test'
 import { dayStatFromCounts, denseHistory, routePaths, shieldsEndpointSchema, siteResponseSchema, statusResponseSchema, validateConfig } from '@statusbeam/core'
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mergeSnapshots, summariesFromSnapshot } from '../src/snapshot'
 
 /**
@@ -33,37 +33,65 @@ if (!config.ok) {
   throw new Error('fixture configuration is invalid')
 }
 
-const today = new Date()
+/**
+ * The plugin reads the real clock inside workerd, where a test cannot freeze it.
+ * So each test starts clear of UTC midnight (waiting past it when it is close)
+ * and captures one time that the fixtures and the expectations share.
+ */
+const MIDNIGHT_MARGIN_MS = 20_000
+
+async function clearOfMidnight(): Promise<Date> {
+  const now = Date.now()
+  const untilMidnight = 86_400_000 - (now % 86_400_000)
+  if (untilMidnight < MIDNIGHT_MARGIN_MS) {
+    await new Promise(resolve => setTimeout(resolve, untilMidnight + 100))
+  }
+  return new Date()
+}
+
+/** One time per test (see {@link clearOfMidnight}); the fixtures below are rebuilt from it before each test. */
+let today = new Date()
 const isoDay = (ago: number) => new Date(today.getTime() - ago * 86_400_000).toISOString().slice(0, 10)
 
 function monitor(slug: string, status: 'up' | 'degraded' | 'down', responseTime: number, extra: Partial<MonitorState> = {}): MonitorState {
-  const days = new Map([
-    [isoDay(2), dayStatFromCounts({ day: isoDay(2), up: 9, degraded: 1, down: 0, total: 10 })],
-    [isoDay(1), dayStatFromCounts({ day: isoDay(1), up: 3, degraded: 0, down: 1, total: 4 })],
-    [isoDay(0), dayStatFromCounts({ day: isoDay(0), up: 1, degraded: 0, down: 0, total: 1 })],
-  ])
+  const counts = [
+    { day: isoDay(2), up: 9, degraded: 1, down: 0, total: 10 },
+    { day: isoDay(1), up: 3, degraded: 0, down: 1, total: 4 },
+    { day: isoDay(0), up: 1, degraded: 0, down: 0, total: 1 },
+  ]
   return {
     slug,
     result: { slug, status, code: status === 'down' ? 500 : 200, responseTime, checkedAt: today.toISOString() },
-    days: denseHistory(days, today),
+    days: denseHistory(new Map(counts.map(row => [row.day, dayStatFromCounts(row)])), today),
+    totals: Object.fromEntries(counts.map(row => [row.day, row.total])),
     ...extra,
   }
 }
 
-const SNAPSHOT: ShardSnapshot = {
-  version: 2,
-  shard: 0,
-  updatedAt: today.toISOString(),
-  deliveries: [],
-  monitors: [
-    monitor('website', 'up', 142),
-    monitor('api', 'degraded', 2310),
-    // An unsupported monitor keeps its last real result; only the warning marks it.
-    monitor('worker', 'up', 88, { warning: { limit: 'body', since: today.toISOString(), lastSeen: today.toISOString() } }),
-  ],
+function snapshotAt(): ShardSnapshot {
+  return {
+    version: 2,
+    shard: 0,
+    updatedAt: today.toISOString(),
+    deliveries: [],
+    monitors: [
+      monitor('website', 'up', 142),
+      monitor('api', 'degraded', 2310),
+      // An unsupported monitor keeps its last real result; only the warning marks it.
+      monitor('worker', 'up', 88, { warning: { limit: 'body', since: today.toISOString(), lastSeen: today.toISOString() } }),
+    ],
+  }
 }
 
-const summary: SiteSummary[] = summariesFromSnapshot(mergeSnapshots([{ key: 'snapshot:0', value: SNAPSHOT }]), config.config.sites, today)
+let SNAPSHOT: ShardSnapshot = snapshotAt()
+let summary: SiteSummary[] = []
+
+beforeEach(async () => {
+  today = await clearOfMidnight()
+  SNAPSHOT = snapshotAt()
+  summary = summariesFromSnapshot(mergeSnapshots([{ key: 'snapshot:0', value: SNAPSHOT }]), config.config.sites, today)
+  web.summary = summary
+})
 
 const normalize = (body: string) => body.replace(/"generatedAt":"[^"]*"/, '"generatedAt":"<now>"')
 
@@ -101,7 +129,6 @@ interface WebModules {
 let standalone: WebModules
 
 beforeAll(async () => {
-  web.summary = summary
   standalone = {
     status: (await import('../../../apps/web/src/pages/api/status.json')).GET as unknown as WebHandler,
     site: (await import('../../../apps/web/src/pages/api/status/[slug].json')).GET as unknown as WebHandler,
@@ -204,7 +231,7 @@ describe('the public status routes', () => {
     const month = await (await pluginGet(h, routePaths.emdash.uptimeBadge('api', 'month'))).text()
     for (const query of ['&period=decade', '&period=', '']) {
       const path = `${routePaths.emdash.uptimeBadge('api')}${query}`
-      const expected = await standaloneGet(standalone.uptime, `/api/badge/api/uptime.json${query.replace('&', '?')}`, 'api')
+      const expected = await standaloneGet(standalone.uptime, `/api/badge/api/uptime.json${query.replace(/^&/, '?')}`, 'api')
       const actual = await (await pluginGet(h, path)).text()
       expect(actual, path).toBe(month)
       expect(actual, path).toBe(await expected.text())
@@ -222,8 +249,9 @@ describe('the public status routes', () => {
     expect(miss.headers.get('cache-control')).not.toContain('s-maxage')
   })
 
-  it('answers as standalone does with no data when the configuration is absent or invalid', async () => {
-    for (const yaml of ['', 'name: Test\nsites: [oops']) {
+  it('answers as standalone does with no data when the configuration is absent, invalid, or rejected by the plugin rules', async () => {
+    const duplicateSlugs = 'name: Test\nsites:\n  - name: website\n    url: https://a.example.com/\n  - name: website\n    url: https://b.example.com/'
+    for (const yaml of ['', 'name: Test\nsites: [oops', duplicateSlugs]) {
       const h = await newHost({ yaml, snapshot: null })
       web.summary = []
       const status = await pluginGet(h, routePaths.emdash.status())

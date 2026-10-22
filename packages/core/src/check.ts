@@ -1,24 +1,15 @@
 import type { Site } from './config'
+import type { ErrorClassifier } from './limit'
 import type { CheckResult, CheckStatus } from './types'
 import { z } from 'zod'
 import { checkAigateway } from './aigateway'
+import { limitOf } from './limit'
 import { checkSentry } from './sentry'
 
 /** Minimal fetch signature so callers (and tests) can pass any compatible impl. */
 export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>
 
-/**
- * Tells a host limit from a target failure by looking at what the injected
- * fetch threw. Returns the limit it recognises, or `undefined` for an ordinary
- * failure. The host's wording stays with the caller, not in core.
- */
-export type ErrorClassifier = (error: unknown) => 'body' | undefined
-
-/** Spread this into a failed {@link CheckResult} to carry a recognised host limit. */
-function limitOf(classify: ErrorClassifier | undefined, error: unknown): Pick<CheckResult, 'limit'> {
-  const limit = classify?.(error)
-  return limit ? { limit } : {}
-}
+export type { ErrorClassifier } from './limit'
 
 /**
  * Derive a check status from a completed HTTP response.
@@ -64,10 +55,10 @@ export async function checkSite(
     return checkStatuspage(site, fetchImpl, now, deps.classifyError)
   }
   if (site.check === 'sentry') {
-    return checkSentry(site, { fetchImpl, now, token: deps.sentryToken })
+    return checkSentry(site, { fetchImpl, now, token: deps.sentryToken, classifyError: deps.classifyError })
   }
   if (site.check === 'aigateway') {
-    return checkAigateway(site, { fetchImpl, now })
+    return checkAigateway(site, { fetchImpl, now, classifyError: deps.classifyError })
   }
   return checkHttp(site, fetchImpl, now, deps.classifyError)
 }

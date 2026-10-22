@@ -4,9 +4,10 @@ import { fetchStatus, SiteDetail, StatusBanner } from '../../../../packages/emda
 
 // Demo page for @statusbeam/emdash-ui. The default source is a standalone
 // deployment: https://demo.statusbeam.dev, or `STATUSBEAM_BASE_URL` at build time.
-// `?source=plugin` reads this site's own StatusBeam plugin routes instead. The
-// base URL is never taken from the query string, so the page cannot be used to
-// fetch arbitrary URLs.
+// `?source=plugin` points the components at this site's own StatusBeam plugin
+// routes. This demo does not register the engine plugin, so that path shows the
+// unavailable state until one is registered. The base URL is never taken from
+// the query string, so the page cannot be used to fetch arbitrary URLs.
 const STANDALONE_BASE_URL: string = import.meta.env.STATUSBEAM_BASE_URL || 'https://demo.statusbeam.dev'
 
 const usePlugin = Astro.url.searchParams.get('source') === 'plugin'

@@ -52,7 +52,7 @@ standalone StatusBeam, edited on a plugin admin page that validates before savin
 
 **Phase 3 — engine plugin**
 
-- [ ] FR-8: run scheduled checks for every configured monitor inside the plugin, sharding each run's monitors across separate scheduled tasks so every task stays within one invocation's limits, and keep check history and the current status snapshot in plugin-owned storage
+- [ ] FR-8: run scheduled checks inside the plugin for every configured poll monitor within the plugin's scheduled capacity (webhook-only Sentry monitors take their status from inbound webhooks, and monitors beyond capacity are named by the AC-021 warning), sharding each run's monitors across separate scheduled tasks so every task stays within one invocation's limits, and keep check history and the current status snapshot in plugin-owned storage
 - [ ] FR-9: compute 90-day per-day uptime from plugin storage with the same results as the standalone rollup for the same check history
 - [ ] FR-10: send Slack and generic-webhook notifications when a monitor's status changes
 - [ ] FR-11: accept Statuspage and Sentry inbound webhooks on public endpoints authenticated by a shared secret token
@@ -91,6 +91,7 @@ standalone StatusBeam, edited on a plugin admin page that validates before savin
 - [ ] AC-004 (FR-5): If any execution mode grades a probe differently from the ADR-0004 probe contract, then the track shall revise ADR-0004 before Phase 3 starts.
 - [ ] AC-005 (FR-7): When a client requests the plugin's public status endpoint, the system shall return a body that the shared contract accepts with no wrapping envelope.
 - [ ] AC-006 (FR-7): When a client requests the plugin's badge endpoint, the system shall return a body that is a valid shields.io endpoint response.
+- [ ] AC-032 (FR-7): If a client requests the plugin's uptime badge with an invalid or absent `period`, then the system shall return the monthly uptime badge, as the standalone endpoint does.
 - [ ] AC-007 (FR-11): If no webhook secret is configured, then the system shall reject every inbound webhook request.
 - [ ] AC-008 (FR-11): If an inbound webhook request carries a token that does not match the configured secret, then the system shall reject it without changing any monitor's status.
 - [ ] AC-009 (FR-13): When a probe fails because the response exceeds the body-size limit, the system shall mark that probe unsupported.

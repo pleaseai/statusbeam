@@ -41,16 +41,30 @@ export interface Available<T> {
 
 export type StatusResult<T> = Available<T> | Unavailable
 
+/**
+ * Deadline in ms on one read, covering both the request and the body. A source
+ * that accepts the connection and then stalls would otherwise hold the page
+ * render open.
+ */
+export const DEFAULT_TIMEOUT_MS = 10_000
+
 export interface FetchOptions {
   /** Fetch implementation; defaults to the global `fetch`. */
   fetch?: typeof fetch
-  /** Abort signal, e.g. `AbortSignal.timeout(5000)`. An abort yields `unavailable`. */
+  /** Abort signal, e.g. to cancel with the page request. An abort yields `unavailable`. */
   signal?: AbortSignal
+  /** Deadline in ms on the request and the body read together; defaults to {@link DEFAULT_TIMEOUT_MS}. A miss yields `unavailable`. */
+  timeoutMs?: number
 }
 
 /** Join a base URL and a contract path, tolerating a trailing slash on the base. */
 function joinUrl(baseUrl: string, path: string): string {
-  return `${baseUrl.replace(/\/+$/, '')}${path}`
+  // A linear scan rather than `/\/+$/`, which backtracks polynomially on many trailing slashes.
+  let end = baseUrl.length
+  while (end > 0 && baseUrl.endsWith('/', end)) {
+    end--
+  }
+  return `${baseUrl.slice(0, end)}${path}`
 }
 
 /** URL of the aggregate status response for a source. */
@@ -76,30 +90,77 @@ interface Schema<T> {
   safeParse: (value: unknown) => { success: true, data: T } | { success: false, error: { message: string } }
 }
 
+/** A signal that aborts when any of `signals` does: `AbortSignal.any` where the runtime has it, otherwise wired by hand. */
+function anySignal(signals: AbortSignal[]): AbortSignal {
+  if (typeof AbortSignal.any === 'function') {
+    return AbortSignal.any(signals)
+  }
+  const controller = new AbortController()
+  for (const signal of signals) {
+    if (signal.aborted) {
+      controller.abort(signal.reason)
+      break
+    }
+    signal.addEventListener('abort', () => controller.abort(signal.reason), { once: true })
+  }
+  return controller.signal
+}
+
+/**
+ * Settle with `pending`, or reject as soon as `signal` aborts. The fetch is
+ * handed the signal too, but an implementation that ignores it, or a body
+ * stream that never ends, must not outlive the deadline.
+ */
+function untilAborted<T>(pending: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) {
+    pending.catch(() => {})
+    return Promise.reject(signal.reason)
+  }
+  let onAbort: () => void = () => {}
+  const aborted = new Promise<never>((_, reject) => {
+    onAbort = () => reject(signal.reason)
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
+  pending.catch(() => {})
+  return Promise.race([pending, aborted]).finally(() => signal.removeEventListener('abort', onAbort))
+}
+
 async function fetchContract<T>(url: string, schema: Schema<T>, options: FetchOptions): Promise<StatusResult<T>> {
   const fetchImpl = options.fetch ?? fetch
-  let response: Response
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
+  const deadline = new AbortController()
+  const timer = setTimeout(() => deadline.abort(new Error(`read exceeded the ${timeoutMs} ms deadline`)), timeoutMs)
+  const signal = options.signal ? anySignal([options.signal, deadline.signal]) : deadline.signal
   try {
-    response = await fetchImpl(url, { headers: { accept: 'application/json' }, signal: options.signal })
+    let response: Response
+    try {
+      response = await untilAborted(fetchImpl(url, { headers: { accept: 'application/json' }, signal }), signal)
+    }
+    catch (error) {
+      return unavailable(url, 'network', message(error))
+    }
+    if (!response.ok) {
+      return unavailable(url, 'http', `HTTP ${response.status}`)
+    }
+    let body: unknown
+    try {
+      body = await untilAborted(response.json(), signal)
+    }
+    catch (error) {
+      // A deadline or a cancellation during the body read is a transport failure, not a bad body.
+      return signal.aborted
+        ? unavailable(url, 'network', message(signal.reason))
+        : unavailable(url, 'contract', `invalid JSON: ${message(error)}`)
+    }
+    const parsed = schema.safeParse(body)
+    if (!parsed.success) {
+      return unavailable(url, 'contract', parsed.error.message)
+    }
+    return { ok: true, data: parsed.data, url }
   }
-  catch (error) {
-    return unavailable(url, 'network', message(error))
+  finally {
+    clearTimeout(timer)
   }
-  if (!response.ok) {
-    return unavailable(url, 'http', `HTTP ${response.status}`)
-  }
-  let body: unknown
-  try {
-    body = await response.json()
-  }
-  catch (error) {
-    return unavailable(url, 'contract', `invalid JSON: ${message(error)}`)
-  }
-  const parsed = schema.safeParse(body)
-  if (!parsed.success) {
-    return unavailable(url, 'contract', parsed.error.message)
-  }
-  return { ok: true, data: parsed.data, url }
 }
 
 /** Read the aggregate status (overall severity plus one row per site). */

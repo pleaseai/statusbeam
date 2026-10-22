@@ -31,12 +31,21 @@ async function newHost(yaml: string) {
 
 const text = (response: BlockResponse) => JSON.stringify(response.blocks)
 
+/** The submit id of the response's configuration form, which carries the revision the form was rendered with. */
+function runActionOf(response: BlockResponse): string {
+  const form = response.blocks.find(block => block.type === 'form')
+  if (!form || form.type !== 'form') {
+    throw new Error('no form in the response')
+  }
+  return form.submit.action_id
+}
+
 describe('the admin page', () => {
   it('renders for an administrator and carries the stored YAML in one multiline field', async () => {
     const { host: h, admin } = await newHost(OLD)
     const page = await h.admin.loadPage(PAGE, { user: admin })
     const form = page.blocks.find(block => block.type === 'form')
-    expect(form).toMatchObject({ type: 'form', submit: { action_id: 'run' } })
+    expect(form).toMatchObject({ type: 'form', submit: { action_id: expect.stringMatching(/^run:/) } })
     expect(JSON.stringify(form)).toContain('"multiline":true')
     expect(JSON.stringify(form)).toContain('name: Old')
   })
@@ -60,19 +69,39 @@ describe('the admin page', () => {
 
   it('shows every issue and keeps the stored configuration on an invalid save, then saves a valid one and refuses a stale one', async () => {
     const { host: h, admin, second } = await newHost(OLD)
-    await h.admin.loadPage(PAGE, { user: admin })
-    await h.admin.loadPage(PAGE, { user: second })
+    const adminForm = runActionOf(await h.admin.loadPage(PAGE, { user: admin }))
+    const secondForm = runActionOf(await h.admin.loadPage(PAGE, { user: second }))
 
-    const bad = await h.admin.submit(PAGE, 'run', { yaml: 'name: X\nsites:\n  - name: a\n    url: nope\n', operation: 'save' }, { user: admin })
+    const bad = await h.admin.submit(PAGE, adminForm, { yaml: 'name: X\nsites:\n  - name: a\n    url: nope\n', operation: 'save' }, { user: admin })
     expect(text(bad)).toContain('Error at sites[0].url')
     expect(await h.inspect.setting('config')).toBe(OLD)
 
-    const saved = await h.admin.submit(PAGE, 'run', { yaml: NEW, operation: 'save' }, { user: second })
+    const saved = await h.admin.submit(PAGE, secondForm, { yaml: NEW, operation: 'save' }, { user: second })
     expect(saved.toast?.type).toBe('success')
     expect(await h.inspect.setting('config')).toBe(NEW)
 
-    const stale = await h.admin.submit(PAGE, 'run', { yaml: OLD.replace('Old', 'Mine'), operation: 'save' }, { user: admin })
+    const stale = await h.admin.submit(PAGE, adminForm, { yaml: OLD.replace('Old', 'Mine'), operation: 'save' }, { user: admin })
     expect(text(stale)).toContain('Reload to see the current configuration')
+    expect(await h.inspect.setting('config')).toBe(NEW)
+  })
+
+  it('refuses a save from an older tab of the same administrator after a newer tab saved', async () => {
+    const { host: h, admin } = await newHost(OLD)
+    const tab1 = runActionOf(await h.admin.loadPage(PAGE, { user: admin }))
+    const tab2 = runActionOf(await h.admin.loadPage(PAGE, { user: admin }))
+
+    const saved = await h.admin.submit(PAGE, tab2, { yaml: NEW, operation: 'save' }, { user: admin })
+    expect(saved.toast?.type).toBe('success')
+    const stale = await h.admin.submit(PAGE, tab1, { yaml: OLD.replace('Old', 'Mine'), operation: 'save' }, { user: admin })
+    expect(text(stale)).toContain('Reload to see the current configuration')
+    expect(await h.inspect.setting('config')).toBe(NEW)
+
+    // The saved form and a reload both carry the current revision.
+    const again = await h.admin.submit(PAGE, runActionOf(saved), { yaml: OLD, operation: 'save' }, { user: admin })
+    expect(again.toast?.type).toBe('success')
+    const reloaded = await h.admin.act(PAGE, 'reload', { user: admin })
+    const fromReload = await h.admin.submit(PAGE, runActionOf(reloaded), { yaml: NEW, operation: 'save' }, { user: admin })
+    expect(fromReload.toast?.type).toBe('success')
     expect(await h.inspect.setting('config')).toBe(NEW)
   })
 

@@ -31,4 +31,25 @@ describe('checkSite host limit classifier', () => {
     })
     expect(result.limit).toBe('body')
   })
+
+  it('carries the limit for a sentry poll and an aigateway fetch that throw, and only when classified', async () => {
+    const sentry = siteSchema.parse({ name: 'API', url: 'https://api.example.com', check: 'sentry', sentry: { org: 'acme' } })
+    const gateway = siteSchema.parse({ name: 'Model', check: 'aigateway', aigateway: { provider: 'vercel', model: 'anthropic/claude-opus-4.5' } })
+    for (const target of [sentry, gateway]) {
+      const classified = await checkSite(target, {
+        fetchImpl: () => Promise.reject(new Error('response body exceeds the limit')),
+        classifyError: bodyLimit,
+        sentryToken: 'tok',
+        now: () => 0,
+      })
+      const unclassified = await checkSite(target, {
+        fetchImpl: () => Promise.reject(new Error('network')),
+        classifyError: bodyLimit,
+        sentryToken: 'tok',
+        now: () => 0,
+      })
+      expect(classified, target.check).toMatchObject({ status: 'down', code: 0, limit: 'body' })
+      expect('limit' in unclassified, target.check).toBe(false)
+    }
+  })
 })

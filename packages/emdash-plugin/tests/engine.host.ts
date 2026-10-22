@@ -3,7 +3,7 @@ import type { DayBucket } from '../src/buckets'
 import type { ShardSnapshot } from '../src/snapshot'
 import { createPluginRuntimeTestHost } from '@emdash-cms/plugin-test'
 import { dayStatFromCounts, groupDayStats } from '@statusbeam/core'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { toDayCounts } from '../src/buckets'
 
 /**
@@ -28,11 +28,36 @@ function config(sites: string[], extra = ''): string {
   ].join('\n')
 }
 
-const today = () => new Date().toISOString().slice(0, 10)
-const daysAgo = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10)
+/** An explicit comparator for `sort`, so the order never depends on the engine's default string conversion. */
+const byText = (a: string, b: string) => a.localeCompare(b)
+
+/**
+ * The plugin reads the real clock inside workerd, where a test cannot freeze it.
+ * So each test starts clear of UTC midnight (waiting past it when it is close)
+ * and captures one time that the fixtures and the expectations share.
+ */
+const MIDNIGHT_MARGIN_MS = 20_000
+
+async function clearOfMidnight(): Promise<Date> {
+  const now = Date.now()
+  const untilMidnight = 86_400_000 - (now % 86_400_000)
+  if (untilMidnight < MIDNIGHT_MARGIN_MS) {
+    await new Promise(resolve => setTimeout(resolve, untilMidnight + 100))
+  }
+  return new Date()
+}
+
+let testStart = new Date()
+
+beforeEach(async () => {
+  testStart = await clearOfMidnight()
+})
+
+const today = () => testStart.toISOString().slice(0, 10)
+const daysAgo = (days: number) => new Date(testStart.getTime() - days * 86_400_000).toISOString().slice(0, 10)
 
 function cron(name: string, data: Record<string, unknown> = {}) {
-  return { name, data, scheduledAt: new Date().toISOString() }
+  return { name, data, scheduledAt: testStart.toISOString() }
 }
 
 async function newHost(yaml: string): Promise<PluginRuntimeTestHost> {
@@ -56,15 +81,15 @@ describe('a shard cron task', () => {
 
     await h.transport.invokeHook('cron', cron('check-0', { shard: 0 }))
 
-    expect(h.http.requests().map(r => r.url).sort()).toEqual(names.slice(0, 5).map(n => `https://${n}.example.com/`))
+    expect(h.http.requests().map(r => r.url).sort(byText)).toEqual(names.slice(0, 5).map(n => `https://${n}.example.com/`))
     expect(h.http.requests().every(r => r.method === 'GET')).toBe(true)
 
     const rows = await bucketRows(h)
-    expect(rows.map(r => r.slug).sort()).toEqual(names.slice(0, 5))
+    expect(rows.map(r => r.slug).sort(byText)).toEqual(names.slice(0, 5))
     expect(rows.every(r => r.date === today() && r.up === 1 && r.total === 1)).toBe(true)
 
     const snapshot = await h.inspect.kv.get<ShardSnapshot>('snapshot:0')
-    expect(snapshot?.monitors.map(m => m.slug).sort()).toEqual(names.slice(0, 5))
+    expect(snapshot?.monitors.map(m => m.slug).sort(byText)).toEqual(names.slice(0, 5))
     expect(snapshot?.monitors.every(m => m.result?.status === 'up' && m.result.code === 200)).toBe(true)
     expect(await h.inspect.kv.get('snapshot:1')).toBeNull()
   })
@@ -79,9 +104,9 @@ describe('a shard cron task', () => {
     await h.transport.invokeHook('cron', cron('check-1', { shard: 1 }))
 
     const probed = h.http.requests().map(r => r.url)
-    expect(probed.sort()).toEqual(names.map(n => `https://${n}.example.com/`))
+    expect(probed.sort(byText)).toEqual(names.map(n => `https://${n}.example.com/`))
     expect(new Set(probed).size).toBe(names.length)
-    expect((await bucketRows(h)).map(r => r.slug).sort()).toEqual(names)
+    expect((await bucketRows(h)).map(r => r.slug).sort(byText)).toEqual(names)
   })
 
   it('adds to the existing day bucket and derives the same day stat as the standalone rollup', async () => {
@@ -126,6 +151,14 @@ describe('a shard cron task', () => {
     // Only the configuration-error record (T008) is written.
     expect(await h.inspect.kv.list()).toHaveLength(1)
     expect(await h.inspect.kv.get('snapshot:config-error')).toMatchObject({ version: 1, issues: [{ severity: 'error', path: '' }] })
+    await h.dispose()
+
+    // No configuration setting at all: nothing is wrong, so not even the error record is written.
+    host = await createPluginRuntimeTestHost()
+    await host.transport.invokeHook('cron', cron('check-0', { shard: 0 }))
+    expect(host.http.requests()).toEqual([])
+    expect(await bucketRows(host)).toEqual([])
+    expect(await host.inspect.kv.list()).toEqual([])
   })
 })
 
@@ -159,7 +192,7 @@ describe('the maintenance cron task', () => {
 
     await h.transport.invokeHook('cron', cron('maintenance'))
 
-    expect((await bucketRows(h)).map(r => r.date).sort()).toEqual([daysAgo(89), daysAgo(0)].sort())
+    expect((await bucketRows(h)).map(r => r.date).sort(byText)).toEqual([daysAgo(89), daysAgo(0)].sort(byText))
   })
 })
 
@@ -172,7 +205,7 @@ describe('shard reconciliation on activate', () => {
 
     const tasks = await h.inspect.scheduledTasks()
     const byName = new Map(tasks.map(t => [t.name as string, t]))
-    expect([...byName.keys()].sort()).toEqual(['check-0', 'check-1', 'check-2', 'maintenance'])
+    expect([...byName.keys()].sort(byText)).toEqual(['check-0', 'check-1', 'check-2', 'maintenance'])
     expect(byName.get('check-1')?.schedule).toBe('*/5 * * * *')
   })
 
@@ -184,7 +217,7 @@ describe('shard reconciliation on activate', () => {
     await h.fixtures.plugin.setting('config', config(['m00', 'm01']))
     await h.transport.invokeHook('plugin:activate', {})
 
-    const names = (await h.inspect.scheduledTasks()).map(t => t.name as string).sort()
+    const names = (await h.inspect.scheduledTasks()).map(t => t.name as string).sort(byText)
     expect(names).toEqual(['check-0', 'maintenance'])
   })
 })

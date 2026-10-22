@@ -9,7 +9,7 @@ import { clearConfigError, CONFIG_ERROR_KEY, loadStoredConfig, recordConfigError
 import { buildMessages, deliver } from './notify'
 import { probeSite } from './probe'
 import { pollableSites, reconcileShards, shardSites } from './shards'
-import { advanceMonitor, listSnapshots, mergeSnapshots, writeShardSnapshot } from './snapshot'
+import { advanceMonitor, handoffFor, listSnapshots, mergeSnapshots, writeShardSnapshot } from './snapshot'
 
 type RunContext = Pick<PluginContext, 'settings' | 'kv' | 'storage' | 'http'>
 
@@ -127,12 +127,15 @@ export async function runShard(ctx: RunContext, shard: number, options: ShardRun
   const effective = new Map([...existing, ...changed.map(({ id, data }) => [id, data] as const)])
   const monitors = results.map((result: CheckResult) => advanceMonitor(
     // Poll-only state: webhook counts live in the webhook's own key and are added when readers merge.
+    // A monitor just moved here from a shard that ran first is found through that shard's handoff.
     previous.polled.get(result.slug),
     result,
     [...new Set([bucketId(result.slug, today), bucketId(result.slug, dayOf(result))])].flatMap(id => effective.get(id) ?? []),
     finishedAt,
   ))
-  const snapshot: ShardSnapshot = { version: 2, shard, updatedAt: finishedAt.toISOString(), monitors, deliveries }
+  // Monitors a configuration change moved to a shard that has not run yet ride along until it has (no extra call).
+  const handoff = handoffFor(snapshots, shard, new Set(sites.map(site => site.slug)), new Set(pollable.map(site => site.slug)))
+  const snapshot: ShardSnapshot = { version: 2, shard, updatedAt: finishedAt.toISOString(), monitors, ...(handoff.length > 0 ? { handoff } : {}), deliveries }
   await writeShardSnapshot(ctx, snapshot)
   calls += 1
 

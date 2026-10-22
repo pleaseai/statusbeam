@@ -105,6 +105,36 @@ jobs:
         # (emdash-ui ships .astro/.ts source and has no build).
         run: bun run build
 
+      - name: Quality gate (EmDash host tests)
+        # The plugin's workerd host tests run it through EmDash's production
+        # sandbox wrapper, which `bun run test` does not cover. Gate its publish on them.
+        if: steps.pkg.outputs.dir == 'packages/emdash-plugin'
+        working-directory: packages/emdash-plugin
+        run: bun run test:host
+
+      - name: Wait for the @statusbeam/core release this package needs
+        # release-please cuts core's release in the same run when core changed
+        # too, and each release publishes in its own run of this workflow, so the
+        # two can race. `bun pm pack` pins `workspace:*` to the core version in
+        # this tree, so wait until npm serves that version (up to 20 minutes)
+        # rather than publish a package whose `@statusbeam/core/contract` import
+        # cannot resolve. A core version that is already on npm passes at once.
+        if: steps.pkg.outputs.dir == 'packages/emdash-ui' || steps.pkg.outputs.dir == 'packages/emdash-plugin'
+        # Outside the checkout: inside the Bun workspaces monorepo npm enters workspace mode.
+        working-directory: ${{ runner.temp }}
+        run: |
+          version="$(node -p "require(process.env.GITHUB_WORKSPACE + '/packages/core/package.json').version")"
+          for attempt in $(seq 1 40); do
+            if npm view "@statusbeam/core@$version" version >/dev/null 2>&1; then
+              echo "@statusbeam/core@$version is on npm"
+              exit 0
+            fi
+            echo "Waiting for @statusbeam/core@$version on npm (attempt $attempt of 40)"
+            sleep 30
+          done
+          echo "::error::@statusbeam/core@$version is not on npm after 20 minutes. Publish core first, then re-run this tag with workflow_dispatch."
+          exit 1
+
       - name: Pack + publish with provenance
         working-directory: ${{ steps.pkg.outputs.dir }}
         run: |

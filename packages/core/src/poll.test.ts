@@ -22,4 +22,13 @@ describe('selectPollSites', () => {
     expect(warnings).toHaveLength(1)
     expect(warnings[0]).toContain('"polled"')
   })
+
+  it('treats a whitespace-only token as missing', () => {
+    for (const sentryToken of ['', ' ', '\t\n ']) {
+      const warnings: string[] = []
+      const picked = selectPollSites(sites, { sentryToken, warn: m => warnings.push(m) })
+      expect(picked.map(s => s.slug), JSON.stringify(sentryToken)).toEqual(['web'])
+      expect(warnings).toHaveLength(1)
+    }
+  })
 })

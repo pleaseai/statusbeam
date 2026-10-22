@@ -17,7 +17,8 @@ export function selectPollSites<S extends Pick<Site, 'check' | 'slug' | 'sentry'
     if (site.check !== 'sentry') {
       return true
     }
-    if (site.sentry !== undefined && !options.sentryToken) {
+    // A whitespace-only token cannot authenticate either, so it counts as missing.
+    if (site.sentry !== undefined && !options.sentryToken?.trim()) {
       warn(`scheduled: sentry poll configured for "${site.slug}" but SENTRY_AUTH_TOKEN is missing; skipping poll`)
       return false
     }

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test'
+import { describe, expect, it, spyOn } from 'bun:test'
 import { buildStatusChangePayload } from './notify'
 import { buildNotificationMessages, deliverNotification, dispatchNotifications, redactUrl } from './notify-delivery'
 
@@ -35,7 +35,7 @@ describe('notification delivery', () => {
   it('dispatches to every target through the injected fetch', async () => {
     const { impl, urls } = fakeFetch(true)
     await dispatchNotifications(notifications, payload, impl)
-    expect(urls).toHaveLength(2)
+    expect([...urls].sort()).toEqual([notifications.slack.webhookUrl, notifications.webhooks[0]!.url].sort())
   })
 
   it('throws on non-2xx without leaking the url path or token', async () => {
@@ -43,6 +43,34 @@ describe('notification delivery', () => {
     const err = await deliverNotification({ url: 'https://example.com/hook?token=SECRET', body: {} }, impl).then(() => undefined, (e: Error) => e)
     expect(err?.message).toContain('https://example.com')
     expect(err?.message).not.toContain('SECRET')
+    expect(err?.message).not.toContain('example.com/hook')
+  })
+
+  it('logs a failed inline delivery as a fixed category and the origin, never the error text', async () => {
+    const logged: unknown[][] = []
+    const spy = spyOn(console, 'error').mockImplementation((...args: unknown[]) => void logged.push(args))
+    try {
+      // A runtime's fetch error can quote the full URL, path and token included.
+      const throwing = (async (url: string) => {
+        throw new TypeError(`fetch failed: ${url}`)
+      }) as unknown as typeof fetch
+      await dispatchNotifications(notifications, payload, throwing)
+      await dispatchNotifications(notifications, payload, fakeFetch(false).impl)
+    }
+    finally {
+      spy.mockRestore()
+    }
+    const lines = logged.map(args => args.map(String).join(' '))
+    expect(lines).toHaveLength(4)
+    expect(lines).toContain('notify: POST https://example.com failed (network)')
+    expect(lines).toContain('notify: POST https://hooks.slack.com failed (http)')
+    for (const line of lines) {
+      expect(line).not.toContain('SECRET')
+      expect(line).not.toContain('example.com/hook')
+      expect(line).not.toContain('slack.com/services')
+      expect(line).not.toContain('token')
+      expect(line).not.toContain('?')
+    }
   })
 
   it('never throws from inline dispatch when a target fails', async () => {

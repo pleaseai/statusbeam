@@ -210,9 +210,12 @@ standalone deployment:
   monitor `degraded`. Plugin latency is not directly comparable with a
   standalone deployment's.
 - **Responses over 8 MiB are unsupported.** The host rejects them. The engine
-  matches that rejection by its message text, marks the monitor *unsupported*,
-  leaves it out of status and uptime, sends no notification, and shows a
-  persistent warning on the monitor. It never switches a `GET` monitor to `HEAD`.
+  matches that rejection by its message text and marks the probe *unsupported*.
+  The rejected probe counts toward neither status nor uptime: the monitor keeps
+  its last real result and history, and a monitor whose first probe is rejected
+  stays off the public status until it has one. No notification is sent, and a
+  persistent warning shows on the monitor. It never switches a `GET` monitor to
+  `HEAD`.
 - **A probe has a 10-second deadline.** A target that has not finished by then is
   graded `down` with code 0, and the task goes on to its remaining monitors.
   Without the deadline, one never-completing response would end the whole
@@ -266,8 +269,8 @@ POST /_emdash/api/plugins/statusbeam/webhooks/sentry?slug=<slug>&token=<secret>
 ```
 
 The routes fail closed. While `webhookSecret` is unset, every request is
-rejected. A request with a wrong token is rejected before anything is parsed or
-stored. A valid token with an unknown slug, or a provider that does not match the
+rejected. A request with a wrong token is rejected before its body is parsed or
+anything is stored. A valid token with an unknown slug, or a provider that does not match the
 monitor's check kind, returns 404 and changes nothing. A token in a query string
 can appear in server logs, so use a long random value that you can rotate.
 
@@ -282,13 +285,14 @@ can appear in server logs, so use a long random value that you can rotate.
 | Shape | Checks run in | The page reads from | Survives a CMS or host outage |
 |---|---|---|---|
 | **Everything in EmDash** | The engine plugin | The plugin's routes | No. Checks and page stop with the CMS. |
-| **Standalone engine, EmDash page** | A standalone StatusBeam deployment | The standalone `/api/*`, through `@statusbeam/emdash-ui` | Yes. The checks and the data stay up. |
+| **Standalone engine, EmDash page** | A standalone StatusBeam deployment | The standalone `/api/*`, through `@statusbeam/emdash-ui` | Partly. Checks and data stay up; the EmDash-rendered page goes down with its host. |
+| **Standalone engine and page** | A standalone StatusBeam deployment | The standalone deployment's own page | Yes. Nothing depends on the CMS. |
 
-The standalone deployment plus `@statusbeam/emdash-ui` pointed at it keeps checks
-and the status page independent of a CMS or host outage. The EmDash site only
-displays status. If the EmDash site itself is down, its pages are down too, so
-serve the page from the standalone deployment's own site when the page must
-stay reachable during a CMS outage.
+The standalone deployment keeps checks and the status page independent of a CMS
+or host outage. Pointing `@statusbeam/emdash-ui` at it keeps the checks and their
+data independent, but the EmDash site only displays status: if that site is down,
+its pages are down too. Serve the page from the standalone deployment's own site
+when the page must stay reachable during a CMS outage.
 
 Pick the shape like this:
 

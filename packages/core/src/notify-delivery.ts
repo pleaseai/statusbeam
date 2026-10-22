@@ -45,6 +45,9 @@ export function redactUrl(url: string): string {
   }
 }
 
+/** A delivery that completed with a non-2xx response; its message names only the redacted target and the status. */
+class NotificationHttpError extends Error {}
+
 /**
  * POST one notification message. Throws on a network error or a non-2xx
  * response so a queue consumer retries (and eventually dead-letters) it. The
@@ -64,8 +67,17 @@ export async function deliverNotification(
     signal: AbortSignal.timeout(10_000),
   })
   if (!res.ok) {
-    throw new Error(`POST ${redactUrl(message.url)} failed (${res.status})`)
+    throw new NotificationHttpError(`POST ${redactUrl(message.url)} failed (${res.status})`)
   }
+}
+
+/** What kind of failure a delivery hit, without any of the error's own text. */
+function failureCategory(err: unknown): 'http' | 'timeout' | 'network' {
+  if (err instanceof NotificationHttpError) {
+    return 'http'
+  }
+  const name = err instanceof Error ? err.name : ''
+  return name === 'TimeoutError' || name === 'AbortError' ? 'timeout' : 'network'
 }
 
 /** Inline variant of {@link deliverNotification}: logs failures, never throws. */
@@ -74,9 +86,9 @@ async function postJson(fetchImpl: typeof fetch, message: NotificationMessage): 
     await deliverNotification(message, fetchImpl)
   }
   catch (err) {
-    // A non-2xx error already names the target; a thrown fetch (network failure)
-    // does not, so include the redacted URL either way.
-    console.error(`notify: POST ${redactUrl(message.url)} failed`, err)
+    // A fixed category and the redacted origin only: a runtime's fetch error
+    // message can quote the full URL, whose path or query is the secret.
+    console.error(`notify: POST ${redactUrl(message.url)} failed (${failureCategory(err)})`)
   }
 }
 

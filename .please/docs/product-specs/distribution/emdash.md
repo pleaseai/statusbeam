@@ -6,8 +6,8 @@ feature: emdash
 depends: []
 conflicts: []
 traces: []
-created_at: 2026-10-22T11:16:17.725Z
-updated_at: 2026-10-22T11:16:17.725Z
+created_at: 2026-10-22T11:33:21.358Z
+updated_at: 2026-10-22T11:33:21.358Z
 source_tracks: ["emdash-distribution-20261022"]
 ---
 
@@ -84,10 +84,15 @@ The system MUST serve the engine plugin's public status, per-site, and badge end
 - WHEN a client requests the plugin's badge endpoint
 - THEN return a body that is a valid shields.io endpoint response
 
-### Requirement: run scheduled checks for every configured monitor inside the plugin, sharding each run's monitors across separate scheduled tasks so every task stays within one invocation's limits, and keep check history and the current status snapshot in plugin-owned storage
+#### Scenario: If a client requests the plugin's uptime badge with an invalid or absent `period`, then the system shall return the monthly uptime badge, as the standalone endpoint does.
+
+- WHEN a client requests the plugin's uptime badge with an invalid or absent `period`
+- THEN return the monthly uptime badge, as the standalone endpoint does
+
+### Requirement: run scheduled checks inside the plugin for every configured poll monitor within the plugin's scheduled capacity (webhook-only Sentry monitors take their status from inbound webhooks, and monitors beyond capacity are named by the AC-021 warning), sharding each run's monitors across separate scheduled tasks so every task stays within one invocation's limits, and keep check history and the current status snapshot in plugin-owned storage
 <!-- req: REQ-008 tracks=emdash-distribution-20261022 -->
 
-The system MUST run scheduled checks for every configured monitor inside the plugin, sharding each run's monitors across separate scheduled tasks so every task stays within one invocation's limits, and keep check history and the current status snapshot in plugin-owned storage.
+The system MUST run scheduled checks inside the plugin for every configured poll monitor within the plugin's scheduled capacity (webhook-only Sentry monitors take their status from inbound webhooks, and monitors beyond capacity are named by the AC-021 warning), sharding each run's monitors across separate scheduled tasks so every task stays within one invocation's limits, and keep check history and the current status snapshot in plugin-owned storage.
 
 #### Scenario: When a monitored endpoint has not finished its response within 10 seconds, the system shall grade that probe down and go on to the task's remaining monitors.
 
