@@ -40,7 +40,7 @@
     },
     "apps/web": {
       "name": "@statusbeam/web",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@astrojs/cloudflare": "^14",
         "@astrojs/react": "^6",
@@ -67,7 +67,7 @@
     },
     "apps/worker": {
       "name": "@statusbeam/worker",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@statusbeam/core": "workspace:*",
       },
@@ -78,7 +78,7 @@
     },
     "packages/cli": {
       "name": "@statusbeam/cli",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "bin": {
         "statusbeam": "./dist/cli.js",
       },
@@ -93,7 +93,7 @@
     },
     "packages/core": {
       "name": "@statusbeam/core",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "yaml": "^2.5.0",
         "zod": "^4.4.3",
@@ -101,12 +101,26 @@
     },
     "packages/create-statusbeam": {
       "name": "create-statusbeam",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "bin": {
         "create-statusbeam": "./dist/index.js",
       },
       "devDependencies": {
         "@types/node": "^26",
+      },
+    },
+    "packages/emdash-ui": {
+      "name": "@statusbeam/emdash-ui",
+      "version": "0.0.0",
+      "dependencies": {
+        "@statusbeam/core": "workspace:*",
+      },
+      "devDependencies": {
+        "@astrojs/check": "^0.9",
+        "astro": "^7",
+      },
+      "peerDependencies": {
+        "astro": "^7",
       },
     },
   },
@@ -556,6 +570,8 @@
     "@statusbeam/core": ["@statusbeam/core@workspace:packages/core"],
 
     "@statusbeam/docs": ["@statusbeam/docs@workspace:apps/docs"],
+
+    "@statusbeam/emdash-ui": ["@statusbeam/emdash-ui@workspace:packages/emdash-ui"],
 
     "@statusbeam/web": ["@statusbeam/web@workspace:apps/web"],
 

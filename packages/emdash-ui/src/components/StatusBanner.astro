@@ -1,0 +1,50 @@
+---
+import type { Locale } from '@statusbeam/core/contract'
+import type { StatusInput } from '../client'
+import { DEFAULT_LOCALE, getDict } from '@statusbeam/core/contract'
+import { loadStatus } from '../client'
+import '../styles/tokens.css'
+import StatusIcon from './StatusIcon.astro'
+import Unavailable from './Unavailable.astro'
+
+/**
+ * Overall-status banner, rolled up from the worst site state by the producer
+ * (`status` in the aggregate response). Mirrors apps/web's StatusBanner: the
+ * same dictionary headline, with an icon and the text label alongside color.
+ *
+ * Pass `baseUrl` (plus `flavor` for an EmDash plugin source) to fetch, or a
+ * `result` from `fetchStatus` to reuse one request across components.
+ */
+type Props = StatusInput & { locale?: Locale }
+
+const { locale = DEFAULT_LOCALE, ...input } = Astro.props
+const result = await loadStatus(input)
+---
+
+{result.ok
+  ? (
+      <div class="statusbeam sb-banner" data-sb-tone={result.data.status} role="status">
+        <StatusIcon kind={result.data.status} size={24} />
+        <p class="sb-banner-title">{getDict(locale).banner[result.data.status]}</p>
+      </div>
+    )
+  : <Unavailable result={result} locale={locale} />}
+
+<style>
+  .sb-banner {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem 1.25rem;
+    border: 1px solid color-mix(in oklch, var(--sb-tone) 30%, transparent);
+    border-radius: var(--sb-radius);
+    background: color-mix(in oklch, var(--sb-tone) 10%, transparent);
+  }
+  .sb-banner-title {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.25;
+  }
+</style>

@@ -1,0 +1,37 @@
+---
+import type { Locale } from '@statusbeam/core/contract'
+import type { Unavailable } from '../client'
+import { DEFAULT_LOCALE } from '@statusbeam/core/contract'
+import { getMessages } from '../messages'
+import '../styles/tokens.css'
+import StatusIcon from './StatusIcon.astro'
+
+/**
+ * Rendered in place of a component when its source is unreachable, answers
+ * non-2xx, or sends a body that breaks the contract. The failure reason goes
+ * into a data attribute for debugging; the visible text stays generic.
+ */
+interface Props {
+  result: Unavailable
+  locale?: Locale
+}
+
+const { result, locale = DEFAULT_LOCALE } = Astro.props
+---
+
+<div class="statusbeam sb-unavailable" data-sb-tone="unavailable" data-sb-reason={result.reason} role="status">
+  <StatusIcon kind="unavailable" />
+  <span>{getMessages(locale).unavailable}</span>
+</div>
+
+<style>
+  .sb-unavailable {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    border: 1px dashed var(--sb-border);
+    border-radius: var(--sb-radius);
+    color: var(--sb-muted);
+  }
+</style>

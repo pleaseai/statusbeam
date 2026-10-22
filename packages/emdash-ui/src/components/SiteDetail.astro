@@ -1,0 +1,93 @@
+---
+import type { Locale } from '@statusbeam/core/contract'
+import type { SiteInput } from '../client'
+import { DEFAULT_LOCALE, formatUptime, getDict, toSeverity, windowUptime } from '@statusbeam/core/contract'
+import { loadSite } from '../client'
+import '../styles/tokens.css'
+import StatusIcon from './StatusIcon.astro'
+import Unavailable from './Unavailable.astro'
+import UptimeBars from './UptimeBars.astro'
+
+/**
+ * Per-site detail: name, current status, uptime breakdown, the 90-day bars and
+ * the latest response time. Mirrors one row of apps/web's StatusList, rendered
+ * statically: the uptime breakdown that apps/web shows in a tooltip is printed
+ * as text, and the status label sits beside its icon, so color is never the
+ * only cue.
+ *
+ * Pass `baseUrl` + `slug` (plus `flavor` for an EmDash plugin source) to fetch,
+ * or a `result` from `fetchSite` to reuse one request.
+ */
+type Props = SiteInput & { locale?: Locale }
+
+const { locale = DEFAULT_LOCALE, ...input } = Astro.props
+const result = await loadSite(input)
+const t = getDict(locale)
+const site = result.ok ? result.data : undefined
+const severity = site && toSeverity(site.status)
+const uptime90 = site && formatUptime(windowUptime(site.history))
+---
+
+{!result.ok && <Unavailable result={result} locale={locale} />}
+{result.ok && site && severity && (
+  <section class="statusbeam sb-site" data-sb-slug={site.slug} aria-label={site.name}>
+    <div class="sb-head">
+      <span class="sb-name">{site.name}</span>
+      <span class="sb-uptime">{uptime90}</span>
+      <span class="sb-badge" data-sb-tone={severity}>
+        <StatusIcon kind={severity} size={14} />
+        <span>{t.severity[severity]}</span>
+      </span>
+    </div>
+    <UptimeBars result={result} locale={locale} />
+    <p class="sb-meta">
+      <span>{t.breakdown({ day: site.uptimeDay, week: site.uptimeWeek, month: site.uptimeMonth, quarter: uptime90 ?? '' })}</span>
+      {(site.responseHistory?.length ?? 0) > 0 && (
+        <span>{t.status.responseTime} · {site.responseTime} {t.unit.ms}</span>
+      )}
+    </p>
+  </section>
+)}
+
+<style>
+  .sb-site {
+    padding: 1rem 1.25rem;
+    border: 1px solid var(--sb-border);
+    border-radius: var(--sb-radius);
+  }
+  .sb-head {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+  .sb-name {
+    flex: 1 1 auto;
+    font-weight: 500;
+  }
+  .sb-uptime {
+    font-size: 0.875rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--sb-muted);
+  }
+  .sb-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.125rem 0.5rem;
+    border: 1px solid color-mix(in oklch, var(--sb-tone) 40%, transparent);
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+  }
+  .sb-meta {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0.25rem 1rem;
+    margin: 0.75rem 0 0;
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--sb-muted);
+  }
+</style>
