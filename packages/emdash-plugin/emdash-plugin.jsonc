@@ -16,6 +16,8 @@
   // Notification destinations live in encrypted settings, never in the YAML: a webhook URL embeds
   // its credential. The scheduled run reads them with the configuration in one `settings.list`.
   "admin": {
+    "pages": [{ "path": "/config", "label": "StatusBeam", "icon": "chart" }],
+    "widgets": [{ "id": "status", "title": "Status", "size": "half" }],
     "settingsSchema": {
       "slackWebhookUrl": {
         "type": "secret",

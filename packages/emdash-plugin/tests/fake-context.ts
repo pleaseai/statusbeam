@@ -47,6 +47,15 @@ export function createFakeContext(options: FakeContextOptions = {}) {
   if (options.config !== undefined) {
     settings.set('config', options.config)
   }
+  // Every write to a setting gives it a new opaque revision, as the host's versioned settings do.
+  const revisions = new Map<string, string>([...settings.keys()].map(key => [key, 'r0']))
+  let revisionCounter = 0
+  const write = (key: string, value: unknown) => {
+    settings.set(key, value)
+    revisionCounter += 1
+    revisions.set(key, `r${revisionCounter}`)
+    return `r${revisionCounter}`
+  }
   const kv = new Map<string, unknown>()
   const rows = new Map<string, DayBucket>((options.buckets ?? []).map(b => [`${b.slug}:${b.date}`, b]))
   const tasks = new Map<string, { name: string, schedule: string, data?: Record<string, unknown> }>(
@@ -71,7 +80,12 @@ export function createFakeContext(options: FakeContextOptions = {}) {
   const ctx = {
     settings: {
       get: async (key: string) => track('settings.get', () => (settings.has(key) ? settings.get(key) : null)),
-      set: async (key: string, value: unknown) => track('settings.set', () => void settings.set(key, value)),
+      getVersioned: async (key: string) => track('settings.getVersioned', () => (settings.has(key) ? { value: settings.get(key), revision: revisions.get(key) as string } : null)),
+      compareAndSet: async (key: string, expected: string | null, value: unknown) => track('settings.compareAndSet', () => {
+        const current = settings.has(key) ? revisions.get(key) as string : null
+        return current === expected ? { applied: true as const, revision: write(key, value) } : { applied: false as const }
+      }),
+      set: async (key: string, value: unknown) => track('settings.set', () => void write(key, value)),
       list: async (prefix = '') => track('settings.list', () => [...settings].filter(([key]) => key.startsWith(prefix)).map(([key, value]) => ({ key, value }))),
     },
     kv: {
@@ -103,7 +117,8 @@ export function createFakeContext(options: FakeContextOptions = {}) {
     rows,
     kv,
     tasks,
-    setConfig: (yaml: string) => void settings.set('config', yaml),
+    setConfig: (yaml: string) => void write('config', yaml),
+    settings,
   }
 }
 

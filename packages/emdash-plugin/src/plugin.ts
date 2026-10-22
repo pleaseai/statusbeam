@@ -1,4 +1,5 @@
 import type { SandboxedPlugin } from 'emdash/plugin'
+import { adminRoute } from './admin'
 import { PROBE_DEADLINE_MS } from './budget'
 import { publicRoutes } from './routes/public'
 import { webhookRoutes } from './routes/webhooks'
@@ -23,7 +24,7 @@ function deadlineFrom(data: Record<string, unknown> | undefined): number {
  * `reconcileShards` after a save.
  */
 const plugin: SandboxedPlugin = {
-  routes: { ...publicRoutes, ...webhookRoutes },
+  routes: { ...publicRoutes, ...webhookRoutes, admin: adminRoute },
   hooks: {
     // Also runs after first install, so one hook covers install and re-enable.
     'plugin:activate': async (_event, ctx) => {
