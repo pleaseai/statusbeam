@@ -1,5 +1,5 @@
 import type { RouteFlavor } from '@statusbeam/core/contract'
-import type { StatusSource } from './client'
+import type { FetchOptions, StatusSource } from './client'
 
 /**
  * The "status" Portable Text block's data shape and its mapping to the T010
@@ -117,6 +117,17 @@ export interface SelectOptions {
   allowedOrigins?: readonly string[]
 }
 
+/**
+ * Fetch options for a block's server-side read. Redirects are not followed:
+ * the checks in `selectFromBlock` see only the configured URL, so following a
+ * redirect would let an accepted source send the server to an origin nobody
+ * approved. A redirect answer renders as unavailable (`HTTP 3xx`).
+ * `redirect: 'manual'` rather than `'error'`, which Cloudflare Workers reject.
+ */
+export function blockFetchOptions(fetchImpl: typeof fetch = fetch): FetchOptions {
+  return { fetch: ((input, init) => fetchImpl(input, { ...init, redirect: 'manual' })) as typeof fetch }
+}
+
 export type OriginList
   = | { ok: true, origins: string[] }
     | { ok: false, reason: string }
@@ -181,12 +192,18 @@ export function selectFromBlock(node: Record<string, unknown>, options: SelectOp
   if (url.href.includes('?') || url.href.includes('#')) {
     return { ok: false, reason: 'baseUrl must not carry a query string or a fragment' }
   }
-  if (options.allowedOrigins !== undefined && options.allowedOrigins.length > 0) {
+  // Options can arrive unvalidated (`createPlugin` called directly), so any defined value is
+  // parsed: a malformed one refuses the block instead of silently restoring the literal check.
+  let origins: string[] = []
+  if (options.allowedOrigins !== undefined) {
     const allowed = parseAllowedOrigins(options.allowedOrigins)
     if (!allowed.ok) {
       return { ok: false, reason: allowed.reason }
     }
-    if (!allowed.origins.includes(url.origin)) {
+    origins = allowed.origins
+  }
+  if (origins.length > 0) {
+    if (!origins.includes(url.origin)) {
       return { ok: false, reason: `baseUrl origin ${url.origin} is not in the site's allowed origins` }
     }
   }

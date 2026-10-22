@@ -1,5 +1,6 @@
 import { describe, expect, it, spyOn } from 'bun:test'
-import { parseAllowedOrigins, selectFromBlock } from './block-node'
+import { blockFetchOptions, parseAllowedOrigins, selectFromBlock } from './block-node'
+import { fetchStatus } from './client'
 
 describe('selectFromBlock', () => {
   it('maps a banner block to a standalone source by default', () => {
@@ -98,6 +99,13 @@ describe('selectFromBlock with allowedOrigins', () => {
     }
   })
 
+  it('refuses every block when the configured value is not an array, instead of falling back', () => {
+    for (const bad of ['', 0, true, {}, null]) {
+      const options = { allowedOrigins: bad as unknown as string[] }
+      expect(selectFromBlock({ baseUrl: 'https://internal.corp' }, options), String(bad)).toEqual({ ok: false, reason: 'allowedOrigins must be an array of origins' })
+    }
+  })
+
   it('keeps the literal-address guard when the list is unset or empty', () => {
     for (const options of [{}, { allowedOrigins: [] }]) {
       expect(selectFromBlock({ baseUrl: 'https://internal.corp' }, options)).toMatchObject({ ok: true })
@@ -137,5 +145,18 @@ describe('parseAllowedOrigins', () => {
   it('reports a non-array or non-string entry', () => {
     expect(parseAllowedOrigins('https://status.example.com')).toMatchObject({ ok: false, reason: 'allowedOrigins must be an array of origins' })
     expect(parseAllowedOrigins([42])).toMatchObject({ ok: false, reason: expect.stringContaining('allowedOrigins entry 42') })
+  })
+})
+
+describe('blockFetchOptions', () => {
+  it('does not follow a redirect, so an accepted source cannot send the read elsewhere', async () => {
+    const seen: Array<RequestRedirect | undefined> = []
+    const redirecting = (async (_input: string | URL | Request, init?: RequestInit) => {
+      seen.push(init?.redirect)
+      return new Response(null, { status: 302, headers: { location: 'http://10.0.0.5/api/status.json' } })
+    }) as typeof fetch
+    const result = await fetchStatus({ baseUrl: 'https://status.example.com' }, blockFetchOptions(redirecting))
+    expect(seen).toEqual(['manual'])
+    expect(result).toMatchObject({ ok: false, reason: 'http', detail: 'HTTP 302' })
   })
 })

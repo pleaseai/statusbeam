@@ -117,9 +117,12 @@ descriptor), `@statusbeam/emdash-ui/plugin` (the entrypoint) and
 
 #### Restrict block sources (recommended)
 
-The block renderer fetches the status source URL on the server. Without
-configuration it refuses `localhost`, credentials, a query string, a fragment and
-loopback, private, link-local and unique-local IP **literals**. It cannot see
+The block renderer fetches the status source URL on the server. It always
+refuses credentials, a query string and a fragment, and it does not follow
+redirects: a source that answers with one renders as unavailable, so enter its
+final URL. Without configuration, a production build also refuses `localhost`
+and loopback, private, link-local and unique-local IP **literals**; the
+development server (`astro dev`) accepts them so a local fixture works. It cannot see
 where a hostname resolves, so an editor can still enter a name that resolves to
 an internal address. Only an allowlist stops that. Pass the origins editors may
 use:
@@ -143,7 +146,8 @@ emdash({
   credentials. A bad entry fails the site build with an error that names it.
 - A listed origin is trusted as configured, even if it is a private address.
   The credentials, query string and fragment checks still apply.
-- An empty or missing list keeps the literal-address check only.
+- An empty or missing list keeps the default behavior above: the
+  literal-address check in production, none on the development server.
 
 The list reaches the renderer through the plugin's `createPlugin(options)`,
 which EmDash runs from its middleware before any page renders.

@@ -105,11 +105,18 @@ describe('allowedOrigins reach the renderer', () => {
 
       createPlugin(JSON.parse(JSON.stringify(statusBeamBlock().options ?? {})))
       expect(renderOptions(true)).toEqual({ allowPrivateHosts: true })
+
+      // `createPlugin` is a published entry, so options can skip `statusBeamBlock`'s validation.
+      createPlugin({ allowedOrigins: {} as unknown as string[] })
+      expect(selectFromBlock({ baseUrl: 'https://internal.corp' }, renderOptions(false))).toEqual({ ok: false, reason: 'allowedOrigins must be an array of origins' })
     }
     finally {
       createPlugin()
     }
     const renderer = await Bun.file(resolve(import.meta.dir, 'astro/StatusBlock.astro')).text()
     expect(renderer).toContain('selectFromBlock(Astro.props.node ?? {}, renderOptions(import.meta.env.DEV))')
+    expect(renderer).toContain('const options = blockFetchOptions()')
+    expect(renderer).toContain('fetchStatus(selection.source, options)')
+    expect(renderer).toContain('fetchSite(selection.source, selection.slug, options)')
   })
 })
