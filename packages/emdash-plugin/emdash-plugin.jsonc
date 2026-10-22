@@ -1,0 +1,21 @@
+{
+  "$schema": "../../node_modules/@emdash-cms/plugin-cli/schemas/emdash-plugin.schema.json",
+
+  "slug": "statusbeam",
+  // Placeholder until the registry publisher is set up (T012).
+  "publisher": "did:plc:statusbeamplaceholder",
+
+  "license": "MIT",
+  "author": { "name": "StatusBeam maintainers" },
+  "security": { "url": "https://github.com/pleaseai/statusbeam/security" },
+
+  // The engine probes arbitrary user-configured URLs (ADR-0004 Negative consequences).
+  "capabilities": ["network:request:unrestricted"],
+  "allowedHosts": [],
+
+  // One document per (slug, UTC day): `{ slug, date, up, degraded, down, total }`, id `slug:date`.
+  // `date` alone serves the retention prune; `[slug, date]` serves one monitor's history.
+  "storage": {
+    "buckets": { "indexes": ["date", ["slug", "date"]] }
+  }
+}
