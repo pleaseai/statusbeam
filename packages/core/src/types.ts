@@ -131,6 +131,19 @@ export function formatUptime(ratio: number): string {
   return pct >= 99.995 ? '100%' : `${pct.toFixed(2)}%`
 }
 
+/**
+ * The 90-day uptime figure a renderer shows for a site, or `null` when it has
+ * none: the site is not checked yet, or its window holds no checked day, which
+ * {@link windowUptime} would read as 100%. The shorter windows are tails of the
+ * same history, so `null` means none of them has a figure either.
+ */
+export function uptimeFigure(site: { pending?: boolean, history: DayStat[] }): string | null {
+  if (site.pending || !site.history.some(d => d.status !== null)) {
+    return null
+  }
+  return formatUptime(windowUptime(site.history))
+}
+
 /** Mean response time (ms) over a sample window; `0` for an empty window. */
 export function averageResponse(points: ResponsePoint[]): number {
   if (points.length === 0) {

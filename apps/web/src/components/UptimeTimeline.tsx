@@ -1,5 +1,5 @@
 import type { DayStat, Locale } from '@statusbeam/core'
-import { formatDay, formatUptime, getDict, windowUptime } from '@statusbeam/core'
+import { formatDay, formatUptime, getDict, uptimeFigure } from '@statusbeam/core'
 import { cn } from '@/lib/utils'
 
 const DAY_COLOR = {
@@ -15,15 +15,17 @@ const DAY_COLOR = {
  * timeline renders as static HTML. Bars flex to fill the width and shrink on
  * narrow viewports (adaptive), so the full window fits without a scrollbar.
  */
-export function UptimeTimeline({ history, locale }: Readonly<{ history: DayStat[], locale: Locale }>) {
+export function UptimeTimeline({ history, pending, locale }: Readonly<{ history: DayStat[], pending?: boolean, locale: Locale }>) {
   const t = getDict(locale)
-  const uptime = formatUptime(windowUptime(history))
+  // Named by the same figure the row shows, so the two never disagree.
+  const figure = uptimeFigure({ pending, history })
+  const label = figure === null ? t.timeline.ariaNoData : t.timeline.ariaUptime(figure)
   return (
     <div>
       <div
         className="flex h-9 items-stretch gap-px"
         role="img"
-        aria-label={t.timeline.ariaUptime(uptime)}
+        aria-label={label}
       >
         {history.map((d) => {
           const key = d.status ?? 'nodata'

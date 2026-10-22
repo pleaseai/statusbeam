@@ -1,5 +1,5 @@
 import type { Dict, Locale, SiteSummary } from '@statusbeam/core'
-import { formatUptime, getDict, toSeverity, windowUptime } from '@statusbeam/core'
+import { getDict, toSeverity, uptimeFigure } from '@statusbeam/core'
 import { ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
@@ -39,11 +39,12 @@ function StatusRow({ site, locale, t }: Readonly<{ site: SiteSummary, locale: Lo
   // Guard against stale KV snapshots written before these fields existed.
   const history = site.history ?? []
   const responseHistory = site.responseHistory ?? []
-  // A pending site's empty history reads as 100% in every uptime window: show no figure instead, as the uptime badge does.
-  const uptime90 = site.pending ? NO_UPTIME : formatUptime(windowUptime(history))
-  const breakdown = site.pending
+  // No figure for a pending site or an empty window, which would otherwise read as 100%, as the uptime badge does.
+  const figure = uptimeFigure({ pending: site.pending, history })
+  const uptime90 = figure ?? NO_UPTIME
+  const breakdown = figure === null
     ? t.breakdown({ day: NO_UPTIME, week: NO_UPTIME, month: NO_UPTIME, quarter: NO_UPTIME })
-    : t.breakdown({ day: site.uptimeDay, week: site.uptimeWeek, month: site.uptimeMonth, quarter: uptime90 })
+    : t.breakdown({ day: site.uptimeDay, week: site.uptimeWeek, month: site.uptimeMonth, quarter: figure })
   return (
     <div className="px-5 py-4">
       <div className="flex items-center justify-between">
@@ -71,7 +72,7 @@ function StatusRow({ site, locale, t }: Readonly<{ site: SiteSummary, locale: Lo
         </div>
       </div>
       <div className="mt-3">
-        <UptimeTimeline history={history} locale={locale} />
+        <UptimeTimeline history={history} pending={site.pending} locale={locale} />
       </div>
       {responseHistory.length > 0 && (
         <div className="mt-3">

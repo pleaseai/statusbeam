@@ -1,7 +1,7 @@
 ---
 import type { DayKey, Locale } from '@statusbeam/core/contract'
 import type { SiteInput } from '../client'
-import { DEFAULT_LOCALE, formatDay, formatUptime, getDict, windowUptime } from '@statusbeam/core/contract'
+import { DEFAULT_LOCALE, formatDay, formatUptime, getDict, uptimeFigure } from '@statusbeam/core/contract'
 import { loadSite } from '../client'
 import '../styles/tokens.css'
 import Unavailable from './Unavailable.astro'
@@ -23,14 +23,16 @@ const { locale = DEFAULT_LOCALE, ...input } = Astro.props
 const result = await loadSite(input)
 const t = getDict(locale)
 const history = result.ok ? result.data.history : []
-const uptime = formatUptime(windowUptime(history))
+// Named by the same figure SiteDetail shows, so the two never disagree.
+const figure = result.ok ? uptimeFigure(result.data) : null
+const stripLabel = figure === null ? t.timeline.ariaNoData : t.timeline.ariaUptime(figure)
 ---
 
 {result.ok
   ? (
       <div class="statusbeam sb-bars">
         {/* `role="list"` keeps the list semantics that some browsers drop once list-style is removed. */}
-        <ul class="sb-strip" role="list" aria-label={t.timeline.ariaUptime(uptime)}>
+        <ul class="sb-strip" role="list" aria-label={stripLabel}>
           {history.map((d) => {
             const key: DayKey = d.status ?? 'nodata'
             // Only real (non-nodata) days carry an uptime figure in the tooltip.

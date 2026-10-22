@@ -18,7 +18,7 @@ import { overallSiteSeverity } from './types'
 // uptime math. All are pure and yaml-free.
 export { DEFAULT_LOCALE, formatDay, getDict, LOCALES } from './i18n'
 export type { DayKey, Dict, Locale } from './i18n'
-export { formatUptime, overallSiteSeverity, toSeverity, windowUptime } from './types'
+export { formatUptime, overallSiteSeverity, toSeverity, uptimeFigure, windowUptime } from './types'
 export type { CheckStatus, DayStat, Severity } from './types'
 
 /**

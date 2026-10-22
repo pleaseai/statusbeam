@@ -1,6 +1,6 @@
 import type { DayStat, ResponsePoint } from './types'
 import { describe, expect, it } from 'bun:test'
-import { averageResponse, formatUptime, overallSeverity, percentileResponse, toSeverity, windowUptime } from './types'
+import { averageResponse, formatUptime, overallSeverity, percentileResponse, toSeverity, uptimeFigure, windowUptime } from './types'
 
 function day(status: DayStat['status'], uptime: number): DayStat {
   return { date: '2026-01-01', status, uptime }
@@ -46,6 +46,18 @@ describe('windowUptime', () => {
   it('returns 1 when the window is empty or entirely no-data', () => {
     expect(windowUptime([])).toBe(1)
     expect(windowUptime([day(null, 1), day(null, 1)])).toBe(1)
+  })
+})
+
+describe('uptimeFigure', () => {
+  it('formats the window uptime of a checked site with data', () => {
+    expect(uptimeFigure({ history: [day('up', 1), day(null, 1), day('down', 0)] })).toBe('50.00%')
+  })
+
+  it('has no figure for a pending site or a window with no checked day, instead of 100%', () => {
+    expect(uptimeFigure({ pending: true, history: [day('up', 1)] })).toBeNull()
+    expect(uptimeFigure({ history: [day(null, 1), day(null, 1)] })).toBeNull()
+    expect(uptimeFigure({ history: [] })).toBeNull()
   })
 })
 
