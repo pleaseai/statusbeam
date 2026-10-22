@@ -26,6 +26,11 @@
         "type": "secret",
         "label": "Generic webhook URLs",
         "description": "One URL per line, or separated by commas or spaces. Each receives the status-change JSON."
+      },
+      "sentryToken": {
+        "type": "secret",
+        "label": "Sentry auth token",
+        "description": "Lets monitors with a Sentry poll backstop read the Issues API. Without it, only webhooks update those monitors."
       }
     }
   },

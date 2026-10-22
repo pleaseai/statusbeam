@@ -5,9 +5,9 @@ import type { ShardSnapshot } from './snapshot'
 import { detectStatusChanges } from '@statusbeam/core'
 import { applyResults, bucketId, bucketsOf, dayOf, pruneExpiredBuckets, touchedBucketIds } from './buckets'
 import { CALL_BUDGET, monitorsPerTask, plannedCalls, PROBE_DEADLINE_MS, reservedCallsFor } from './budget'
+import { clearConfigError, CONFIG_ERROR_KEY, loadStoredConfig, recordConfigError } from './config'
 import { buildMessages, deliver } from './notify'
 import { probeSite } from './probe'
-import { readSettings } from './settings'
 import { pollableSites, reconcileShards, shardSites } from './shards'
 import { advanceMonitor, listSnapshots, mergeSnapshots, writeShardSnapshot } from './snapshot'
 
@@ -24,7 +24,7 @@ export interface ShardRunResult {
   probed: number
   /** Bridge calls the run made. */
   calls: number
-  /** Bridge calls the plan set aside before the first probe: the fixed calls, one per probe, one per destination. `calls` never exceeds it. */
+  /** Bridge calls the plan set aside before the first probe: the fixed calls, one per probe, one per destination, and one more when the run clears a stale configuration-error record. `calls` never exceeds it. */
   planned: number
   /** Probes the host's limit rejected; those monitors are marked unsupported, not graded. */
   unsupported: number
@@ -63,10 +63,15 @@ export async function runShard(ctx: RunContext, shard: number, options: ShardRun
   const deadlineMs = options.deadlineMs ?? PROBE_DEADLINE_MS
   const idle = (calls: number, planned = calls): ShardRunResult => ({ probed: 0, calls, planned, unsupported: 0, deliveries: 0 })
 
-  const { config, destinations } = await readSettings(ctx)
-  if (!config) {
+  const stored = await loadStoredConfig(ctx)
+  if (stored.status === 'absent') {
     return idle(1)
   }
+  if (stored.status === 'invalid') {
+    await recordConfigError(ctx, stored.issues, now())
+    return idle(2)
+  }
+  const { config, destinations } = stored
 
   const pollable = pollableSites(config)
   const reserved = reservedCallsFor(destinations.length)
@@ -103,6 +108,7 @@ export async function runShard(ctx: RunContext, shard: number, options: ShardRun
   ])
   calls += 2
   const previous = mergeSnapshots(snapshots)
+  const staleConfigError = snapshots.some(entry => entry.key === CONFIG_ERROR_KEY)
 
   const changes = detectStatusChanges(real, previous.results)
   let deliveries: DeliveryOutcome[] = []
@@ -129,7 +135,16 @@ export async function runShard(ctx: RunContext, shard: number, options: ShardRun
   await writeShardSnapshot(ctx, snapshot)
   calls += 1
 
-  return { probed: sites.length, calls, planned, unsupported: results.length - real.length, deliveries: deliveries.length }
+  // The configuration validated, so an earlier error record is stale. Clear it when the budget has a call to spare;
+  // a full shard leaves it to the maintenance task or the save, which also clear it.
+  let plannedTotal = planned
+  if (staleConfigError && calls < CALL_BUDGET) {
+    await clearConfigError(ctx)
+    calls += 1
+    plannedTotal += 1
+  }
+
+  return { probed: sites.length, calls, planned: plannedTotal, unsupported: results.length - real.length, deliveries: deliveries.length }
 }
 
 /** Calls the daily prune may spend (one `query` and one `deleteMany`, twice), leaving the rest to the reconcile. */
@@ -141,11 +156,11 @@ const PRUNE_CALL_ALLOWANCE = 4
  * an earlier reconcile left undone). Its own invocation gets its own budget.
  */
 export async function runMaintenance(
-  ctx: Pick<PluginContext, 'settings' | 'storage' | 'cron'>,
+  ctx: Pick<PluginContext, 'settings' | 'storage' | 'cron' | 'kv'>,
   options: { now?: () => Date } = {},
 ): Promise<{ deleted: number, calls: number }> {
   const now = options.now ?? (() => new Date())
   const pruned = await pruneExpiredBuckets(ctx, now(), PRUNE_CALL_ALLOWANCE)
-  await reconcileShards(ctx, { budget: CALL_BUDGET - pruned.calls })
+  await reconcileShards(ctx, { budget: CALL_BUDGET - pruned.calls, clearConfigError: true })
   return { deleted: pruned.deleted, calls: pruned.calls }
 }

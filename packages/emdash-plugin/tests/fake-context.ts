@@ -77,6 +77,7 @@ export function createFakeContext(options: FakeContextOptions = {}) {
     kv: {
       get: async (key: string) => track('kv.get', () => (kv.has(key) ? kv.get(key) : null)),
       set: async (key: string, value: unknown) => track('kv.set', () => void kv.set(key, value)),
+      delete: async (key: string) => track('kv.delete', () => kv.delete(key)),
       list: async (prefix = '') => track('kv.list', () => [...kv].filter(([key]) => key.startsWith(prefix)).map(([key, value]) => ({ key, value }))),
     },
     storage: { buckets },

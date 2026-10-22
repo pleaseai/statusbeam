@@ -2,7 +2,7 @@ import type { Site, StatusConfig } from '@statusbeam/core'
 import type { PluginContext } from 'emdash/plugin'
 import { selectPollSites } from '@statusbeam/core'
 import { CALL_BUDGET, MAX_SHARDS, monitorsPerTask, reservedCallsFor } from './budget'
-import { readSettings } from './settings'
+import { clearConfigError, loadStoredConfig, recordConfigError } from './config'
 
 /** Cadence of every shard task (FR-4: the 5-minute cadence works in all three execution modes). */
 export const SHARD_SCHEDULE = '*/5 * * * *'
@@ -112,20 +112,23 @@ export interface ReconcileResult {
  * shard tasks (and the maintenance task), cancel the surplus ones. Idempotent.
  *
  * It spends at most `budget` bridge calls (default {@link CALL_BUDGET}): one to
- * read the settings (the configuration and the destinations that size the shards), one to list tasks, then one per schedule or cancel.
+ * read the settings (the configuration and the destinations that size the shards), one to list tasks, one to record or clear the
+ * configuration error when the configuration is invalid or `clearConfigError` is set, then one per schedule or cancel.
  * Missing tasks go first so coverage comes before cleanup. Call it from
- * `plugin:activate` and after a configuration save.
+ * `plugin:activate`, and after a successful configuration save with `{ clearConfigError: true }`.
  */
 export async function reconcileShards(
-  ctx: Pick<PluginContext, 'settings' | 'cron'>,
-  options: { budget?: number } = {},
+  ctx: Pick<PluginContext, 'settings' | 'cron' | 'kv'>,
+  options: { budget?: number, clearConfigError?: boolean } = {},
 ): Promise<ReconcileResult> {
   const cron = ctx.cron
   if (!cron) {
     throw new Error('ctx.cron is unavailable')
   }
   const budget = options.budget ?? CALL_BUDGET
-  const { config, destinations } = await readSettings(ctx)
+  const stored = await loadStoredConfig(ctx)
+  const config = stored.status === 'valid' ? stored.config : null
+  const destinations = stored.status === 'valid' ? stored.destinations : []
   const monitors = config ? pollableSites(config).length : 0
   const shards = config ? shardCountFor(monitors, destinations.length) : null
   const plan = planReconcile(shards, await cron.list())
@@ -133,6 +136,16 @@ export async function reconcileShards(
   const scheduled: string[] = []
   const cancelled: string[] = []
   let remaining = Math.max(0, budget - 2)
+  // An invalid stored configuration is recorded for the admin page and leaves the shard tasks alone.
+  // A save clears an earlier record (the caller passes `clearConfigError`); each takes one call.
+  if (stored.status === 'invalid') {
+    await recordConfigError(ctx, stored.issues, new Date())
+    remaining = Math.max(0, remaining - 1)
+  }
+  else if (stored.status === 'valid' && options.clearConfigError) {
+    await clearConfigError(ctx)
+    remaining = Math.max(0, remaining - 1)
+  }
   for (const task of plan.schedule) {
     if (remaining === 0) {
       break

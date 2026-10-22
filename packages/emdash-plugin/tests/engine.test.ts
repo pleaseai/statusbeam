@@ -80,12 +80,15 @@ describe('runShard', () => {
   })
 
   it('checks nothing and writes nothing without a valid configuration', async () => {
-    for (const config of [undefined, 'sites: [broken']) {
+    // An absent configuration writes nothing; an invalid one writes only the configuration-error record (T008, AC-024).
+    const cases: Array<[string | undefined, string[], string[]]> = [[undefined, ['settings.list'], []], ['sites: [broken', ['settings.list', 'kv.set'], ['snapshot:config-error']]]
+    for (const [config, calls, kvKeys] of cases) {
       const fake = createFakeContext({ config })
       const result = await runShard(fake.ctx, 0)
       expect(result.probed).toBe(0)
-      expect(fake.bridgeCalls).toEqual(['settings.list'])
-      expect(fake.rows.size + fake.kv.size).toBe(0)
+      expect(fake.bridgeCalls).toEqual(calls)
+      expect([...fake.kv.keys()]).toEqual(kvKeys)
+      expect(fake.rows.size).toBe(0)
     }
   })
 })

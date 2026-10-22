@@ -32,6 +32,11 @@ export interface PluginSettings {
   invalidDestinations: number
 }
 
+/** Whether `entry` is an http(s) URL, the only kind a destination can be. */
+export function isHttpUrl(entry: string): boolean {
+  return URL.canParse(entry) && ['https:', 'http:'].includes(new URL(entry).protocol)
+}
+
 /**
  * Split a secret holding URLs into valid http(s) URLs and a count of the rest.
  * The count carries no text, so a malformed secret cannot leak through it.
@@ -43,8 +48,7 @@ export function parseUrlList(value: unknown): { urls: string[], invalid: number 
   const urls: string[] = []
   let invalid = 0
   for (const entry of value.split(/[\s,]+/).filter(Boolean)) {
-    const parsed = URL.canParse(entry) ? new URL(entry) : null
-    if (parsed && (parsed.protocol === 'https:' || parsed.protocol === 'http:')) {
+    if (isHttpUrl(entry)) {
       urls.push(entry)
     }
     else {

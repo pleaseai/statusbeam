@@ -123,7 +123,9 @@ describe('a shard cron task', () => {
     await h.transport.invokeHook('cron', cron('check-0', { shard: 0 }))
     expect(h.http.requests()).toEqual([])
     expect(await bucketRows(h)).toEqual([])
-    expect(await h.inspect.kv.list()).toEqual([])
+    // Only the configuration-error record (T008) is written.
+    expect(await h.inspect.kv.list()).toHaveLength(1)
+    expect(await h.inspect.kv.get('snapshot:config-error')).toMatchObject({ version: 1, issues: [{ severity: 'error', path: '' }] })
   })
 })
 
