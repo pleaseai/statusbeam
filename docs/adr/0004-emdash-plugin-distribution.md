@@ -1,4 +1,4 @@
-# ADR-0004: EmDash distribution: sandboxed engine plugin + native render package
+# ADR-0004: EmDash distribution: sandboxed engine plugin + Astro render library
 
 ## Status
 
@@ -24,10 +24,17 @@ EmDash offers two plugin formats with different authority:
 |---|---|---|
 | Entry | `src/plugin.ts` default-exports a `SandboxedPlugin` | `definePlugin()` / `createPlugin()` |
 | Install | Registry, after admin approval of declared capabilities | Trusted site dependency only (code + config change) |
-| Can render page HTML | No — `page:fragments` and Astro components are trusted-only | Yes — Astro components via `componentsEntry` |
+| Portable Text block renderers | No — the site must supply one | Yes — Astro renderers via `componentsEntry` |
+| Raw HTML/scripts in pages | No — `page:fragments` is trusted-only | Yes |
 | Admin UI | Block Kit only | React or Block Kit |
 
-Four facts about StatusBeam and the EmDash host shape the decision:
+EmDash's format guide names only three needs that require a native plugin: a custom
+React admin, custom Portable Text block types, and raw HTML or scripts through
+`page:fragments`. Rendering a page is not one of them. An EmDash site is an Astro
+site, so its own pages can import Astro components from an ordinary npm package
+without installing any plugin.
+
+Five facts about StatusBeam and the EmDash host shape the decision:
 
 1. **The check engine compiles against the sandbox, but its HTTP semantics change.**
    `checkSite(site, { fetchImpl })` already takes an injected fetch
@@ -58,11 +65,25 @@ Four facts about StatusBeam and the EmDash host shape the decision:
    `public: true` and `cacheControl` do not remove it. Only a route that declares
    `response: "raw"` and returns `pluginResponse()` sends an unwrapped body
    (`application/json` is allowed; HTML, SVG, and other active types are not).
+5. **A sandboxed plugin runs in one of three modes, and needs a runner for two of
+   them.** Listed in `sandboxed: []`, it runs isolated under the site's configured
+   `sandboxRunner`: Worker Loader (`sandbox()` from `@emdash-cms/cloudflare`) or a
+   `workerd` child process on Node (`@emdash-cms/sandbox-workerd/sandbox`). The
+   runners enforce different fixed limits per invocation: Worker Loader caps CPU
+   time (50 ms), subrequests (10), and wall time (30 s); the Node/workerd runner
+   enforces only the 30 s wall time. Neither enforces a per-plugin memory limit.
+   With no runner configured, or with a runner the platform cannot provide, plugins in
+   `sandboxed: []` do not load, and EmDash only logs a startup warning. A site can
+   instead list the same plugin in `plugins: []` to run it in-process: capability
+   gating still applies, but there is no isolation and no per-plugin resource limit.
+   The EmDash docs do not say whether `ctx.http.fetch` buffers bodies the same way
+   in-process as under the two runners (fact 1).
 
-Shipping only a sandboxed plugin leaves EmDash sites with no way to render a status
-page. Shipping only a native plugin rules out registry install and needs full site
-authority. Shipping the full engine in *both* formats means a site that installs
-both runs every check twice, and nothing in EmDash prevents that.
+Shipping only a sandboxed plugin leaves every EmDash site to build its own status
+page templates against the JSON. Shipping only a native plugin rules out registry
+install and needs full site authority. Shipping the full engine in *both* formats
+means a site that installs both runs every check twice, and nothing in EmDash
+prevents that.
 
 ## Decision
 
@@ -81,9 +102,20 @@ Ship StatusBeam for EmDash as **two packages with one engine**:
      because EmDash strips credential headers at the route boundary;
    - a Block Kit admin page for monitors and settings.
 
-2. **`@statusbeam/emdash-ui` (npm, native) — rendering only.** A native plugin that
-   ships Astro components (status banner, 90-day bars, per-site detail) and **no
-   hooks, cron, or storage**. It fetches the public JSON from a configured base URL.
+2. **`@statusbeam/emdash-ui` (npm) — rendering only, not a plugin.** A plain Astro
+   component library (status banner, 90-day bars, per-site detail) that the site
+   imports into its own pages. It has no `definePlugin()`, no hooks, cron, or
+   storage, and needs no EmDash plugin registration or capability approval. It is
+   still a trusted site dependency: its components run as site code during SSR,
+   outside any sandbox. It fetches the public JSON from a configured base URL.
+   - **Optional native Portable Text block.** For sites that want editors to embed
+     status inside content, the package also ships an opt-in native plugin entry
+     point for a "status" Portable Text block. It needs both halves EmDash requires:
+     the editor definition in `admin.portableTextBlocks` (`type: "statusbeam-status"`
+     plus its fields), so editors can insert the block, and a `componentsEntry`
+     module exporting `blockComponents` keyed by that same `type`, rendering with
+     the same library components. It is the only StatusBeam code registered as a
+     native plugin, and it too has no hooks, cron, or storage.
 
 3. **A core-owned wire contract.** Move the public status response into
    `packages/core` as a zod schema + type (`statusResponseSchema`, per-site response).
@@ -120,26 +152,34 @@ URL at either source:
   status; the page and engine stay independent of the CMS.
 
 **Why this split:** the engine lives in exactly one package, and the render package
-has no hooks, cron, or storage, so installing both can't run checks twice.
-The render package is also designed to consume only the public JSON and never
-engine state. This is a design constraint, not a host guarantee: as a native
-plugin it runs with full site authority, and plugin-scoped storage (Context
-fact 3) isolates storage access only between plugins through the plugin API. Rendering
-requires native authority anyway, and isolating it in a hook-free package keeps the
-trusted surface small. The shared contract lets the same UI serve both deployment
-shapes instead of building a separate display-only plugin.
+is not a plugin at all, so installing both can't run checks twice. Rendering a page
+is not one of the format guide's native-only needs (Context), so the common case
+registers no StatusBeam plugin with the host: no capability approval, and no hooks,
+routes, or admin surface beyond the engine's. That does not make the renderer
+untrusted-safe. Both the component library and the optional Portable Text block run
+as site code outside the sandbox, with the site's full authority, like any other
+server-side dependency the site imports. Both are designed to consume only the
+public JSON and never engine state; that is a constraint their implementation keeps,
+not a boundary the host enforces, and plugin-scoped storage (Context fact 3) isolates
+storage access only between plugins through the plugin API. Keeping the renderer
+hook-free, storage-free, and its native entry point opt-in keeps the trusted surface
+small. The shared contract lets the same UI serve both deployment shapes instead of
+building a separate display-only plugin.
 
 ## Consequences
 
 ### Positive
 
-- One engine implementation for EmDash; the native package can't double-run checks.
+- One engine implementation for EmDash; the render package can't double-run checks.
 - `packages/core` code is reused by the engine without a fork (within the probe
   contract); the new JSON schema also tightens the existing standalone `/api/*`
   routes.
 - The render package works against standalone StatusBeam, so EmDash sites can show
   status without accepting the CMS-coupled engine.
-- The engine is registry-installable; only the small, read-only UI needs trust.
+- The engine is registry-installable, and the component library needs no plugin
+  registration or capability approval; only the optional Portable Text block is
+  registered as a native plugin. Both remain trusted site dependencies that site
+  operators review like any other server-side package.
 
 ### Negative
 
@@ -158,6 +198,13 @@ shapes instead of building a separate display-only plugin.
 - Instant Cache-Tag purge probably does not carry over — the host owns caching
   headers on plugin routes, so the plugin path likely falls back to TTL
   (`cacheControl`). _TODO: confirm against the EmDash host._
+- **A sandbox runner is required.** Installed as designed (`sandboxed: []`), the
+  engine does not load on a site with no `sandboxRunner` configured or with a runner
+  its platform cannot provide, and EmDash only logs a startup warning (Context
+  fact 5). The install docs must state this up front. Listing the engine in
+  `plugins: []` makes it load without a runner, but runs it in-process with no
+  isolation or resource limits, so the docs must present that as a trust decision,
+  not a workaround.
 - Users who want everything in EmDash install two packages from two places
   (registry + npm).
 - Config moves from `status.config.yml` to plugin settings / Block Kit, which departs
@@ -176,7 +223,8 @@ shapes instead of building a separate display-only plugin.
 ### Neutral
 
 - ADR-0002's standalone packages remain the primary distribution; this adds a channel.
-- New workspaces under `packages/` for the two plugins; release-please config grows.
+- New workspaces under `packages/` for the engine plugin and the component library;
+  release-please config grows.
 - Contract changes to the public JSON become versioned, breaking-change-aware events.
 
 ## Alternatives Considered
@@ -187,6 +235,14 @@ shapes instead of building a separate display-only plugin.
   standalone deployment.
 - **Sandboxed engine only.** Registry-installable, but cannot render a page; every
   site would have to build its own templates against the JSON.
+- **Render package as a native plugin.** An earlier draft of this ADR shipped the
+  Astro components inside a `definePlugin()` native plugin. Rendering a page is not
+  one of EmDash's native-only needs, so that form would add a plugin registration,
+  config change, and hook surface that the renderer does not use, for every site that
+  only wants to display status. It would not change the renderer's authority: a
+  plain library imported into site pages runs with the same full site authority. The
+  native plugin form is kept for the optional Portable Text block, the one piece
+  that needs `componentsEntry`.
 - **Native plugin only (full port).** Most capable and could reuse `StatusPage.astro`
   and possibly D1 SQL, but not registry-installable, runs with full site authority,
   and makes the whole app a second host to maintain.
@@ -199,9 +255,11 @@ shapes instead of building a separate display-only plugin.
 ## Open Questions (spike before Accepted)
 
 - _TODO: acceptance gate for probe semantics — run large, slow-body, and streaming
-  HTTP responses through `ctx.http.fetch` on both runners (Worker Loader and
-  Node/workerd) and confirm the graded results match the probe contract in
-  Decision (4)._
+  HTTP responses through `ctx.http.fetch` in all three execution modes (Context
+  fact 5): the Worker Loader runner, the Node/workerd runner, and in-process
+  (`plugins: []`), and confirm the graded results match the probe contract in
+  Decision (4). If in-process fetch does not buffer, the probe contract must say
+  which mode it describes, or the engine must refuse to run in-process._
 - _TODO: confirm the sandbox fetch's buffering-limit rejection is distinguishable
   from a network failure (error type or code), so the check-time guard in
   Decision (4) can classify it without masking a real outage; and decide how the
@@ -212,12 +270,19 @@ shapes instead of building a separate display-only plugin.
 
 - _TODO: minimum `ctx.cron.schedule()` interval — does it support the current
   5-minute cadence?_
-- _TODO: subrequest / CPU limits per `cron` invocation on the Cloudflare Worker
-  Loader runner, and how many sites one run can probe._
+- _TODO: how many sites one `cron` invocation can probe under Worker Loader's
+  10-subrequest and 50 ms CPU caps (fact 5), counting notification deliveries as
+  subrequests too, and whether the engine must split a run across invocations._
 - _TODO: `ctx.storage` query cost for 90 days of history per site; whether to
   store raw checks or pre-aggregated day buckets._
-- _TODO: whether a native plugin's Astro component can fetch a same-site public
-  plugin route during SSR without a network round trip._
+- _TODO: EmDash's Portable Text page says a sandboxed plugin can declare
+  `admin.portableTextBlocks` without `componentsEntry`, with the site passing its
+  own renderer; this is unverified against the EmDash source. Confirm it, and
+  whether the engine plugin could declare the status block and the site map it to
+  a library component, which would remove the native entry point for plugin-engine
+  sites (standalone-backed sites would still need it)._
+- _TODO: whether a component-library component rendered during the site's SSR can
+  fetch a same-site public plugin route without a network round trip._
 
 ## References
 
@@ -225,3 +290,7 @@ shapes instead of building a separate display-only plugin.
 - `ARCHITECTURE.md` — Architecture Invariants
 - EmDash plugin docs: `creating-plugins` skill — `references/sandbox-boundaries.md`,
   `references/hooks.md` (cron), `references/storage.md`, `references/api-routes.md`
+- EmDash docs: [Choosing a format](https://docs.emdashcms.com/plugins/creating-plugins/choosing-a-format/)
+  (native-only needs, sandbox runners, in-process `plugins: []`),
+  [Plugin Sandbox](https://docs.emdashcms.com/deployment/plugin-sandbox/) (per-runner limits),
+  [React admin](https://docs.emdashcms.com/plugins/creating-native-plugins/react-admin/)
