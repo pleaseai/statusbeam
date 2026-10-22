@@ -202,6 +202,11 @@ const plugin: SandboxedPlugin = {
     cron: async (event, ctx) => {
       const input = capacityInput({ ...event.data, tag: `cron-${event.name}` })
       const started = Date.now()
+      // Engine deadline check: abandon a never-completing fetch at 10 s, then keep
+      // making bridge calls (the probes and the closing KV write below).
+      const hang = (event.data as Record<string, unknown> | undefined)?.hang === 1
+        ? await probe(ctx, 'hang', FIXTURE_URLS['stream-120s']!, 10_000)
+        : null
       const result = await runCapacity(ctx, input)
       const summary = {
         name: event.name,
@@ -209,6 +214,7 @@ const plugin: SandboxedPlugin = {
         ranAt: new Date(started).toISOString(),
         wallMs: Date.now() - started,
         probesUp: result.probesUp,
+        ...(hang ? { hang: { status: hang.graded.status, code: hang.graded.code, wallMs: hang.wallMs } } : {}),
         failed: result.steps.filter(s => !s.ok).map(s => `${s.step}: ${s.error?.message ?? s.detail}`),
       }
       // The summary write is itself a bridge call, so it can fail once a limit is hit.
@@ -252,6 +258,7 @@ const plugin: SandboxedPlugin = {
             n,
             notify: Number(str(routeCtx.input, 'notify') ?? '0'),
             parse: Number(str(routeCtx.input, 'parse') ?? '1'),
+            hang: Number(str(routeCtx.input, 'hang') ?? '0'),
           }
           await ctx.cron!.schedule(name, { schedule, data })
           return { ok: true, name, schedule, tasks: await ctx.cron!.list() }

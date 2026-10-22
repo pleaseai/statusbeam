@@ -29,7 +29,7 @@ not change the versions that `apps/web` and `apps/docs` resolve.
 
 `src/pages/status.astro` renders the `@statusbeam/emdash-ui` components, imported by
 relative path from `packages/emdash-ui`. By default it reads the standalone deployment at
-`https://statusbeam.dev`; set `STATUSBEAM_BASE_URL` at build time to point it at another
+`https://demo.statusbeam.dev`; set `STATUSBEAM_BASE_URL` at build time to point it at another
 standalone deployment. `/status?source=plugin` reads this site's own StatusBeam plugin
 routes instead.
 
