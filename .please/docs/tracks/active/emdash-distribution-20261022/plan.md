@@ -108,7 +108,7 @@ Considered and not built (beyond the spec's Out of Scope):
 
 **Phase 5 — render library and docs**
 
-- [ ] T010 Build the Astro status components and contract client in `@statusbeam/emdash-ui` (file: packages/emdash-ui/src/components/StatusBanner.astro) (depends on T002) [FR-21, NFR-1, NFR-4, AC-027]
+- [~] T010 Build the Astro status components and contract client in `@statusbeam/emdash-ui` (file: packages/emdash-ui/src/components/StatusBanner.astro) (depends on T002) [FR-21, NFR-1, NFR-4, AC-027]
   Validation: Banner, 90-day bars and per-site detail render from either a standalone or a plugin base URL. Against a standalone deployment they show the same per-site status as its page (AC-027). Every status is conveyed by a text label or icon as well as color (NFR-4). A response that fails the contract renders an unavailable state instead of throwing. The package has no scheduled work, storage or engine imports (NFR-1).
   Method: `bun test packages/emdash-ui` for the contract client (bun cannot import `.astro`), plus `Skill("please:test-browser")` on an `apps/emdash-demo` page pointed at standalone and at the plugin
 - [ ] T011 Add the opt-in native "status" Portable Text block entry point (file: packages/emdash-ui/src/block.ts) (depends on T010) [FR-22]
@@ -155,6 +155,8 @@ Considered and not built (beyond the spec's Out of Scope):
   Evidence: `bun test` → 324 pass, 0 fail; `contract.test.ts` asserts each body equals the legacy payload with only `version: 1` prepended, parses under its schema, and the path map yields both flavors; `grep -c yaml packages/core/dist/contract.js` → 0; `bun run build`/`typecheck`/`lint` green in the track tree.
 - [x] (2026-10-22 16:24 KST) T003 Move the rollup, change detection, poll selection, notification delivery, webhook helpers and config issue list into core — `16c71b5`
   Evidence: `bun test` → 352 pass, 0 fail (314 before); no existing `*.test.ts` modified (`git diff --name-status 12da16f..HEAD -- '*.test.ts'` shows only additions); `rollup.test.ts` reproduces the pre-refactor worker output recorded in `fixtures/rollup-worker.json`; `config-issues.test.ts` covers syntax and schema issue paths; build/typecheck/lint green.
+- [~] (2026-10-22 17:34 KST) T010 Build the Astro status components and contract client in `@statusbeam/emdash-ui` — `ecd101a`, `98501b9`, `a378a12`
+  Evidence: `bun test` → 361 pass, 0 fail (`packages/emdash-ui` 9 pass: URL building for both flavors, valid body, schema-failing/non-JSON/503/rejected fetch → unavailable, and an import scan that allows only `@statusbeam/core/contract`); build 6/6, typecheck 10/10 (`astro check` 0 errors), lint clean in the track tree; `grep -c yaml packages/core/dist/contract.js` → 0. Browser check on `apps/emdash-demo` `/status` against a local fixture built by core's `buildStatusResponse`/`buildSiteResponse`: icon plus label for every severity, and "Status unavailable" for an enveloped body and for the not-yet-existing plugin route. Open: AC-027 against the live https://statusbeam.dev (the executor sandbox has no outbound DNS) and the plugin base URL (needs T006).
 
 ## Decision Log
 
@@ -167,4 +169,7 @@ Considered and not built (beyond the spec's Out of Scope):
 
 ## Surprises & Discoveries
 
+- Executors now start with `git reset --hard <track tip>` in their worktree, which removes the cherry-pick base problem above. Root `bun run build`/`typecheck` still fail inside a nested `.claude/worktrees/*` checkout (`@statusbeam/web` cannot find its tsconfig), so gates are re-run in the track tree.
+- Root `eslint .` lints the gitignored `apps/emdash-demo/.emdash/` that a demo build generates, so lint fails after a local demo run. Fix with an eslint ignore when T012 touches tooling.
+- `@statusbeam/core/contract` now also re-exports the pure display helpers (`getDict`, `formatDay`, `formatUptime`, `windowUptime`, `toSeverity`) so the render library matches apps/web's labels without importing the yaml-bearing core root.
 - Executor worktrees are cut from the main checkout's `main` (12da16f), not from the track branch, so they lack the track files. Their commits are cherry-picked onto the track branch, and Progress is recorded here by the lead.
