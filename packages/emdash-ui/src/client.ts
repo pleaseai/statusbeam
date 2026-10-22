@@ -90,20 +90,30 @@ interface Schema<T> {
   safeParse: (value: unknown) => { success: true, data: T } | { success: false, error: { message: string } }
 }
 
-/** A signal that aborts when any of `signals` does: `AbortSignal.any` where the runtime has it, otherwise wired by hand. */
-function anySignal(signals: AbortSignal[]): AbortSignal {
+/**
+ * A signal that aborts when any of `signals` does: `AbortSignal.any` where the
+ * runtime has it, otherwise wired by hand. Call `dispose` once the request
+ * settles so a long-lived caller signal does not keep the hand-wired listeners.
+ */
+function anySignal(signals: AbortSignal[]): { signal: AbortSignal, dispose: () => void } {
   if (typeof AbortSignal.any === 'function') {
-    return AbortSignal.any(signals)
+    return { signal: AbortSignal.any(signals), dispose: () => {} }
   }
   const controller = new AbortController()
+  const listeners: Array<[AbortSignal, () => void]> = []
   for (const signal of signals) {
     if (signal.aborted) {
       controller.abort(signal.reason)
       break
     }
-    signal.addEventListener('abort', () => controller.abort(signal.reason), { once: true })
+    const onAbort = () => controller.abort(signal.reason)
+    signal.addEventListener('abort', onAbort, { once: true })
+    listeners.push([signal, onAbort])
   }
-  return controller.signal
+  return {
+    signal: controller.signal,
+    dispose: () => listeners.forEach(([signal, onAbort]) => signal.removeEventListener('abort', onAbort)),
+  }
 }
 
 /**
@@ -130,7 +140,9 @@ async function fetchContract<T>(url: string, schema: Schema<T>, options: FetchOp
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
   const deadline = new AbortController()
   const timer = setTimeout(() => deadline.abort(new Error(`read exceeded the ${timeoutMs} ms deadline`)), timeoutMs)
-  const signal = options.signal ? anySignal([options.signal, deadline.signal]) : deadline.signal
+  const { signal, dispose } = options.signal
+    ? anySignal([options.signal, deadline.signal])
+    : { signal: deadline.signal, dispose: () => {} }
   try {
     let response: Response
     try {
@@ -160,6 +172,7 @@ async function fetchContract<T>(url: string, schema: Schema<T>, options: FetchOp
   }
   finally {
     clearTimeout(timer)
+    dispose()
   }
 }
 

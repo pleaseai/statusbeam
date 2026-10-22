@@ -128,6 +128,32 @@ describe('read deadline', () => {
     caller.abort()
     expect(seen?.aborted).toBe(true)
   })
+
+  it('leaves no listeners on a reused caller signal when the runtime lacks AbortSignal.any', async () => {
+    const any = AbortSignal.any
+    const caller = new AbortController()
+    const live = new Set<EventListenerOrEventListenerObject>()
+    const add = caller.signal.addEventListener.bind(caller.signal)
+    const remove = caller.signal.removeEventListener.bind(caller.signal)
+    caller.signal.addEventListener = ((type: string, listener: EventListenerOrEventListenerObject, options?: AddEventListenerOptions) => {
+      live.add(listener)
+      add(type, listener, options)
+    }) as typeof caller.signal.addEventListener
+    caller.signal.removeEventListener = ((type: string, listener: EventListenerOrEventListenerObject) => {
+      live.delete(listener)
+      remove(type, listener)
+    }) as typeof caller.signal.removeEventListener
+    try {
+      ;(AbortSignal as { any?: unknown }).any = undefined
+      for (let i = 0; i < 3; i++) {
+        expect(await fetchStatus({ baseUrl: 'https://x.test' }, { fetch: stub(() => json(status)).fetch, signal: caller.signal })).toMatchObject({ ok: true })
+      }
+    }
+    finally {
+      AbortSignal.any = any
+    }
+    expect(live.size).toBe(0)
+  })
 })
 
 describe('package surface (NFR-1)', () => {
