@@ -1,0 +1,17 @@
+{
+  "$schema": "../node_modules/@emdash-cms/plugin-cli/schemas/emdash-plugin.schema.json",
+
+  // ADR-0004 spike probe. Never published; the publisher DID is a placeholder.
+  "slug": "statusbeam-spike-probe",
+  "publisher": "did:plc:statusbeamspike",
+
+  "license": "MIT",
+  "author": { "name": "StatusBeam maintainers" },
+  "security": { "url": "https://github.com/pleaseai/statusbeam/security" },
+
+  // The engine needs unrestricted outbound HTTP (ADR-0004 Negative consequences).
+  "capabilities": ["network:request:unrestricted"],
+  "allowedHosts": [],
+  // One collection, to measure whether a batch write costs one bridge call.
+  "storage": { "buckets": { "indexes": ["slug"] } }
+}

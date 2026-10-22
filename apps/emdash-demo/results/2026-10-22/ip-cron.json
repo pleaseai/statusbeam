@@ -1,0 +1,200 @@
+{
+  "success": true,
+  "data": {
+    "ok": true,
+    "tasks": [
+      {
+        "name": "tensec",
+        "schedule": "*/10 * * * * *",
+        "nextRunAt": "2026-10-22T07:56:20.000Z",
+        "lastRunAt": "2026-10-22T07:56:10.001Z"
+      },
+      {
+        "name": "five",
+        "schedule": "*/5 * * * *",
+        "nextRunAt": "2026-10-22T08:00:00.000Z",
+        "lastRunAt": "2026-10-22T07:55:00.003Z"
+      }
+    ],
+    "runs": [
+      {
+        "key": "spike:cron:five",
+        "value": [
+          {
+            "name": "five",
+            "scheduledAt": "2026-10-22T07:55:00.000Z",
+            "ranAt": "2026-10-22T07:55:00.004Z",
+            "wallMs": 1328,
+            "probesUp": 12,
+            "failed": []
+          }
+        ]
+      },
+      {
+        "key": "spike:cron:tensec",
+        "value": [
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:53:00.000Z",
+            "ranAt": "2026-10-22T07:53:01.002Z",
+            "wallMs": 232,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:53:10.000Z",
+            "ranAt": "2026-10-22T07:53:10.001Z",
+            "wallMs": 243,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:53:20.000Z",
+            "ranAt": "2026-10-22T07:53:20.001Z",
+            "wallMs": 166,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:53:30.000Z",
+            "ranAt": "2026-10-22T07:53:30.002Z",
+            "wallMs": 194,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:53:40.000Z",
+            "ranAt": "2026-10-22T07:53:40.000Z",
+            "wallMs": 246,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:53:50.000Z",
+            "ranAt": "2026-10-22T07:53:50.000Z",
+            "wallMs": 188,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:54:00.000Z",
+            "ranAt": "2026-10-22T07:54:00.002Z",
+            "wallMs": 196,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:54:10.000Z",
+            "ranAt": "2026-10-22T07:54:10.003Z",
+            "wallMs": 209,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:54:20.000Z",
+            "ranAt": "2026-10-22T07:54:20.001Z",
+            "wallMs": 199,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:54:30.000Z",
+            "ranAt": "2026-10-22T07:54:30.000Z",
+            "wallMs": 191,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:54:40.000Z",
+            "ranAt": "2026-10-22T07:54:40.002Z",
+            "wallMs": 313,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:54:50.000Z",
+            "ranAt": "2026-10-22T07:54:51.004Z",
+            "wallMs": 385,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:55:00.000Z",
+            "ranAt": "2026-10-22T07:55:01.334Z",
+            "wallMs": 57,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:55:10.000Z",
+            "ranAt": "2026-10-22T07:55:10.001Z",
+            "wallMs": 268,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:55:20.000Z",
+            "ranAt": "2026-10-22T07:55:20.003Z",
+            "wallMs": 236,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:55:30.000Z",
+            "ranAt": "2026-10-22T07:55:30.002Z",
+            "wallMs": 244,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:55:40.000Z",
+            "ranAt": "2026-10-22T07:55:40.002Z",
+            "wallMs": 183,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:55:50.000Z",
+            "ranAt": "2026-10-22T07:55:51.001Z",
+            "wallMs": 231,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:56:00.000Z",
+            "ranAt": "2026-10-22T07:56:00.003Z",
+            "wallMs": 180,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:56:10.000Z",
+            "ranAt": "2026-10-22T07:56:10.001Z",
+            "wallMs": 206,
+            "probesUp": 1,
+            "failed": []
+          }
+        ]
+      }
+    ]
+  }
+}

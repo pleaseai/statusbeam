@@ -1,0 +1,69 @@
+Ad-hoc runs on 2026-10-22 (UTC), copied verbatim from the terminal.
+Format: query, HTTP status, client wall time, passed steps / total, first failures.
+WL = https://statusbeam-emdash-spike.balancefriends.workers.dev (Worker Loader)
+WD = http://127.0.0.1:4401 (Node/workerd)
+
+## WL: which bridge calls count against the 10-subrequest limit (probe 0.1.1)
+n=12 200 2474ms ok 11/13 probe-10:Too many subrequests by single Worker invocation. To configu [Error/Error] | probe-11:Too many subrequests by single Worker invocation. To configu [Error/Error]
+n=10&kvWrites=2 200 450ms ok 11/13 kv-0:Too many subrequests by single Worker invocation. To configu [Error/Error] | kv-1:Too many subrequests by single Worker invocation. To configu [Error/Error]
+n=0&kvWrites=12 200 1209ms ok 11/13 kv-10:Too many subrequests by single Worker invocation. To configu [Error/Error] | kv-11:Too many subrequests by single Worker invocation. To configu [Error/Error]
+n=0&logs=12 200 139ms ok 11/13 log-10:Too many subrequests by single Worker invocation. To configu [Error/Error] | log-11:Too many subrequests by single Worker invocation. To configu [Error/Error]
+n=0&parse=1 200 116ms ok 1/1
+
+## WL: putMany cost (probe 0.1.3)
+n=9&putMany=20 200 3677ms ok 11/11
+n=9&putMany=100 200 8980ms ok 11/11
+n=10&putMany=1 200 246ms ok 11/12 putMany:Too many subrequests by single Worker invocation. To configu [Error/Error]
+
+## WL: CPU limit, parseConfig iterations per invocation (probe 0.1.1)
+n=0&parse=500 200 2360ms ok 500/500
+n=0&parse=1000 200 1385ms ok 1000/1000
+n=0&parse=2500 400 204 {"success":false,"error":{"code":"ROUTE_ERROR","message":"Worker exceeded CPU time limit."}}
+n=0&parse=5000 400 151 {"success":false,"error":{"code":"ROUTE_ERROR","message":"Worker exceeded CPU time limit."}}
+-- second series, right after the first
+n=0&parse=1000 200 2779ms ok 1000/1000
+n=0&parse=1250 400 1147 {"success":false,"error":{"code":"ROUTE_ERROR","message":"Worker exceeded CPU time limit."}}
+n=0&parse=1500 400 224 {"success":false,"error":{"code":"ROUTE_ERROR","message":"Worker exceeded CPU time limit."}}
+n=0&parse=1750 400 219 {"success":false,"error":{"code":"ROUTE_ERROR","message":"Worker exceeded CPU time limit."}}
+n=0&parse=2000 400 188 {"success":false,"error":{"code":"ROUTE_ERROR","message":"Worker exceeded CPU time limit."}}
+n=0&parse=1500 400 216 {"success":false,"error":{"code":"ROUTE_ERROR","message":"Worker exceeded CPU time limit."}}
+n=0&parse=1000 400 187 {"success":false,"error":{"code":"ROUTE_ERROR","message":"Worker exceeded CPU time limit."}}
+n=0&parse=750 400 188 {"success":false,"error":{"code":"ROUTE_ERROR","message":"Worker exceeded CPU time limit."}}
+-- third series, after a 20 s pause
+n=0&parse=1 200 1316ms ok 1/1
+n=0&parse=10 200 129ms ok 10/10
+n=0&parse=50 200 251ms ok 50/50
+n=0&parse=100 200 385ms ok 100/100
+n=0&parse=200 200 345ms ok 200/200
+n=0&parse=400 200 531ms ok 400/400
+n=0&parse=600 200 834ms ok 600/600
+n=0&parse=1 200 76ms ok 1/1
+n=12&parse=1 200 422ms ok 11/13 probe-10:Too many subrequests by single Worker invocation. To configu [Error/Error] | probe-11:Too many subrequests by single Worker invocation. To configu [Error/Error]
+
+## WL: cron task with parse=3000 (wrangler tail of statusbeam-emdash-spike)
+[cron] Hook failed for statusbeam-spike-probe:cpuburn: Error: Worker exceeded CPU time limit.
+
+## WL: plugin-side timeout on the 120 s stream (probe?fixture=stream-120s&timeoutMs=10000)
+{"success":true,"data":{"ok":true,"outcome":{"label":"stream-120s","graded":{"slug":"stream-120s","status":"down","code":0,"responseTime":10000,"checkedAt":"2026-10-22T07:40:22.956Z","error":"spike probe timeout after 10000ms"},"raw":{"name":"Error","message":"spike probe timeout after 10000ms","ctor":"Error"},"wallMs":10000}}}
+
+## WL: cron task with n=12 (fixture Worker tail, requests per path)
+/ok/cron-five/0 .. /ok/cron-five/9 reached the fixture from Cloudflare at 07:45:18 and 07:50:18; /ok/cron-five/10 and /11 did not.
+No spike:cron:five summary was ever written (the closing KV write is call 11+).
+
+## WD: no subrequest or CPU limit
+n=0&parse=2500 200 4587ms ok 2500/2500
+n=0&parse=5000 200 6417ms ok 5000/5000
+n=30 200 4821ms ok 31/31
+n=0&logs=15&kvWrites=15 200 68ms ok 31/31
+
+## In-process: the 120 s stream with no client timeout
+{"success":true,"data":{"ok":true,"outcome":{"label":"stream-120s","graded":{"slug":"stream-120s","status":"degraded","code":200,"responseTime":120233,"checkedAt":"2026-10-22T07:48:21.203Z"},"raw":null,"wallMs":120233}}}
+
+## Local parseConfig cost (bun scripts/bench-parse.ts)
+{"monitors":25,"yamlBytes":3047,"coldMs":19.72,"warmMsPerParse":1.619,"runtime":"bun 1.4.3"}
+{"monitors":25,"yamlBytes":3047,"coldMs":20.46,"warmMsPerParse":1.395,"runtime":"bun 1.4.3"}
+-- later runs, same machine
+{"monitors":25,"yamlBytes":3047,"coldMs":38.08,"warmMsPerParse":5.867,"runtime":"bun 1.4.3"}
+{"monitors":25,"yamlBytes":3047,"coldMs":21.21,"warmMsPerParse":1.664,"runtime":"bun 1.4.3"}
+{"monitors":25,"yamlBytes":3047,"coldMs":21.12,"warmMsPerParse":1.442,"runtime":"bun 1.4.3"}
+{"monitors":25,"yamlBytes":3047,"coldMs":69.43,"warmMsPerParse":1.454,"runtime":"bun 1.4.3"}

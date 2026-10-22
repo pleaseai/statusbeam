@@ -1,0 +1,19 @@
+{
+  "name": "statusbeam-spike-probe",
+  "type": "module",
+  "version": "0.1.3",
+  "private": true,
+  "description": "ADR-0004 spike probe plugin. Not published; built by ../package.json scripts.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    },
+    "./sandbox": "./dist/plugin.mjs"
+  },
+  "main": "dist/index.mjs",
+  "files": [
+    "dist",
+    "emdash-plugin.jsonc"
+  ]
+}

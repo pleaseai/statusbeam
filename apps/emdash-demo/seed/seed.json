@@ -1,0 +1,26 @@
+{
+  "$schema": "https://emdashcms.com/seed.schema.json",
+  "version": "1",
+  "meta": {
+    "name": "StatusBeam spike",
+    "description": "Minimal schema for the ADR-0004 spike site",
+    "author": "StatusBeam"
+  },
+  "settings": {
+    "title": "StatusBeam EmDash spike",
+    "tagline": "Probe-semantics harness"
+  },
+  "collections": [
+    {
+      "slug": "posts",
+      "label": "Posts",
+      "labelSingular": "Post",
+      "urlPattern": "/posts/{slug}",
+      "supports": ["drafts", "revisions"],
+      "fields": [
+        { "slug": "title", "label": "Title", "type": "string", "required": true },
+        { "slug": "content", "label": "Content", "type": "portableText" }
+      ]
+    }
+  ]
+}

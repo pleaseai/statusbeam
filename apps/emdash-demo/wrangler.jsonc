@@ -1,0 +1,28 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // ADR-0004 spike site (Worker Loader mode). Spike-only resources; see README.md for teardown.
+  "name": "statusbeam-emdash-spike",
+  "main": "./src/worker.ts",
+  "compatibility_date": "2026-02-24",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "statusbeam-emdash-spike",
+      "database_id": "c22e9fd7-164b-49fb-a365-f8478092e080"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "MEDIA",
+      "bucket_name": "statusbeam-emdash-spike-media"
+    }
+  ],
+  // Sandboxed plugins require Worker Loader (Workers paid plan).
+  "worker_loaders": [{ "binding": "LOADER" }],
+  // EmDash maintenance + plugin cron executor. One minute is the Cron Trigger floor.
+  "triggers": {
+    "crons": ["* * * * *"]
+  },
+  "observability": { "enabled": true }
+}

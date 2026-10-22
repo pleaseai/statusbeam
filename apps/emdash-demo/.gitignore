@@ -1,0 +1,6 @@
+# EmDash local state (generated at build or first request)
+.emdash/
+emdash-env.d.ts
+data-*.db
+data-*.db-*
+uploads/
