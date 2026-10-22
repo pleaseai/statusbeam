@@ -115,6 +115,43 @@ The package exposes the pieces EmDash needs as `@statusbeam/emdash-ui/block` (th
 descriptor), `@statusbeam/emdash-ui/plugin` (the entrypoint) and
 `@statusbeam/emdash-ui/astro` (the `blockComponents` renderer).
 
+#### Restrict block sources (recommended)
+
+The block renderer fetches the status source URL on the server. It always
+refuses credentials, a query string and a fragment, and it does not follow
+redirects: a source that answers with one renders as unavailable, so enter its
+final URL. Without configuration, a production build also refuses `localhost`
+and loopback, private, link-local and unique-local IP **literals**; the
+development server (`astro dev`) accepts them so a local fixture works. It cannot see
+where a hostname resolves, so an editor can still enter a name that resolves to
+an internal address. Only an allowlist stops that. Pass the origins editors may
+use:
+
+```ts title="astro.config.mjs"
+emdash({
+  plugins: [
+    statusBeamBlock({
+      allowedOrigins: ['https://status.example.com', 'https://cms.example.com'],
+    }),
+  ],
+  // ...
+})
+```
+
+- A block whose source URL origin (scheme, host and port) is not listed renders
+  as unavailable and makes no request. The path after the origin is free.
+- Origins are compared normalised: case and a default port (`:443`, `:80`) do
+  not matter.
+- Each entry must be an http(s) origin with no path, query, fragment or
+  credentials. A bad entry fails the site build with an error that names it.
+- A listed origin is trusted as configured, even if it is a private address.
+  The credentials, query string and fragment checks still apply.
+- An empty or missing list keeps the default behavior above: the
+  literal-address check in production, none on the development server.
+
+The list reaches the renderer through the plugin's `createPlugin(options)`,
+which EmDash runs from its middleware before any page renders.
+
 ## Configure monitors
 
 Open **StatusBeam** in the EmDash admin. Only administrators can use the page.

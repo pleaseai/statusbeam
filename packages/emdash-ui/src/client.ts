@@ -174,6 +174,8 @@ async function fetchContract<T>(url: string, schema: Schema<T>, options: FetchOp
       return unavailable(url, 'network', message(error))
     }
     if (!response.ok) {
+      // Release the unread body (an error page, or a 3xx under `redirect: 'manual'`) so it does not hold the connection.
+      response.body?.cancel().catch(() => {})
       return unavailable(url, 'http', `HTTP ${response.status}`)
     }
     const declared = Number(response.headers.get('content-length'))

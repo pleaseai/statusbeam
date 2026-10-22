@@ -74,6 +74,18 @@ describe('fetchStatus / fetchSite', () => {
     expect(result).toMatchObject({ ok: false, reason: 'http', detail: 'HTTP 503' })
   })
 
+  it('cancels the unread body of a non-2xx response', async () => {
+    let cancelled = false
+    const body = new ReadableStream({
+      cancel() {
+        cancelled = true
+      },
+    }, { highWaterMark: 0 })
+    const result = await fetchStatus({ baseUrl: 'https://x.test' }, { fetch: stub(() => new Response(body, { status: 302 })).fetch })
+    expect(result).toMatchObject({ ok: false, reason: 'http', detail: 'HTTP 302' })
+    expect(cancelled).toBe(true)
+  })
+
   it('yields unavailable (network) when fetch rejects, without throwing', async () => {
     const failing = stub(() => {
       throw new TypeError('fetch failed')

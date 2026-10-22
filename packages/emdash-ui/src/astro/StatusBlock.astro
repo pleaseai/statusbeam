@@ -1,5 +1,7 @@
 ---
-import { selectFromBlock } from '../block-node'
+import { renderOptions } from '../block-config'
+import { blockFetchOptions, selectFromBlock } from '../block-node'
+import { fetchSite, fetchStatus } from '../client'
 import SiteDetail from '../components/SiteDetail.astro'
 import StatusBanner from '../components/StatusBanner.astro'
 import Unavailable from '../components/Unavailable.astro'
@@ -8,10 +10,15 @@ import Unavailable from '../components/Unavailable.astro'
  * Renders the "status" Portable Text block with the library components. EmDash
  * passes the block data as `Astro.props.node`. Only a development server accepts
  * a localhost or private source (a local fixture); a production build refuses it.
+ * The site's `allowedOrigins`, when configured, decide the source instead. The
+ * read itself happens here, so it does not follow redirects past those checks.
  */
-const selection = selectFromBlock(Astro.props.node ?? {}, { allowPrivateHosts: import.meta.env.DEV })
+const selection = selectFromBlock(Astro.props.node ?? {}, renderOptions(import.meta.env.DEV))
+const options = blockFetchOptions()
+const banner = selection.ok && selection.view === 'banner' ? await fetchStatus(selection.source, options) : undefined
+const site = selection.ok && selection.view === 'site' ? await fetchSite(selection.source, selection.slug, options) : undefined
 ---
 
-{selection.ok && selection.view === 'banner' && <StatusBanner {...selection.source} />}
-{selection.ok && selection.view === 'site' && <SiteDetail {...selection.source} slug={selection.slug} />}
+{banner && <StatusBanner result={banner} />}
+{site && <SiteDetail result={site} />}
 {!selection.ok && <Unavailable result={{ ok: false, reason: 'contract', detail: selection.reason, url: '' }} />}

@@ -1,5 +1,5 @@
 import type { RouteFlavor } from '@statusbeam/core/contract'
-import type { StatusSource } from './client'
+import type { FetchOptions, StatusSource } from './client'
 
 /**
  * The "status" Portable Text block's data shape and its mapping to the T010
@@ -12,8 +12,10 @@ import type { StatusSource } from './client'
  * - `slug`: the site to show; required when `view` is `site`.
  * - `baseUrl` + `flavor`: the producer to read, as `StatusSource` takes them.
  *
- * There is no site-level default: a Portable Text block renderer receives only
- * the block's own data, so each block carries its source.
+ * There is no site-level default source: a Portable Text block renderer
+ * receives only the block's own data, so each block carries its source. The
+ * one site-level setting, the allowed origins, reaches the renderer through
+ * `./block-config`.
  */
 export const BLOCK_TYPE = 'statusbeam-status'
 
@@ -104,6 +106,62 @@ export interface SelectOptions {
    * and a fragment are refused either way.
    */
   allowPrivateHosts?: boolean
+  /**
+   * Administrator-approved origins (scheme, host and port) a block may fetch.
+   * When non-empty, a base URL whose origin is not listed is refused, and the
+   * list replaces the literal-address check: an approved origin is fetched
+   * even if it names a private address, and a name that resolves to a private
+   * address is stopped unless it is listed. Credentials, a query and a fragment
+   * are still refused. One unreadable entry refuses every block, naming it.
+   */
+  allowedOrigins?: readonly string[]
+}
+
+/**
+ * Fetch options for a block's server-side read. Redirects are not followed:
+ * the checks in `selectFromBlock` see only the configured URL, so following a
+ * redirect would let an accepted source send the server to an origin nobody
+ * approved. A redirect answer renders as unavailable (`HTTP 3xx`).
+ * `redirect: 'manual'` rather than `'error'`, which Cloudflare Workers reject.
+ */
+export function blockFetchOptions(fetchImpl: typeof fetch = fetch): FetchOptions {
+  return { fetch: ((input, init) => fetchImpl(input, { ...init, redirect: 'manual' })) as typeof fetch }
+}
+
+export type OriginList
+  = | { ok: true, origins: string[] }
+    | { ok: false, reason: string }
+
+/**
+ * Validate configured origins and normalise each to `URL.origin` (lowercase
+ * host, default port dropped). An entry must be an absolute http(s) URL with no
+ * credentials, path beyond `/`, query or fragment; the first one that is not is
+ * reported instead of being skipped.
+ */
+export function parseAllowedOrigins(entries: unknown): OriginList {
+  if (!Array.isArray(entries)) {
+    return { ok: false, reason: 'allowedOrigins must be an array of origins' }
+  }
+  const origins: string[] = []
+  for (const entry of entries) {
+    const reason = `allowedOrigins entry ${JSON.stringify(entry)} must be an http(s) origin such as https://status.example.com`
+    if (typeof entry !== 'string') {
+      return { ok: false, reason }
+    }
+    let url: URL
+    try {
+      url = new URL(entry.trim())
+    }
+    catch {
+      return { ok: false, reason }
+    }
+    if ((url.protocol !== 'http:' && url.protocol !== 'https:') || url.username !== '' || url.password !== ''
+      || url.pathname !== '/' || url.href.includes('?') || url.href.includes('#')) {
+      return { ok: false, reason }
+    }
+    origins.push(url.origin)
+  }
+  return { ok: true, origins }
 }
 
 /**
@@ -113,6 +171,7 @@ export interface SelectOptions {
  * change what the appended contract path means), and must not name localhost or
  * a loopback, private, link-local or unique-local IP literal. Anything else is
  * refused, with the reason, unless `options.allowPrivateHosts` lifts the host check.
+ * With a non-empty `options.allowedOrigins`, the origin must be listed instead.
  */
 export function selectFromBlock(node: Record<string, unknown>, options: SelectOptions = {}): BlockSelection {
   const baseUrl = text(node.baseUrl)
@@ -133,9 +192,26 @@ export function selectFromBlock(node: Record<string, unknown>, options: SelectOp
   if (url.href.includes('?') || url.href.includes('#')) {
     return { ok: false, reason: 'baseUrl must not carry a query string or a fragment' }
   }
-  const hostReason = options.allowPrivateHosts ? undefined : nonPublicHost(url.hostname)
-  if (hostReason) {
-    return { ok: false, reason: hostReason }
+  // Options can arrive unvalidated (`createPlugin` called directly), so any defined value is
+  // parsed: a malformed one refuses the block instead of silently restoring the literal check.
+  let origins: string[] = []
+  if (options.allowedOrigins !== undefined) {
+    const allowed = parseAllowedOrigins(options.allowedOrigins)
+    if (!allowed.ok) {
+      return { ok: false, reason: allowed.reason }
+    }
+    origins = allowed.origins
+  }
+  if (origins.length > 0) {
+    if (!origins.includes(url.origin)) {
+      return { ok: false, reason: `baseUrl origin ${url.origin} is not in the site's allowed origins` }
+    }
+  }
+  else {
+    const hostReason = options.allowPrivateHosts ? undefined : nonPublicHost(url.hostname)
+    if (hostReason) {
+      return { ok: false, reason: hostReason }
+    }
   }
   const flavor: RouteFlavor = node.flavor === 'emdash' ? 'emdash' : 'standalone'
   const source: StatusSource = { baseUrl, flavor }
