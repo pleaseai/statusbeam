@@ -1,5 +1,5 @@
 import type { Dict, Locale, SiteSummary } from '@statusbeam/core'
-import { formatUptime, getDict, toSeverity, windowUptime } from '@statusbeam/core'
+import { getDict, toSeverity, uptimeFigure } from '@statusbeam/core'
 import { ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
@@ -23,6 +23,10 @@ const STYLE = {
   maintenance: { dot: 'bg-status-maintenance', badge: 'border-status-maintenance/40 text-status-maintenance' },
 } as const
 
+// A site not checked yet (`pending`) has no real status: neutral styling, its own label.
+const PENDING_STYLE = { dot: 'bg-status-nodata', badge: 'border-status-nodata/40 text-muted-foreground' } as const
+const NO_UPTIME = '—'
+
 /**
  * One status card row: name + rolled-up badge, a 90-day uptime timeline, and an
  * expandable response-time sparkline. Interactive (the breakdown tooltip and the
@@ -31,12 +35,16 @@ const STYLE = {
 function StatusRow({ site, locale, t }: Readonly<{ site: SiteSummary, locale: Locale, t: Dict }>) {
   const [open, setOpen] = useState(false)
   const severity = toSeverity(site.status)
-  const style = STYLE[severity]
+  const style = site.pending ? PENDING_STYLE : STYLE[severity]
   // Guard against stale KV snapshots written before these fields existed.
   const history = site.history ?? []
   const responseHistory = site.responseHistory ?? []
-  const uptime90 = formatUptime(windowUptime(history))
-  const breakdown = t.breakdown({ day: site.uptimeDay, week: site.uptimeWeek, month: site.uptimeMonth, quarter: uptime90 })
+  // No figure for a pending site or an empty window, which would otherwise read as 100%, as the uptime badge does.
+  const figure = uptimeFigure({ pending: site.pending, history })
+  const uptime90 = figure ?? NO_UPTIME
+  const breakdown = figure === null
+    ? t.breakdown({ day: NO_UPTIME, week: NO_UPTIME, month: NO_UPTIME, quarter: NO_UPTIME })
+    : t.breakdown({ day: site.uptimeDay, week: site.uptimeWeek, month: site.uptimeMonth, quarter: figure })
   return (
     <div className="px-5 py-4">
       <div className="flex items-center justify-between">
@@ -59,12 +67,12 @@ function StatusRow({ site, locale, t }: Readonly<{ site: SiteSummary, locale: Lo
             <TooltipContent>{breakdown}</TooltipContent>
           </Tooltip>
           <Badge variant="outline" className={style.badge}>
-            {t.severity[severity]}
+            {site.pending ? t.status.notChecked : t.severity[severity]}
           </Badge>
         </div>
       </div>
       <div className="mt-3">
-        <UptimeTimeline history={history} locale={locale} />
+        <UptimeTimeline history={history} pending={site.pending} locale={locale} />
       </div>
       {responseHistory.length > 0 && (
         <div className="mt-3">

@@ -59,7 +59,8 @@ export interface Dict {
   /** Per-day timeline bucket label. */
   day: Record<DayKey, string>
   incidents: { heading: string, recentlyResolved: string, none: string }
-  status: { responseTime: string }
+  /** `notChecked` labels a site with no real result yet (`pending` in the contract). */
+  status: { responseTime: string, notChecked: string }
   chart: { avg: string, p95: string, responseTime: string, noData: string }
   /** Unit suffix for response-time figures (kept as the symbol across locales). */
   unit: { ms: string }
@@ -67,6 +68,8 @@ export interface Dict {
     today: string
     windowStart: (days: number) => string
     ariaUptime: (uptime: string) => string
+    /** Accessible name of a timeline with no checked day, which has no uptime figure. */
+    ariaNoData: string
   }
   /** Uptime tooltip breakdown, e.g. "Today 100% · 7d 99.9% · …". */
   breakdown: (parts: { day: string, week: string, month: string, quarter: string }) => string
@@ -107,7 +110,7 @@ const en: Dict = {
     recentlyResolved: 'Recently resolved',
     none: 'No incidents reported in the last 90 days.',
   },
-  status: { responseTime: 'Response time' },
+  status: { responseTime: 'Response time', notChecked: 'Not checked yet' },
   chart: {
     avg: 'avg',
     p95: 'p95',
@@ -119,6 +122,7 @@ const en: Dict = {
     today: 'Today',
     windowStart: days => `${days} days ago`,
     ariaUptime: uptime => `90-day uptime history — ${uptime} uptime`,
+    ariaNoData: '90-day uptime history — no data yet',
   },
   breakdown: ({ day, week, month, quarter }) =>
     `Today ${day} · 7d ${week} · 30d ${month} · 90d ${quarter}`,
@@ -159,7 +163,7 @@ const zh: Dict = {
     recentlyResolved: '最近已解决',
     none: '过去 90 天内没有报告任何事件。',
   },
-  status: { responseTime: '响应时间' },
+  status: { responseTime: '响应时间', notChecked: '尚未检查' },
   chart: {
     avg: '平均',
     p95: 'p95',
@@ -171,6 +175,7 @@ const zh: Dict = {
     today: '今日',
     windowStart: days => `${days} 天前`,
     ariaUptime: uptime => `90 天正常运行记录 — 正常运行率 ${uptime}`,
+    ariaNoData: '90 天正常运行记录 — 暂无数据',
   },
   breakdown: ({ day, week, month, quarter }) =>
     `今日 ${day} · 7天 ${week} · 30天 ${month} · 90天 ${quarter}`,
@@ -211,7 +216,7 @@ const ja: Dict = {
     recentlyResolved: '最近解決済み',
     none: '過去90日間に報告されたインシデントはありません。',
   },
-  status: { responseTime: '応答時間' },
+  status: { responseTime: '応答時間', notChecked: '未確認' },
   chart: {
     avg: '平均',
     p95: 'p95',
@@ -223,6 +228,7 @@ const ja: Dict = {
     today: '今日',
     windowStart: days => `${days}日前`,
     ariaUptime: uptime => `90日間の稼働率履歴 — 稼働率 ${uptime}`,
+    ariaNoData: '90日間の稼働率履歴 — データなし',
   },
   breakdown: ({ day, week, month, quarter }) =>
     `今日 ${day} · 7日 ${week} · 30日 ${month} · 90日 ${quarter}`,
@@ -263,7 +269,7 @@ const ko: Dict = {
     recentlyResolved: '최근 해결됨',
     none: '최근 90일간 보고된 인시던트가 없습니다.',
   },
-  status: { responseTime: '응답 시간' },
+  status: { responseTime: '응답 시간', notChecked: '확인 전' },
   chart: {
     avg: '평균',
     p95: 'p95',
@@ -275,6 +281,7 @@ const ko: Dict = {
     today: '오늘',
     windowStart: days => `${days}일 전`,
     ariaUptime: uptime => `90일 가동률 기록 — 가동률 ${uptime}`,
+    ariaNoData: '90일 가동률 기록 — 데이터 없음',
   },
   breakdown: ({ day, week, month, quarter }) =>
     `오늘 ${day} · 7일 ${week} · 30일 ${month} · 90일 ${quarter}`,

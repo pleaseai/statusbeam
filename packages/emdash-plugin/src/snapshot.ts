@@ -356,7 +356,8 @@ export function advanceMonitor(
  * limit has a warning and no real result; it is left out, since core would read
  * it as `down` and show an outage nobody observed. A monitor with a warning and
  * an earlier real result keeps showing that result, and a monitor with neither
- * (not probed yet) reads as core's default (`down`). Warnings are on
+ * (not probed yet, or a webhook-only monitor before its first event) is
+ * `pending` ("not checked yet"), as standalone serves it. Warnings are on
  * `merged.monitors`.
  */
 export function summariesFromSnapshot(merged: MergedSnapshot, sites: Site[], now: Date): SiteSummary[] {

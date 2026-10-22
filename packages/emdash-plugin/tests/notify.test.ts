@@ -130,7 +130,7 @@ describe('a body-limit failure', () => {
     expect(fake.rows.get('big:2026-10-22')).toMatchObject({ up: 1, total: 1 })
   })
 
-  it('leaves a monitor whose only probes hit the limit out of the public summaries, instead of reporting it down', async () => {
+  it('leaves a monitor whose only probes hit the limit out of the public summaries, and reads an unprobed one as not checked yet', async () => {
     const at = '2026-10-22T10:05:00.000Z'
     const warning = { limit: 'body' as const, since: at, lastSeen: at }
     const snapshot: ShardSnapshot = {
@@ -145,7 +145,7 @@ describe('a body-limit failure', () => {
     }
     const sites = ['big', 'old', 'new'].map(name => siteSchema.parse({ name, url: `https://${name}.example.com/` }))
     const summaries = summariesFromSnapshot(mergeSnapshots([{ key: 'snapshot:0', value: snapshot }]), sites, new Date(at))
-    expect(summaries.map(s => [s.slug, s.status])).toEqual([['old', 'up'], ['new', 'down']])
+    expect(summaries.map(s => [s.slug, s.status, s.pending])).toEqual([['old', 'up', undefined], ['new', 'down', true]])
   })
 
   it('does not compare a limit result for change detection, so a recovery to the same status sends nothing', async () => {
@@ -211,6 +211,22 @@ describe('status-change notifications', () => {
     const hook = w.posts().find(r => r.url === HOOK_A)?.body as { changes: Array<{ slug: string, from: string, to: string }>, severity: string }
     expect(hook.changes).toEqual([{ slug: 'a', from: 'up', to: 'down' }, { slug: 'b', from: 'up', to: 'down' }])
     expect(hook.severity).toBe('major_outage')
+  })
+
+  it('sends nothing for a monitor\'s first real result after it read as not checked yet', async () => {
+    const w = world()
+    const c = clock()
+    const fake = createFakeContext({ config: monitorsYaml(['a']), settings: SECRETS.both, fetch: w.fetch })
+    const sites = [siteSchema.parse({ name: 'a', url: 'https://a.example.com/' })]
+    expect(summariesFromSnapshot(await readSnapshot(fake.ctx), sites, c.now())[0]).toMatchObject({ status: 'down', pending: true })
+
+    w.down.add('a')
+    await runShard(fake.ctx, 0, { now: c.now })
+
+    expect(w.posts()).toEqual([])
+    const [after] = summariesFromSnapshot(await readSnapshot(fake.ctx), sites, c.now())
+    expect(after).toMatchObject({ status: 'down' })
+    expect(after).not.toHaveProperty('pending')
   })
 
   it('sends nothing when nothing changed or no destination is configured', async () => {

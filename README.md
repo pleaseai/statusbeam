@@ -286,7 +286,8 @@ a component's slug (the `slug` from `status.config.yml`, or the slugified name):
 ```
 
 Colors are derived from severity (green → operational, yellow → degraded, red →
-down), uptime ratio, and response time. Add any shields.io query (`?style=flat-square`,
+down), uptime ratio, and response time. A site with no check result yet reads
+`not checked` in grey on its own badges and is left out of the overall badge. Add any shields.io query (`?style=flat-square`,
 `?label=API`, `?logo=cloudflare`) to restyle the rendered badge.
 
 ### Status API
@@ -297,6 +298,11 @@ down), uptime ratio, and response time. Add any shields.io query (`?style=flat-s
   history and response-time samples.
 
 Both send `Access-Control-Allow-Origin: *`, so a browser can fetch them directly.
+
+A site that has no check result yet (for example, a webhook-only Sentry monitor
+before its first event) carries `"pending": true` beside a placeholder
+`"status": "down"`. Treat it as "not checked yet", not as an outage; the
+rolled-up `status` already ignores it. The key is omitted for every other site.
 
 ---
 

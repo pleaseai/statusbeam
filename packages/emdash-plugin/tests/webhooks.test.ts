@@ -192,6 +192,22 @@ describe('an accepted webhook event', () => {
     expect(summary?.status).toBe('down')
     expect(summary?.history.at(-1)).toMatchObject({ date: '2026-10-22', status: 'down', uptime: 0 })
   })
+
+  it('reads a webhook-only monitor as not checked yet until its first event, which notifies nobody', async () => {
+    const fake = newContext({ webhookSecret: SECRET, webhookUrls: 'https://hook.example.com/secret' })
+    const sites = [{ name: 'errors', slug: 'errors', url: 'https://sentry.example.com/', check: 'sentry' } as never]
+    const [before] = summariesFromSnapshot(await readSnapshot(fake.ctx), sites, at(1)())
+    expect(before).toMatchObject({ slug: 'errors', status: 'down', pending: true })
+
+    const created = { action: 'created', data: { issue: { status: 'unresolved' } } }
+    expect((await post(fake.ctx, { provider: 'sentry', slug: 'errors', body: created, now: at(2) })).status).toBe(200)
+
+    expect(fake.bridgeCalls.filter(call => call === 'http.fetch')).toEqual([])
+    expect((fake.kv.get('snapshot:webhook:errors') as WebhookSnapshot).deliveries).toEqual([])
+    const [after] = summariesFromSnapshot(await readSnapshot(fake.ctx), sites, at(3)())
+    expect(after).toMatchObject({ slug: 'errors', status: 'down' })
+    expect(after).not.toHaveProperty('pending')
+  })
 })
 
 describe('a webhook racing a cron run', () => {

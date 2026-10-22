@@ -68,6 +68,14 @@ describe('getDict', () => {
     }
   })
 
+  it('labels a site not checked yet in every locale, apart from every severity label', () => {
+    for (const locale of LOCALES) {
+      const dict = getDict(locale)
+      expect(Object.values(dict.severity)).not.toContain(dict.status.notChecked)
+    }
+    expect(getDict('en').status.notChecked).toBe('Not checked yet')
+  })
+
   it('translates the banner headline per locale', () => {
     expect(getDict('en').banner.operational).toBe('All Systems Operational')
     expect(getDict('ko').banner.operational).toBe('모든 시스템 정상')

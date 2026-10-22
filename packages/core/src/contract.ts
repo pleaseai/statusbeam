@@ -1,7 +1,7 @@
 import type { UptimePeriod } from './badge'
 import type { SiteSummary } from './types'
 import { z } from 'zod'
-import { overallSeverity } from './types'
+import { overallSiteSeverity } from './types'
 
 /**
  * The public status contract: the JSON that `/api/status.json`,
@@ -18,12 +18,19 @@ import { overallSeverity } from './types'
 // uptime math. All are pure and yaml-free.
 export { DEFAULT_LOCALE, formatDay, getDict, LOCALES } from './i18n'
 export type { DayKey, Dict, Locale } from './i18n'
-export { formatUptime, toSeverity, windowUptime } from './types'
+export { formatUptime, overallSiteSeverity, toSeverity, uptimeFigure, windowUptime } from './types'
 export type { CheckStatus, DayStat, Severity } from './types'
 
 /**
  * Current contract version, carried in the body of the aggregate and per-site
  * responses (raw plugin routes cannot set custom headers).
+ *
+ * Additions that old consumers can ignore stay on this version. A site not
+ * checked yet is one: it is marked by an optional `pending: true` beside a
+ * placeholder `status: 'down'`, rather than by a new `status` value, because a
+ * consumer that parses `status` as the closed `up | degraded | down` enum would
+ * reject the whole body on an unknown value, while it strips an unknown key.
+ * The key is omitted for a checked site, so those bodies are unchanged.
  */
 export const CONTRACT_VERSION = 1
 
@@ -36,6 +43,12 @@ const dayStatSchema = z.object({
   status: checkStatusSchema.nullable(),
   uptime: z.number(),
 })
+
+/**
+ * `true` when the site has no real result yet ("not checked yet"); omitted
+ * otherwise. Its `status` is then a placeholder `down`, not an observed outage.
+ */
+const pendingSchema = z.literal(true).optional()
 
 const responsePointSchema = z.object({
   at: z.string(),
@@ -51,6 +64,7 @@ export const statusResponseSchema = z.object({
     slug: z.string(),
     name: z.string(),
     status: checkStatusSchema,
+    pending: pendingSchema,
     responseTime: z.number(),
     uptime: z.object({ day: z.string(), week: z.string(), month: z.string() }),
   })),
@@ -63,6 +77,7 @@ export const siteResponseSchema = z.object({
   slug: z.string(),
   name: z.string(),
   status: checkStatusSchema,
+  pending: pendingSchema,
   responseTime: z.number(),
   uptimeDay: z.string(),
   uptimeWeek: z.string(),
@@ -80,16 +95,20 @@ export const shieldsEndpointSchema = z.object({
   color: z.string(),
 })
 
-/** Build the aggregate response. `now` is injected so callers (and tests) control `generatedAt`. */
+/**
+ * Build the aggregate response. `now` is injected so callers (and tests) control
+ * `generatedAt`. The overall `status` ignores sites not checked yet.
+ */
 export function buildStatusResponse(summary: SiteSummary[], now: Date = new Date()): StatusResponse {
   return {
     version: CONTRACT_VERSION,
-    status: overallSeverity(summary.map(s => s.status)),
+    status: overallSiteSeverity(summary),
     generatedAt: now.toISOString(),
     sites: summary.map(s => ({
       slug: s.slug,
       name: s.name,
       status: s.status,
+      ...(s.pending ? { pending: true } : {}),
       responseTime: s.responseTime,
       uptime: { day: s.uptimeDay, week: s.uptimeWeek, month: s.uptimeMonth },
     })),

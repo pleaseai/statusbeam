@@ -1,7 +1,7 @@
 ---
 import type { Locale } from '@statusbeam/core/contract'
 import type { SiteInput } from '../client'
-import { DEFAULT_LOCALE, formatUptime, getDict, toSeverity, windowUptime } from '@statusbeam/core/contract'
+import { DEFAULT_LOCALE, getDict, toSeverity, uptimeFigure } from '@statusbeam/core/contract'
 import { loadSite } from '../client'
 import '../styles/tokens.css'
 import StatusIcon from './StatusIcon.astro'
@@ -13,19 +13,29 @@ import UptimeBars from './UptimeBars.astro'
  * the latest response time. Mirrors one row of apps/web's StatusList, rendered
  * statically: the uptime breakdown that apps/web shows in a tooltip is printed
  * as text, and the status label sits beside its icon, so color is never the
- * only cue.
+ * only cue. A site not checked yet (`pending`) reads "Not checked yet" in a
+ * neutral tone instead of its placeholder `down`.
  *
  * Pass `baseUrl` + `slug` (plus `flavor` for an EmDash plugin source) to fetch,
  * or a `result` from `fetchSite` to reuse one request.
  */
 type Props = SiteInput & { locale?: Locale }
 
+const NO_UPTIME = '—'
+
 const { locale = DEFAULT_LOCALE, ...input } = Astro.props
 const result = await loadSite(input)
 const t = getDict(locale)
 const site = result.ok ? result.data : undefined
 const severity = site && toSeverity(site.status)
-const uptime90 = site && formatUptime(windowUptime(site.history))
+// A site not checked yet carries a placeholder `down`: show its own label and a neutral tone, not an outage.
+const pending = site?.pending === true
+// No figure for a pending site or an empty window, which would otherwise read as 100%, as the uptime badge does.
+const figure = site ? uptimeFigure(site) : null
+const uptime90 = figure ?? NO_UPTIME
+const uptimes = site && (figure === null
+  ? { day: NO_UPTIME, week: NO_UPTIME, month: NO_UPTIME, quarter: NO_UPTIME }
+  : { day: site.uptimeDay, week: site.uptimeWeek, month: site.uptimeMonth, quarter: figure })
 ---
 
 {!result.ok && <Unavailable result={result} locale={locale} />}
@@ -34,14 +44,14 @@ const uptime90 = site && formatUptime(windowUptime(site.history))
     <div class="sb-head">
       <span class="sb-name">{site.name}</span>
       <span class="sb-uptime">{uptime90}</span>
-      <span class="sb-badge" data-sb-tone={severity}>
-        <StatusIcon kind={severity} size={14} />
-        <span>{t.severity[severity]}</span>
+      <span class="sb-badge" data-sb-tone={pending ? 'pending' : severity}>
+        <StatusIcon kind={pending ? 'pending' : severity} size={14} />
+        <span>{pending ? t.status.notChecked : t.severity[severity]}</span>
       </span>
     </div>
     <UptimeBars result={result} locale={locale} />
     <p class="sb-meta">
-      <span>{t.breakdown({ day: site.uptimeDay, week: site.uptimeWeek, month: site.uptimeMonth, quarter: uptime90 ?? '' })}</span>
+      <span>{uptimes && t.breakdown(uptimes)}</span>
       {/* The current value stands alone: the plugin's summaries carry no responseHistory. */}
       {site.responseTime > 0 && (
         <span>{t.status.responseTime} · {site.responseTime} {t.unit.ms}</span>

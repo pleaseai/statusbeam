@@ -53,7 +53,19 @@ export interface DayStat {
 export interface SiteSummary {
   slug: string
   name: string
+  /**
+   * Latest real status. A site not checked yet (see {@link SiteSummary.pending})
+   * carries `down` here so consumers that predate `pending` read it as before.
+   */
   status: CheckStatus
+  /**
+   * `true` when the site has no real result yet (never probed, or a
+   * webhook-only monitor before its first event): its `status` is not a real
+   * outcome, so it is shown as "not checked yet" and left out of the overall
+   * severity and of change detection. Omitted (never `false`) otherwise, so the
+   * serialized summary of a checked site is unchanged.
+   */
+  pending?: true
   responseTime: number
   /** Trailing uptime percentages as display strings, e.g. "99.98%". */
   uptimeDay: string
@@ -92,6 +104,15 @@ export function overallSeverity(statuses: CheckStatus[]): Severity {
 }
 
 /**
+ * Overall severity across sites, ignoring sites not checked yet: their `down`
+ * is a placeholder, not an observed outage. With every site pending (or none),
+ * the result is `operational`.
+ */
+export function overallSiteSeverity(sites: Array<Pick<SiteSummary, 'status' | 'pending'>>): Severity {
+  return overallSeverity(sites.filter(s => !s.pending).map(s => s.status))
+}
+
+/**
  * Average uptime over a day-stat window, ignoring no-data days. Returns `1`
  * when the window is empty or entirely no-data (nothing to report against).
  */
@@ -108,6 +129,19 @@ export function formatUptime(ratio: number): string {
   const pct = ratio * 100
   // Avoid "100.00%" when a rounded value reaches 100.
   return pct >= 99.995 ? '100%' : `${pct.toFixed(2)}%`
+}
+
+/**
+ * The 90-day uptime figure a renderer shows for a site, or `null` when it has
+ * none: the site is not checked yet, or its window holds no checked day, which
+ * {@link windowUptime} would read as 100%. The shorter windows are tails of the
+ * same history, so `null` means none of them has a figure either.
+ */
+export function uptimeFigure(site: { pending?: boolean, history: DayStat[] }): string | null {
+  if (site.pending || !site.history.some(d => d.status !== null)) {
+    return null
+  }
+  return formatUptime(windowUptime(site.history))
 }
 
 /** Mean response time (ms) over a sample window; `0` for an empty window. */

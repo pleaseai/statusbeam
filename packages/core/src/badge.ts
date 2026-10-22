@@ -1,5 +1,5 @@
 import type { SiteSummary } from './types'
-import { overallSeverity, toSeverity } from './types'
+import { overallSiteSeverity, toSeverity } from './types'
 
 /**
  * A shields.io [endpoint badge](https://shields.io/badges/endpoint-badge)
@@ -27,7 +27,19 @@ export type UptimePeriod = 'day' | 'week' | 'month'
  * instead of slipping through to a broken badge. `ShieldsEndpoint.color` stays
  * `string` because the wire contract also accepts raw `rrggbb` hex.
  */
-export type BadgeColor = 'brightgreen' | 'green' | 'yellowgreen' | 'yellow' | 'orange' | 'red' | 'blue'
+export type BadgeColor = 'brightgreen' | 'green' | 'yellowgreen' | 'yellow' | 'orange' | 'red' | 'blue' | 'lightgrey'
+
+/**
+ * Badge message for a site not checked yet (`pending`). Its `status` is a
+ * placeholder `down`, so badges report this neutral message in grey instead of
+ * an outage nobody observed.
+ */
+export const NOT_CHECKED_MESSAGE = 'not checked'
+
+/** The neutral badge body for a site not checked yet. */
+function notCheckedBadge(label: string): ShieldsEndpoint {
+  return { schemaVersion: 1, label, message: NOT_CHECKED_MESSAGE, color: 'lightgrey' }
+}
 
 /** Map a display severity to a shields.io badge color. */
 export function severityColor(status: SiteSummary['status']): BadgeColor {
@@ -128,8 +140,11 @@ function uptimeDisplay(site: SiteSummary, period: UptimePeriod): string {
   }
 }
 
-/** Status badge for one site: `<name> | up|degraded|down`. */
+/** Status badge for one site: `<name> | up|degraded|down`, or `not checked` in grey while pending. */
 export function statusBadge(site: SiteSummary): ShieldsEndpoint {
+  if (site.pending) {
+    return notCheckedBadge(site.name)
+  }
   return {
     schemaVersion: 1,
     label: site.name,
@@ -141,16 +156,18 @@ export function statusBadge(site: SiteSummary): ShieldsEndpoint {
 /**
  * Overall status badge across every site (worst status wins). Label is
  * `status`; message is `operational` when all up, else the worst severity.
+ * Sites not checked yet are ignored, as in the aggregate status.
  */
 export function overallBadge(summary: SiteSummary[]): ShieldsEndpoint {
-  const severity = overallSeverity(summary.map(s => s.status))
+  const checked = summary.filter(s => !s.pending)
+  const severity = overallSiteSeverity(checked)
   const message = severity === 'operational'
     ? 'operational'
     : severity.replace(/_/g, ' ')
   // Color keys off the worst site's raw status so severityColor's mapping is reused.
-  const worst = summary.find(s => s.status === 'down')
-    ?? summary.find(s => s.status === 'degraded')
-    ?? summary[0]
+  const worst = checked.find(s => s.status === 'down')
+    ?? checked.find(s => s.status === 'degraded')
+    ?? checked[0]
   return {
     schemaVersion: 1,
     label: 'status',
@@ -159,8 +176,14 @@ export function overallBadge(summary: SiteSummary[]): ShieldsEndpoint {
   }
 }
 
-/** Uptime badge for one site over `period` (default `month`). */
+/**
+ * Uptime badge for one site over `period` (default `month`). A site not checked
+ * yet has no uptime to report, so it gets the neutral `not checked` badge.
+ */
 export function uptimeBadge(site: SiteSummary, period: UptimePeriod = 'month'): ShieldsEndpoint {
+  if (site.pending) {
+    return notCheckedBadge('uptime')
+  }
   const display = uptimeDisplay(site, period)
   return {
     schemaVersion: 1,
@@ -174,9 +197,13 @@ export function uptimeBadge(site: SiteSummary, period: UptimePeriod = 'month'): 
  * Response-time badge for one site: `response time | <n>ms`. A down site's
  * check never received a response, so `responseTime` is `0` — reported as-is
  * it would read as the fastest possible response instead of an outage, so a
- * down site gets a `down`/red badge instead of `0ms`/brightgreen.
+ * down site gets a `down`/red badge instead of `0ms`/brightgreen. A site not
+ * checked yet has no response either, and no outage: `not checked` in grey.
  */
 export function responseBadge(site: SiteSummary): ShieldsEndpoint {
+  if (site.pending) {
+    return notCheckedBadge('response time')
+  }
   if (site.status === 'down') {
     return {
       schemaVersion: 1,

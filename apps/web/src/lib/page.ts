@@ -1,12 +1,12 @@
 import type { Incident, SiteSummary } from '@statusbeam/core'
 import type { AstroGlobal } from 'astro'
-import { cacheTagHeader, overallSeverity } from '@statusbeam/core'
+import { cacheTagHeader, overallSiteSeverity } from '@statusbeam/core'
 import { getIncidents, getSummary } from './data'
 
 export interface StatusPageData {
   summary: SiteSummary[]
   incidents: Incident[]
-  overall: ReturnType<typeof overallSeverity>
+  overall: ReturnType<typeof overallSiteSeverity>
 }
 
 /**
@@ -26,5 +26,6 @@ export async function loadStatusPage(astro: AstroGlobal): Promise<StatusPageData
   // site) invalidates it the instant a status changes, not on TTL expiry.
   astro.response.headers.set('Cache-Tag', cacheTagHeader(summary.map(s => s.slug)))
 
-  return { summary, incidents, overall: overallSeverity(summary.map(s => s.status)) }
+  // Sites not checked yet are left out of the overall severity, as in `/api/status.json`.
+  return { summary, incidents, overall: overallSiteSeverity(summary) }
 }
