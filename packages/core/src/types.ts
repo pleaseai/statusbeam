@@ -21,6 +21,14 @@ export interface CheckResult {
   checkedAt: string
   /** Present when the check failed to complete. */
   error?: string
+  /**
+   * Set when the host's own limit ended the request, not the monitored target
+   * (`body`: the response body exceeded the host's size cap). Only a caller that
+   * injects a `classifyError` to {@link checkSite} sees it. The result is then
+   * not a real outcome of the target: `status` is `down` with `code: 0` to stay
+   * in the closed status set, but callers must not count it, grade it, or alert on it.
+   */
+  limit?: 'body'
 }
 
 /** One response-time sample, for the recent-latency sparkline. */

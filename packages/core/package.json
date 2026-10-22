@@ -17,6 +17,12 @@
       "development": "./src/index.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./contract": {
+      "types": "./dist/contract.d.ts",
+      "development": "./src/contract.ts",
+      "import": "./dist/contract.js",
+      "default": "./dist/contract.js"
     }
   },
   "main": "./dist/index.js",
@@ -31,7 +37,7 @@
     "provenance": true
   },
   "scripts": {
-    "build": "bun build ./src/index.ts --outdir dist --target node --format esm --external yaml --external zod && tsc -p tsconfig.build.json",
+    "build": "bun build ./src/index.ts ./src/contract.ts --outdir dist --target node --format esm --external yaml --external zod && tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

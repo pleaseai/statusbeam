@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    "lib": ["ES2023", "DOM"],
+    "types": ["bun", "astro/client"],
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts", "src/**/*.astro"]
+}

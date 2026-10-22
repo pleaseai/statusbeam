@@ -49,6 +49,22 @@
       "changelog-path": "CHANGELOG.md",
       "bump-minor-pre-major": true,
       "bump-patch-for-minor-pre-major": false
+    },
+    "packages/emdash-plugin": {
+      "release-type": "node",
+      "component": "emdash-plugin",
+      "package-name": "@statusbeam/emdash-plugin",
+      "changelog-path": "CHANGELOG.md",
+      "bump-minor-pre-major": true,
+      "bump-patch-for-minor-pre-major": false
+    },
+    "packages/emdash-ui": {
+      "release-type": "node",
+      "component": "emdash-ui",
+      "package-name": "@statusbeam/emdash-ui",
+      "changelog-path": "CHANGELOG.md",
+      "bump-minor-pre-major": true,
+      "bump-patch-for-minor-pre-major": false
     }
   }
 }

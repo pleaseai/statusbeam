@@ -1,0 +1,321 @@
+{
+  "success": true,
+  "data": {
+    "ok": true,
+    "tasks": [
+      {
+        "name": "sharda",
+        "schedule": "* * * * *",
+        "nextRunAt": "2026-10-22T07:56:00.000Z",
+        "lastRunAt": "2026-10-22T07:55:17.546Z"
+      },
+      {
+        "name": "shardb",
+        "schedule": "* * * * *",
+        "nextRunAt": "2026-10-22T07:56:00.000Z",
+        "lastRunAt": "2026-10-22T07:55:17.546Z"
+      },
+      {
+        "name": "shardc",
+        "schedule": "* * * * *",
+        "nextRunAt": "2026-10-22T07:56:00.000Z",
+        "lastRunAt": "2026-10-22T07:55:17.546Z"
+      },
+      {
+        "name": "cpuburn",
+        "schedule": "* * * * *",
+        "nextRunAt": "2026-10-22T07:56:00.000Z",
+        "lastRunAt": "2026-10-22T07:55:17.546Z"
+      },
+      {
+        "name": "five",
+        "schedule": "*/5 * * * *",
+        "nextRunAt": "2026-10-22T08:00:00.000Z",
+        "lastRunAt": "2026-10-22T07:55:17.546Z"
+      }
+    ],
+    "runs": [
+      {
+        "key": "spike:cron:one",
+        "value": [
+          {
+            "name": "one",
+            "scheduledAt": "2026-10-22T07:42:00.000Z",
+            "ranAt": "2026-10-22T07:42:18.445Z",
+            "wallMs": 123,
+            "probesUp": 3,
+            "failed": []
+          },
+          {
+            "name": "one",
+            "scheduledAt": "2026-10-22T07:43:00.000Z",
+            "ranAt": "2026-10-22T07:43:17.805Z",
+            "wallMs": 94,
+            "probesUp": 3,
+            "failed": []
+          },
+          {
+            "name": "one",
+            "scheduledAt": "2026-10-22T07:44:00.000Z",
+            "ranAt": "2026-10-22T07:44:17.920Z",
+            "wallMs": 94,
+            "probesUp": 3,
+            "failed": []
+          },
+          {
+            "name": "one",
+            "scheduledAt": "2026-10-22T07:45:00.000Z",
+            "ranAt": "2026-10-22T07:45:18.910Z",
+            "wallMs": 26,
+            "probesUp": 3,
+            "failed": []
+          },
+          {
+            "name": "one",
+            "scheduledAt": "2026-10-22T07:46:00.000Z",
+            "ranAt": "2026-10-22T07:46:18.298Z",
+            "wallMs": 140,
+            "probesUp": 3,
+            "failed": []
+          },
+          {
+            "name": "one",
+            "scheduledAt": "2026-10-22T07:47:00.000Z",
+            "ranAt": "2026-10-22T07:47:17.938Z",
+            "wallMs": 67,
+            "probesUp": 3,
+            "failed": []
+          },
+          {
+            "name": "one",
+            "scheduledAt": "2026-10-22T07:48:00.000Z",
+            "ranAt": "2026-10-22T07:48:18.584Z",
+            "wallMs": 137,
+            "probesUp": 3,
+            "failed": []
+          },
+          {
+            "name": "one",
+            "scheduledAt": "2026-10-22T07:49:00.000Z",
+            "ranAt": "2026-10-22T07:49:17.727Z",
+            "wallMs": 63,
+            "probesUp": 3,
+            "failed": []
+          },
+          {
+            "name": "one",
+            "scheduledAt": "2026-10-22T07:50:00.000Z",
+            "ranAt": "2026-10-22T07:50:19.595Z",
+            "wallMs": 17,
+            "probesUp": 3,
+            "failed": []
+          },
+          {
+            "name": "one",
+            "scheduledAt": "2026-10-22T07:51:00.000Z",
+            "ranAt": "2026-10-22T07:51:18.324Z",
+            "wallMs": 120,
+            "probesUp": 3,
+            "failed": []
+          }
+        ]
+      },
+      {
+        "key": "spike:cron:tensec",
+        "value": [
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:41:30.000Z",
+            "ranAt": "2026-10-22T07:42:19.114Z",
+            "wallMs": 13,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:42:20.000Z",
+            "ranAt": "2026-10-22T07:43:18.397Z",
+            "wallMs": 8,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:43:20.000Z",
+            "ranAt": "2026-10-22T07:44:18.545Z",
+            "wallMs": 10,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:44:20.000Z",
+            "ranAt": "2026-10-22T07:45:19.491Z",
+            "wallMs": 12,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:45:20.000Z",
+            "ranAt": "2026-10-22T07:46:18.977Z",
+            "wallMs": 12,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:46:20.000Z",
+            "ranAt": "2026-10-22T07:47:18.542Z",
+            "wallMs": 10,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:47:20.000Z",
+            "ranAt": "2026-10-22T07:48:19.259Z",
+            "wallMs": 19,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:48:20.000Z",
+            "ranAt": "2026-10-22T07:49:18.318Z",
+            "wallMs": 9,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:49:20.000Z",
+            "ranAt": "2026-10-22T07:50:20.160Z",
+            "wallMs": 6,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:50:20.000Z",
+            "ranAt": "2026-10-22T07:51:19.087Z",
+            "wallMs": 28,
+            "probesUp": 1,
+            "failed": []
+          }
+        ]
+      },
+      {
+        "key": "spike:cron:sharda",
+        "value": [
+          {
+            "name": "sharda",
+            "scheduledAt": "2026-10-22T07:52:00.000Z",
+            "ranAt": "2026-10-22T07:52:18.170Z",
+            "wallMs": 387,
+            "probesUp": 8,
+            "failed": []
+          },
+          {
+            "name": "sharda",
+            "scheduledAt": "2026-10-22T07:53:00.000Z",
+            "ranAt": "2026-10-22T07:53:17.712Z",
+            "wallMs": 270,
+            "probesUp": 8,
+            "failed": []
+          },
+          {
+            "name": "sharda",
+            "scheduledAt": "2026-10-22T07:54:00.000Z",
+            "ranAt": "2026-10-22T07:54:18.450Z",
+            "wallMs": 371,
+            "probesUp": 8,
+            "failed": []
+          },
+          {
+            "name": "sharda",
+            "scheduledAt": "2026-10-22T07:55:00.000Z",
+            "ranAt": "2026-10-22T07:55:18.341Z",
+            "wallMs": 46,
+            "probesUp": 8,
+            "failed": []
+          }
+        ]
+      },
+      {
+        "key": "spike:cron:shardb",
+        "value": [
+          {
+            "name": "shardb",
+            "scheduledAt": "2026-10-22T07:52:00.000Z",
+            "ranAt": "2026-10-22T07:52:19.169Z",
+            "wallMs": 62,
+            "probesUp": 8,
+            "failed": []
+          },
+          {
+            "name": "shardb",
+            "scheduledAt": "2026-10-22T07:53:00.000Z",
+            "ranAt": "2026-10-22T07:53:18.691Z",
+            "wallMs": 46,
+            "probesUp": 8,
+            "failed": []
+          },
+          {
+            "name": "shardb",
+            "scheduledAt": "2026-10-22T07:54:00.000Z",
+            "ranAt": "2026-10-22T07:54:19.407Z",
+            "wallMs": 82,
+            "probesUp": 8,
+            "failed": []
+          },
+          {
+            "name": "shardb",
+            "scheduledAt": "2026-10-22T07:55:00.000Z",
+            "ranAt": "2026-10-22T07:55:18.992Z",
+            "wallMs": 46,
+            "probesUp": 8,
+            "failed": []
+          }
+        ]
+      },
+      {
+        "key": "spike:cron:shardc",
+        "value": [
+          {
+            "name": "shardc",
+            "scheduledAt": "2026-10-22T07:52:00.000Z",
+            "ranAt": "2026-10-22T07:52:19.830Z",
+            "wallMs": 61,
+            "probesUp": 8,
+            "failed": []
+          },
+          {
+            "name": "shardc",
+            "scheduledAt": "2026-10-22T07:53:00.000Z",
+            "ranAt": "2026-10-22T07:53:19.336Z",
+            "wallMs": 37,
+            "probesUp": 8,
+            "failed": []
+          },
+          {
+            "name": "shardc",
+            "scheduledAt": "2026-10-22T07:54:00.000Z",
+            "ranAt": "2026-10-22T07:54:20.033Z",
+            "wallMs": 74,
+            "probesUp": 8,
+            "failed": []
+          },
+          {
+            "name": "shardc",
+            "scheduledAt": "2026-10-22T07:55:00.000Z",
+            "ranAt": "2026-10-22T07:55:19.637Z",
+            "wallMs": 43,
+            "probesUp": 8,
+            "failed": []
+          }
+        ]
+      }
+    ]
+  }
+}

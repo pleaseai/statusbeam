@@ -2,7 +2,9 @@
 
 ## Status
 
-Proposed
+Accepted
+
+Accepted on 2026-10-22, after the probe-semantics spike revised it (see Spike results).
 
 **Deciders:** StatusBeam maintainers
 
@@ -45,8 +47,10 @@ Five facts about StatusBeam and the EmDash host shape the decision:
    stops its latency timer when `fetch` resolves and never reads the body
    (`packages/core/src/check.ts:63-87`), so on the Worker it measures time to
    headers, while in the sandbox it measures time to the last body byte. A slow
-   body can push a healthy monitor to `degraded`; a body over 8 MiB or a response that
-   never completes fails as `down` (`code: 0`). Under-limit streaming responses are
+   body can push a healthy monitor to `degraded`; a body over 8 MiB fails as `down`
+   (`code: 0`). A response that never completes is not rejected at all: both sandbox
+   runners kill the whole invocation at 30 s, and in-process the fetch blocks (spike,
+   2026-10-22). Under-limit streaming responses are
    buffered successfully, but their latency is measured to the last body byte.
    The same monitor can therefore produce false outages
    and notifications when it moves to the plugin.
@@ -90,7 +94,12 @@ prevents that.
 Ship StatusBeam for EmDash as **two packages with one engine**:
 
 1. **`plugin-sandboxed` (registry) — the engine.** A `SandboxedPlugin` that owns:
-   - the `cron` hook running `checkSite` with `ctx.http.fetch`;
+   - the `cron` hook running `checkSite` with `ctx.http.fetch`. Each 5-minute run is
+     sharded across several cron tasks, because every bridge call (fetch, KV, storage,
+     settings, log) counts against Worker Loader's 10-call budget per invocation, which
+     leaves about 6 monitors per task. The shard count stays within the scheduler's
+     10-due-tasks-per-tick limit. Each task plans its bridge calls before spending any
+     and never starts a probe it cannot afford;
    - check history in `ctx.storage`, the current snapshot in `ctx.kv`;
    - status-change notifications (Slack / webhooks), tokens in encrypted `ctx.settings`;
    - public JSON and shields.io badge routes, plus public webhook routes for
@@ -141,8 +150,17 @@ Ship StatusBeam for EmDash as **two packages with one engine**:
    `ctx.http.fetch` rejects because of the buffering limit, the engine records the
    probe as unsupported rather than `down`, leaves it out of status and uptime
    rollups, sends no status-change notification for it, and shows a persistent
-   warning on that monitor. It does not silently switch a configured `GET` to
-   `HEAD`, which would change the check.
+   warning on that monitor. The rejection carries no error code, so the engine
+   matches it by message text, before treating any other rejection as a network
+   failure. It does not silently switch a configured `GET` to `HEAD`, which would
+   change the check. Every probe also runs under a 10 s plugin-side deadline; a probe
+   that misses it grades `down` (`code: 0`), like a network failure, so one
+   never-completing response cannot end the invocation and lose the other probes.
+   Subrequest, CPU, and wall-time limits cannot be recorded after they hit (later
+   bridge calls fail, and CPU or wall-time kills never reach the plugin), so the
+   engine budgets calls up front instead. A run that a platform limit still kills
+   writes nothing, which leaves the last snapshot, and every monitor's status,
+   unchanged.
 
 Because of the wire contract (Decision 3), the render package can point its base
 URL at either source:
@@ -283,6 +301,176 @@ building a separate display-only plugin.
   sites (standalone-backed sites would still need it)._
 - _TODO: whether a component-library component rendered during the site's SSR can
   fetch a same-site public plugin route without a network round trip._
+
+## Spike results (2026-10-22)
+
+The probe-semantics spike (issue #100, harness in `apps/emdash-demo`) ran the real
+`checkSite` from `@statusbeam/core` with `fetchImpl` set to `ctx.http.fetch` inside a
+sandboxed probe plugin. The probe ran in each of the three execution modes against a
+fixture Worker. The setup:
+
+- EmDash 1.3.1, `@emdash-cms/cloudflare` 1.3.1, and `@emdash-cms/sandbox-workerd` 0.9.5,
+  which spawned workerd 1.20260730.1.
+- The Node modes ran on Node 24.20.0 (macOS).
+- The Worker Loader site was deployed as the `statusbeam-emdash-spike` Worker on a
+  Workers paid account.
+- Every site used `maxResponseTime: 2000`.
+- Each fixture case ran as its own plugin invocation.
+
+The README in `apps/emdash-demo` reproduces every run. The raw output is in
+`apps/emdash-demo/results/2026-10-22/`.
+
+### Probe fixtures (FR-1, AC-001, AC-002)
+
+Each cell shows the graded `CheckResult` as status, `code`, and `responseTime`.
+
+| Fixture | Worker Loader | Node/workerd | In-process | Probe contract (Decision 4) |
+|---|---|---|---|---|
+| 7 MiB body, sent fast | `up` 200, 125 ms | `up` 200, 1526 ms | `up` 200, 423 ms | Holds |
+| 9 MiB body (over 8 MiB) | `down` 0, 189 ms; fetch rejects | `down` 0, 514 ms; fetch rejects | `down` 0, 201 ms; fetch rejects | Holds: the body limit rejects in every mode (see FR-2) |
+| Headers after 3 s (control) | `degraded` 200, 3009 ms | `degraded` 200, 3591 ms | `degraded` 200, 3303 ms | Holds |
+| Headers at once, body done at 3 s | `degraded` 200, 3008 ms | `degraded` 200, 3566 ms | `degraded` 200, 3235 ms | Holds: latency is time to the last body byte in every mode, so in-process buffers too |
+| Stream that completes at 20 s | `degraded` 200, 20008 ms | `degraded` 200, 20251 ms | `degraded` 200, 20120 ms | Holds: buffered, latency to the last byte |
+| Stream that runs 120 s (past the 30 s wall time) | No result. The host kills the invocation at 30 s with `Plugin statusbeam-spike-probe exceeded wall-time limit of 30000ms` | No result. Same 30 s kill and message | `degraded` 200, 120233 ms. No limit applies, so the probe blocks until the body ends | **Contradicts.** The contract expects `down` (`code: 0`) and a check-time guard. No mode rejects the fetch, so the guard never runs |
+| HTTP 503 | `down` 503 | `down` 503 | `down` 503 | Holds (target error) |
+| Unresolvable host (`.invalid`) | `down` 530. Cloudflare answers with an error response, and the fetch does not reject | `down` 0. The fetch rejects in the SSRF DNS pre-check | `down` 0. Same rejection as Node/workerd | Network failures look different per mode (see FR-2) |
+
+A plugin-side timer is a workaround for the 120 s stream. The probe raced `ctx.http.fetch`
+against a 10 s `Promise.race` timer on Worker Loader, because the bridge takes no
+`AbortSignal`. The result was `down` 0 at 10000 ms, and the invocation survived.
+
+### Limit rejections versus network failures (FR-2)
+
+None of the rejections below carries an error code. Each is a plain `Error`, so a
+classifier can tell them apart only by message text.
+
+| Limit | Worker Loader | Node/workerd | In-process |
+|---|---|---|---|
+| Body over 8 MiB | `ctx.http.fetch` rejects with `Error: Plugin HTTP response body exceeds the 8388608 byte limit`. The plugin can catch it | Rejects, with the same text wrapped as `Bridge call http/fetch failed: {"error":"Plugin HTTP response body exceeds the 8388608 byte limit"}` | Rejects with the unwrapped Worker Loader text |
+| Subrequests (10 per invocation) | The 11th bridge call rejects with `Error: Too many subrequests by single Worker invocation. To configure this limit, …`. The plugin can catch it, and every later bridge call fails too | Not enforced: 30 probes plus 30 KV and log calls all succeeded | Not enforced |
+| CPU time (50 ms) | The plugin cannot catch it. The invocation fails, the route answers `ROUTE_ERROR` `Worker exceeded CPU time limit.`, and cron logs `[cron] Hook failed … Worker exceeded CPU time limit.` | Not enforced: 5000 `parseConfig` runs took 6.4 s | Not enforced |
+| Wall time (30 s) | The plugin cannot catch it. The invocation fails with `exceeded wall-time limit of 30000ms` | Same as Worker Loader | Not enforced |
+| Network failure | DNS failure arrives as an HTTP 530 response, not a rejection | DNS failure rejects as `Bridge call http/fetch failed: {"error":"Plugin … blocked fetch to … Hostname resolved to no addresses"}` | Rejects as `Plugin "…": blocked fetch to "…": Hostname resolved to no addresses` |
+
+Two conclusions follow:
+
+- The body-limit and subrequest-limit rejections can be told apart from a network failure
+  by matching message text, in a mode-tolerant way (a substring match, not equality).
+- The CPU-time and wall-time limits never reach the plugin. They end the whole
+  invocation, so the invocation cannot record its own probes as skipped.
+
+### Capacity per run (FR-3, AC-003)
+
+These rows ran on Worker Loader. The two Node modes enforce no subrequest or CPU limit,
+and every one of their runs completed.
+
+| Run | Result |
+|---|---|
+| 8, 9, or 10 probes | All finished. |
+| 12 probes | Run completes but truncates: probes 1–10 finished, probes 11–12 failed with the subrequest error. `checkHttp` graded them `down` 0. |
+| 20 probes | Probes 1–10 finished; the other 10 failed the same way. |
+| 6 probes + 3 notification POSTs | All finished (9 bridge calls). |
+| 0 probes + 12 KV writes, or + 12 `ctx.log` calls | The first 10 succeeded and the next 2 failed. **KV and log calls count against the same 10-subrequest budget.** |
+| 10 probes + 1 `putMany` | `putMany` failed. One `putMany` costs 1 subrequest whatever its size (20 and 100 items both fit beside 9 probes). |
+| Cron task, 12 probes | The fixture Worker received probes 1–10. The closing KV write of the run summary failed, so the run left no record. |
+| 3 cron tasks of 8 probes, same tick | All 24 probes finished. Each cron task is its own invocation with its own 10-call budget. |
+| `parseConfig` on a 25-monitor config (FR-20) | Locally (`scripts/bench-parse.ts`, 6 runs) a warm parse costs 1.4–1.7 ms in 5 runs and 5.9 ms in 1. The first, cold parse costs 20–70 ms. A cold first parse on Worker Loader never failed. On Worker Loader, up to 600–1000 parses fit in one invocation on a fresh isolate. 1250 or more parses hit the CPU limit, and right after such kills, 750 parses failed too. The 50 ms limit is not a fixed budget measurable from inside the plugin. One parse per run is far below it either way. |
+
+The capacity math has these terms:
+
+- Every bridge call costs one subrequest. The spike measured this for
+  `ctx.http.fetch`, `ctx.kv.*`, `ctx.log.*`, and `ctx.storage.*.putMany`. It assumes
+  the same for `ctx.settings.*` and `ctx.cron.*`, which also go through the bridge
+  binding; T004 should confirm it.
+- One run of the engine as designed costs `n + m + k` calls:
+  - `n` probes;
+  - `m` notification deliveries;
+  - a fixed `k` of about 4 calls: read the config and the snapshot, write the buckets
+    with one `putMany`, and write the snapshot.
+- The 10-call budget therefore fits at most about 6 monitors with no notifications.
+  _(Implemented, 2026-10-22: the shipped engine also reads every shard snapshot with one
+  `kv.list` and today's buckets with one `getMany`, so `k` is 5 (`SHARD_FIXED_CALLS`).
+  A shard fits 5 monitors with no notifications and 4 with Slack alone; see the
+  capacity table in the EmDash guide.)_
+
+A run must be split across invocations. The cron executor gives each due task its own
+invocation, but it claims at most 10 due tasks per tick across the whole site
+(`LIMIT 10` in `CronExecutor.tick`) and runs them one after another.
+
+### Cron interval (FR-4)
+
+| Schedule | Worker Loader | Node/workerd | In-process |
+|---|---|---|---|
+| `*/5 * * * *` | Accepted. Ran at 07:45:17, 07:50:17, and 07:55:17 UTC. | Accepted. Ran at :00 every 5 minutes. | Accepted. Ran at :00. |
+| `* * * * *` | Ran every minute, about 17–18 s after the minute. | Ran every minute. | Ran every minute. |
+| `*/10 * * * * *` (seconds field) | Accepted, but ran once a minute. | Ran every 10 s. | Ran every 10 s. |
+| An invalid expression | Rejected with `Invalid schedule "…": must be a valid cron expression or ISO 8601 datetime` | Same | Same |
+
+The minimum interval is 1 minute on Cloudflare, set by the site's `* * * * *` Cron
+Trigger. On Node it is about 1 s, from the scheduler's timer floor. The 5-minute cadence
+works in every mode.
+
+### Deadline follow-up on Worker Loader (2026-10-22, during implementation)
+
+A cron task on Worker Loader raced a fetch to the 120 s stream fixture against a 10 s
+plugin-side timer, then made two more probes and its closing KV write.
+
+| Cron hook timeout | Result |
+|---|---|
+| EmDash default (5 s) | `Hook timeout after 5000ms`; the host cancelled the pending fetch, and no later probe or write ran. |
+| `timeout: 25_000` in the hook config | The abandoned probe graded `down` (code 0) at 10 000 ms, both later probes reached the fixture, and the KV write landed (wall 10.0 s and 11.1 s over two runs). |
+
+An abandoned bridge fetch does not hold the invocation open, but EmDash's 5 s default
+hook timeout ends any cron run that waits longer. The engine therefore declares its
+`cron` hook with a 25 s timeout (`CRON_HOOK_TIMEOUT_MS`), which the plugin CLI writes into
+the manifest's hook entry. That covers the 10 s deadline and stays under the 30 s wall
+limit.
+
+### Spike verdict
+
+The spike triggered the T001 STOP condition: one mode, and in one case every mode,
+contradicted the probe contract as first written, so ADR-0004 was revised before Phase 3.
+On 2026-10-22 the user chose a 10 s per-probe deadline graded `down`, up-front call
+budgeting in place of a recorded "skipped" outcome, and sharding each run across cron
+tasks. Context fact 1 and Decisions 1 and 4 reflect those choices, and the ADR was then
+Accepted. The findings that drove the revision:
+
+- **Confirmed.** Buffering, the 8 MiB limit, and latency measured to the full body hold
+  in all three modes, in-process included. The open question about in-process buffering
+  is closed: it buffers.
+- **Contradiction 1: never-completing responses.** Context fact 1 and Decision 4 say a
+  response that never completes fails as `down` (`code: 0`) and is caught at check time.
+  No mode rejects such a fetch:
+  - both runners kill the whole invocation at 30 s, which loses every other probe in it;
+  - in-process has no limit, so the probe blocks until the body ends.
+
+  Decision 4 needs a per-probe deadline that the engine enforces with a plugin-side timer
+  well under 30 s. It also needs to say how a deadline expiry is graded. Context fact 1
+  needs a matching correction.
+- **Contradiction 2: limit outcomes the plan assumes it can record.** FR-13 and AC-010
+  assume a probe that hits the subrequest or CPU limit can be recorded as skipped, and
+  that is not true:
+  - after the subrequest limit, every later bridge call fails, including the writes
+    that would record the skip;
+  - CPU and wall-time kills never reach the plugin.
+
+  Revise FR-13 and AC-010 so the engine budgets bridge calls before it spends them and
+  never relies on writing after a limit. Revise the T005 limit marker so it matches by
+  message substring, because no error code exists.
+- **Capacity.** The real budget is about 6 monitors per invocation, not 10, because
+  KV, log, settings, and storage calls share the subrequest budget. This is workable only
+  by sharding a run into several cron tasks, so the plan should change:
+  - FR-3, NFR-2, and AC-021, plus the Decision text on the cron hook, should state
+    sharding as the design;
+  - the shard design has to respect the 10-tasks-per-tick claim limit.
+
+  The Phase 3 tasks T004 and T008 should change with it.
+- **Network-failure shape differs per mode.** DNS failure arrives as HTTP 530 on
+  Cloudflare and as a rejection on Node. Both grade `down`, so status is correct. A
+  classifier that treats any fetch rejection as "the target is down" stays correct only
+  if the limit rejections are matched first.
+- **No change needed.** The 5-minute cadence works everywhere (FR-4). Re-validating the
+  config each run (FR-20) costs little enough CPU that caching it stays out of scope.
 
 ## References
 

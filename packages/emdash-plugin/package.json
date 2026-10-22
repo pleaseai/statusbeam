@@ -1,0 +1,51 @@
+{
+  "name": "@statusbeam/emdash-plugin",
+  "type": "module",
+  "version": "0.0.0",
+  "private": false,
+  "description": "StatusBeam engine for EmDash — a sandboxed plugin that runs scheduled checks with the core engine.",
+  "license": "MIT",
+  "homepage": "https://github.com/pleaseai/statusbeam/tree/main/packages/emdash-plugin#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pleaseai/statusbeam.git",
+    "directory": "packages/emdash-plugin"
+  },
+  "keywords": [
+    "emdash",
+    "emdash-plugin",
+    "statusbeam",
+    "status-page"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    },
+    "./sandbox": "./dist/plugin.mjs"
+  },
+  "main": "dist/index.mjs",
+  "files": [
+    "dist",
+    "emdash-plugin.jsonc"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "emdash-plugin build",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "test:host": "emdash-plugin validate && vitest run"
+  },
+  "devDependencies": {
+    "@emdash-cms/blocks": "1.3.1",
+    "@emdash-cms/plugin-cli": "0.13.4",
+    "@emdash-cms/plugin-test": "0.2.10",
+    "@statusbeam/core": "workspace:*",
+    "emdash": "^1.3.1",
+    "vite": "^8",
+    "vitest": "^4.1.0"
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "name": "@statusbeam/emdash-demo",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Private EmDash demo site and ADR-0004 probe-semantics spike harness. Not released.",
+  "license": "MIT",
+  "workspaces": ["probe"],
+  "emdash": {
+    "label": "StatusBeam spike",
+    "seed": "seed/seed.json"
+  },
+  "scripts": {
+    "probe:build": "cd probe && emdash-plugin build",
+    "fixtures:deploy": "wrangler deploy -c fixtures/wrangler.jsonc",
+    "build:worker-loader": "SPIKE_MODE=worker-loader astro build",
+    "deploy:worker-loader": "SPIKE_MODE=worker-loader astro build && wrangler deploy",
+    "build:workerd": "SPIKE_MODE=workerd astro build",
+    "build:in-process": "SPIKE_MODE=in-process astro build",
+    "start": "node ./dist/server/entry.mjs"
+  },
+  "dependencies": {
+    "@astrojs/cloudflare": "^14.3.1",
+    "@astrojs/node": "^11.1.5",
+    "@astrojs/react": "^7.0.0",
+    "@emdash-cms/cloudflare": "^1.3.1",
+    "@emdash-cms/sandbox-workerd": "^0.9.5",
+    "astro": "^7.3.2",
+    "emdash": "^1.3.1",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "statusbeam-spike-probe": "workspace:*",
+    "workerd": "^1.20261022.1"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260820.1",
+    "@emdash-cms/plugin-cli": "0.13.4",
+    "wrangler": "^4.125.0"
+  }
+}

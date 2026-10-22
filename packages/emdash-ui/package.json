@@ -1,0 +1,57 @@
+{
+  "name": "@statusbeam/emdash-ui",
+  "type": "module",
+  "version": "0.0.0",
+  "private": false,
+  "description": "Astro status components for EmDash sites: banner, 90-day uptime bars and per-site detail, rendered from the StatusBeam public JSON.",
+  "license": "MIT",
+  "homepage": "https://github.com/pleaseai/statusbeam/tree/main/packages/emdash-ui#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pleaseai/statusbeam.git",
+    "directory": "packages/emdash-ui"
+  },
+  "keywords": [
+    "astro-component",
+    "emdash",
+    "statusbeam",
+    "status-page"
+  ],
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts",
+    "./block": "./src/block.ts",
+    "./plugin": "./src/plugin.ts",
+    "./astro": "./src/astro/index.ts"
+  },
+  "files": [
+    "src",
+    "!src/**/*.test.ts"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "typecheck": "astro check"
+  },
+  "peerDependencies": {
+    "astro": "^7",
+    "emdash": "^1.3.1"
+  },
+  "peerDependenciesMeta": {
+    "emdash": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "@statusbeam/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9",
+    "astro": "^7"
+  }
+}

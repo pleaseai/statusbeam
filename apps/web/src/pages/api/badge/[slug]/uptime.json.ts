@@ -1,17 +1,9 @@
-import type { UptimePeriod } from '@statusbeam/core'
 import type { APIRoute } from 'astro'
-import { uptimeBadge } from '@statusbeam/core'
+import { parsePeriod, uptimeBadge } from '@statusbeam/core'
 import { jsonResponse, notFound } from '../../../../lib/api'
 import { getSite } from '../../../../lib/data'
 
 export const prerender = false
-
-const PERIODS: readonly UptimePeriod[] = ['day', 'week', 'month']
-
-/** Coerce the `?period=` query to a valid window, defaulting to `month`. */
-function parsePeriod(value: string | null): UptimePeriod {
-  return PERIODS.includes(value as UptimePeriod) ? (value as UptimePeriod) : 'month'
-}
 
 /**
  * Per-site uptime badge (shields.io endpoint): `uptime | 99.98%`. The window is

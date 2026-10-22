@@ -1,7 +1,9 @@
 import type { FetchLike } from './check'
 import type { AigatewayConfig, AigatewayProvider, Site } from './config'
+import type { ErrorClassifier } from './limit'
 import type { CheckResult, CheckStatus } from './types'
 import { z } from 'zod'
+import { limitOf } from './limit'
 
 /**
  * API roots of the two supported model gateways. Both publish their endpoint
@@ -284,7 +286,7 @@ async function gradeAigatewayResponse(
  */
 export async function checkAigateway(
   site: Site,
-  deps: { fetchImpl?: FetchLike, now?: () => number } = {},
+  deps: { fetchImpl?: FetchLike, now?: () => number, classifyError?: ErrorClassifier } = {},
 ): Promise<CheckResult> {
   const fetchImpl = deps.fetchImpl ?? fetch
   const now = deps.now ?? Date.now
@@ -329,6 +331,7 @@ export async function checkAigateway(
       responseTime: 0,
       checkedAt,
       error: err instanceof Error ? err.message : String(err),
+      ...limitOf(deps.classifyError, err),
     }
   }
 

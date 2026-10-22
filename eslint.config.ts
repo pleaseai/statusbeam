@@ -4,6 +4,7 @@ export default pleaseai({
   ignores: [
     '**/dist/**',
     '**/.astro/**',
+    '**/.emdash/**',
     '**/.wrangler/**',
     '**/.impeccable/**',
     'apps/docs/src/components.ts',

@@ -1,7 +1,9 @@
 import type { FetchLike } from './check'
 import type { Site } from './config'
+import type { ErrorClassifier } from './limit'
 import type { CheckResult } from './types'
 import { z } from 'zod'
+import { limitOf } from './limit'
 
 /** Default Sentry SaaS API host; override per-site via `sentry.host` for a region or self-hosted install. */
 export const DEFAULT_SENTRY_HOST = 'https://sentry.io'
@@ -74,7 +76,7 @@ export function sentryIssuesUrl(site: Site): string {
  */
 export async function checkSentry(
   site: Site,
-  deps: { fetchImpl?: FetchLike, now?: () => number, token?: string } = {},
+  deps: { fetchImpl?: FetchLike, now?: () => number, token?: string, classifyError?: ErrorClassifier } = {},
 ): Promise<CheckResult> {
   const fetchImpl = deps.fetchImpl ?? fetch
   const now = deps.now ?? Date.now
@@ -116,6 +118,7 @@ export async function checkSentry(
       responseTime: now() - start,
       checkedAt,
       error: err instanceof Error ? err.message : String(err),
+      ...limitOf(deps.classifyError, err),
     }
   }
 

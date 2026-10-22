@@ -1,0 +1,317 @@
+{
+  "success": true,
+  "data": {
+    "ok": true,
+    "tasks": [
+      {
+        "name": "one",
+        "schedule": "* * * * *",
+        "nextRunAt": "2026-10-22T07:57:00.000Z",
+        "lastRunAt": "2026-10-22T07:56:00.000Z"
+      },
+      {
+        "name": "five",
+        "schedule": "*/5 * * * *",
+        "nextRunAt": "2026-10-22T08:00:00.000Z",
+        "lastRunAt": "2026-10-22T07:55:00.003Z"
+      }
+    ],
+    "runs": [
+      {
+        "key": "spike:cron:tensec",
+        "value": [
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:48:20.000Z",
+            "ranAt": "2026-10-22T07:48:21.005Z",
+            "wallMs": 165,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:48:30.000Z",
+            "ranAt": "2026-10-22T07:48:31.005Z",
+            "wallMs": 171,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:48:40.000Z",
+            "ranAt": "2026-10-22T07:48:40.004Z",
+            "wallMs": 198,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:48:50.000Z",
+            "ranAt": "2026-10-22T07:48:50.003Z",
+            "wallMs": 205,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:49:00.000Z",
+            "ranAt": "2026-10-22T07:49:00.441Z",
+            "wallMs": 59,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:49:10.000Z",
+            "ranAt": "2026-10-22T07:49:10.004Z",
+            "wallMs": 335,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:49:20.000Z",
+            "ranAt": "2026-10-22T07:49:20.005Z",
+            "wallMs": 161,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:49:30.000Z",
+            "ranAt": "2026-10-22T07:49:30.004Z",
+            "wallMs": 286,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:49:40.000Z",
+            "ranAt": "2026-10-22T07:49:41.010Z",
+            "wallMs": 219,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:49:50.000Z",
+            "ranAt": "2026-10-22T07:49:50.005Z",
+            "wallMs": 191,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:50:00.000Z",
+            "ranAt": "2026-10-22T07:50:01.669Z",
+            "wallMs": 76,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:50:10.000Z",
+            "ranAt": "2026-10-22T07:50:10.004Z",
+            "wallMs": 201,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:50:20.000Z",
+            "ranAt": "2026-10-22T07:50:20.004Z",
+            "wallMs": 179,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:50:30.000Z",
+            "ranAt": "2026-10-22T07:50:30.003Z",
+            "wallMs": 191,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:50:40.000Z",
+            "ranAt": "2026-10-22T07:50:40.004Z",
+            "wallMs": 202,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:50:50.000Z",
+            "ranAt": "2026-10-22T07:50:50.004Z",
+            "wallMs": 183,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:51:00.000Z",
+            "ranAt": "2026-10-22T07:51:00.423Z",
+            "wallMs": 96,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:51:10.000Z",
+            "ranAt": "2026-10-22T07:51:10.005Z",
+            "wallMs": 277,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:51:20.000Z",
+            "ranAt": "2026-10-22T07:51:20.005Z",
+            "wallMs": 223,
+            "probesUp": 1,
+            "failed": []
+          },
+          {
+            "name": "tensec",
+            "scheduledAt": "2026-10-22T07:51:30.000Z",
+            "ranAt": "2026-10-22T07:51:30.005Z",
+            "wallMs": 223,
+            "probesUp": 1,
+            "failed": []
+          }
+        ]
+      },
+      {
+        "key": "spike:cron:five",
+        "value": [
+          {
+            "name": "five",
+            "scheduledAt": "2026-10-22T07:45:00.000Z",
+            "ranAt": "2026-10-22T07:45:00.022Z",
+            "wallMs": 1402,
+            "probesUp": 12,
+            "failed": []
+          },
+          {
+            "name": "five",
+            "scheduledAt": "2026-10-22T07:50:00.000Z",
+            "ranAt": "2026-10-22T07:50:00.005Z",
+            "wallMs": 1385,
+            "probesUp": 12,
+            "failed": []
+          },
+          {
+            "name": "five",
+            "scheduledAt": "2026-10-22T07:55:00.000Z",
+            "ranAt": "2026-10-22T07:55:00.017Z",
+            "wallMs": 1175,
+            "probesUp": 12,
+            "failed": []
+          }
+        ]
+      },
+      {
+        "key": "spike:cron:one",
+        "value": [
+          {
+            "name": "one",
+            "scheduledAt": "2026-10-22T07:45:00.000Z",
+            "ranAt": "2026-10-22T07:45:01.462Z",
+            "wallMs": 201,
+            "probesUp": 3,
+            "failed": []
+          },
+          {
+            "name": "one",
+            "scheduledAt": "2026-10-22T07:46:00.000Z",
+            "ranAt": "2026-10-22T07:46:00.006Z",
+            "wallMs": 339,
+            "probesUp": 3,
+            "failed": []
+          },
+          {
+            "name": "one",
+            "scheduledAt": "2026-10-22T07:47:00.000Z",
+            "ranAt": "2026-10-22T07:47:01.001Z",
+            "wallMs": 433,
+            "probesUp": 3,
+            "failed": []
+          },
+          {
+            "name": "one",
+            "scheduledAt": "2026-10-22T07:48:00.000Z",
+            "ranAt": "2026-10-22T07:48:00.005Z",
+            "wallMs": 469,
+            "probesUp": 3,
+            "failed": []
+          },
+          {
+            "name": "one",
+            "scheduledAt": "2026-10-22T07:49:00.000Z",
+            "ranAt": "2026-10-22T07:49:00.005Z",
+            "wallMs": 429,
+            "probesUp": 3,
+            "failed": []
+          },
+          {
+            "name": "one",
+            "scheduledAt": "2026-10-22T07:50:00.000Z",
+            "ranAt": "2026-10-22T07:50:01.396Z",
+            "wallMs": 267,
+            "probesUp": 3,
+            "failed": []
+          },
+          {
+            "name": "one",
+            "scheduledAt": "2026-10-22T07:51:00.000Z",
+            "ranAt": "2026-10-22T07:51:00.016Z",
+            "wallMs": 400,
+            "probesUp": 3,
+            "failed": []
+          },
+          {
+            "name": "one",
+            "scheduledAt": "2026-10-22T07:52:00.000Z",
+            "ranAt": "2026-10-22T07:52:01.006Z",
+            "wallMs": 489,
+            "probesUp": 3,
+            "failed": []
+          },
+          {
+            "name": "one",
+            "scheduledAt": "2026-10-22T07:53:00.000Z",
+            "ranAt": "2026-10-22T07:53:01.013Z",
+            "wallMs": 492,
+            "probesUp": 3,
+            "failed": []
+          },
+          {
+            "name": "one",
+            "scheduledAt": "2026-10-22T07:54:00.000Z",
+            "ranAt": "2026-10-22T07:54:00.006Z",
+            "wallMs": 436,
+            "probesUp": 3,
+            "failed": []
+          },
+          {
+            "name": "one",
+            "scheduledAt": "2026-10-22T07:55:00.000Z",
+            "ranAt": "2026-10-22T07:55:01.201Z",
+            "wallMs": 208,
+            "probesUp": 3,
+            "failed": []
+          },
+          {
+            "name": "one",
+            "scheduledAt": "2026-10-22T07:56:00.000Z",
+            "ranAt": "2026-10-22T07:56:00.006Z",
+            "wallMs": 373,
+            "probesUp": 3,
+            "failed": []
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "track_id": "emdash-distribution-20261022",
+  "type": "feature",
+  "status": "completed",
+  "created_at": "2026-10-22T06:04:40Z",
+  "updated_at": "2026-10-22T11:16:28Z",
+  "issue": "#100",
+  "pr": "#101",
+  "project": "",
+  "project_item_id": "",
+  "code_branch": "amondnet/100-emdash-distribution",
+  "code_pr": "#101"
+}

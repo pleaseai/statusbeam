@@ -10,7 +10,7 @@
     "type": "git",
     "url": "git+https://github.com/pleaseai/statusbeam.git"
   },
-  "workspaces": ["apps/*", "packages/*"],
+  "workspaces": ["apps/*", "!apps/emdash-demo", "packages/*"],
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",

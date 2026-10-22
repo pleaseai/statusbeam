@@ -1,0 +1,8 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  // ADR-0004 spike fixtures. Spike-only resource; see ../README.md for teardown.
+  "name": "statusbeam-emdash-spike-fixtures",
+  "main": "./src/index.ts",
+  "compatibility_date": "2026-04-01",
+  "observability": { "enabled": true }
+}

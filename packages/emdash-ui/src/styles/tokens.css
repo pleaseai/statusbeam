@@ -1,0 +1,38 @@
+/*
+ * Severity tokens for the StatusBeam components. The fallbacks mirror the
+ * palette in apps/web/src/styles/global.css. A site re-themes the components by
+ * setting the matching `--statusbeam-*` property on any ancestor.
+ *
+ * `:where()` keeps specificity at zero, so site CSS always wins.
+ */
+:where(.statusbeam) {
+  --sb-operational: var(--statusbeam-operational, oklch(0.72 0.17 149));
+  --sb-degraded: var(--statusbeam-degraded, oklch(0.82 0.16 86));
+  --sb-partial: var(--statusbeam-partial, oklch(0.75 0.17 55));
+  --sb-major: var(--statusbeam-major, oklch(0.63 0.22 25));
+  --sb-maintenance: var(--statusbeam-maintenance, oklch(0.65 0.15 250));
+  --sb-nodata: var(--statusbeam-nodata, oklch(0.7 0 0));
+  --sb-muted: var(--statusbeam-muted, color-mix(in oklch, currentColor 62%, transparent));
+  --sb-border: var(--statusbeam-border, color-mix(in oklch, currentColor 15%, transparent));
+  --sb-radius: var(--statusbeam-radius, 0.5rem);
+}
+
+/* Each severity sets `--sb-tone`, which icons, dots, borders and tints read. */
+:where([data-sb-tone='operational']) {
+  --sb-tone: var(--sb-operational);
+}
+:where([data-sb-tone='degraded']) {
+  --sb-tone: var(--sb-degraded);
+}
+:where([data-sb-tone='partial_outage']) {
+  --sb-tone: var(--sb-partial);
+}
+:where([data-sb-tone='major_outage']) {
+  --sb-tone: var(--sb-major);
+}
+:where([data-sb-tone='maintenance']) {
+  --sb-tone: var(--sb-maintenance);
+}
+:where([data-sb-tone='unavailable']) {
+  --sb-tone: var(--sb-nodata);
+}
