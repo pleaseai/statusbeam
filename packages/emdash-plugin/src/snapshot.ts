@@ -203,7 +203,8 @@ function combineMonitors(polled: MonitorState, pushed: MonitorState, now: Date):
  * configuration change moves it between shards, the newest snapshot wins. A
  * `handoff` entry stands in for a monitor only while no snapshot holds it in
  * `monitors`: a real owner always wins over a handoff, whatever the order of
- * their `updatedAt`. A monitor that also
+ * their `updatedAt`. Between handoffs, the one with the latest result wins (see
+ * {@link handoffFor} for how two shards come to carry one monitor). A monitor that also
  * has a webhook snapshot is then combined with it (see {@link combineMonitors}),
  * and a webhook-only monitor is taken from its webhook snapshot. Pure; shared by
  * the scheduled run and the webhook (to find each monitor's previous state
@@ -227,7 +228,8 @@ export function mergeSnapshots(entries: KvEntry[]): MergedSnapshot {
   const owned = new Set(polled.keys())
   for (const snapshot of snapshots) {
     for (const monitor of snapshot.handoff ?? []) {
-      if (!owned.has(monitor.slug)) {
+      const held = polled.get(monitor.slug)
+      if (!owned.has(monitor.slug) && (!held || checkedAtOf(monitor) >= checkedAtOf(held))) {
         polled.set(monitor.slug, monitor)
       }
     }
@@ -251,6 +253,11 @@ export function mergeSnapshots(entries: KvEntry[]): MergedSnapshot {
   return { monitors, results, updatedAt, capacityErrors, polled, pushed }
 }
 
+/** When a monitor's latest real result was taken, for ordering two copies of its state; `''` before the first one. */
+function checkedAtOf(monitor: MonitorState): string {
+  return monitor.result?.checkedAt ?? ''
+}
+
 /**
  * The handoff shard `shard` writes next to its `monitors`. A configuration
  * change can move a monitor to another shard, and each shard rewrites only its
@@ -259,8 +266,11 @@ export function mergeSnapshots(entries: KvEntry[]): MergedSnapshot {
  * history and the previous result its change detection compares against. So
  * the old shard keeps carrying a monitor that was in its previous snapshot
  * (`monitors` or `handoff`), is no longer among `siteSlugs`, is still among
- * `pollableSlugs`, and is in no other shard snapshot's `monitors`. Once the new
- * owner has written it, the next run drops it. Pure; works on the `entries`
+ * `pollableSlugs`, and is in no other shard snapshot's `monitors`. Two moves in a
+ * row can leave two shards carrying the same monitor (the intermediate owner ran,
+ * then handed it on), so a shard also drops it while another shard carries a
+ * later result for it. Once the new owner has written it, the next run drops
+ * it. Pure; works on the `entries`
  * the run has already listed, so it costs no bridge call.
  */
 export function handoffFor(entries: KvEntry[], shard: number, siteSlugs: Set<string>, pollableSlugs: Set<string>): MonitorState[] {
@@ -268,12 +278,21 @@ export function handoffFor(entries: KvEntry[], shard: number, siteSlugs: Set<str
   if (!isSnapshot(own)) {
     return []
   }
-  const ownedElsewhere = new Set(entries
+  const others = entries
     .filter(entry => entry.key !== snapshotKey(shard) && isSnapshot(entry.value))
-    .flatMap(entry => (entry.value as ShardSnapshot).monitors.map(monitor => monitor.slug)))
+    .map(entry => entry.value as ShardSnapshot)
+  const ownedElsewhere = new Set(others.flatMap(snapshot => snapshot.monitors.map(monitor => monitor.slug)))
+  const carriedElsewhere = new Map<string, string>()
+  for (const monitor of others.flatMap(snapshot => snapshot.handoff ?? [])) {
+    const seen = carriedElsewhere.get(monitor.slug)
+    if (seen === undefined || checkedAtOf(monitor) > seen) {
+      carriedElsewhere.set(monitor.slug, checkedAtOf(monitor))
+    }
+  }
   const carried = new Map<string, MonitorState>()
   for (const monitor of [...(own.handoff ?? []), ...own.monitors]) {
-    if (!siteSlugs.has(monitor.slug) && pollableSlugs.has(monitor.slug) && !ownedElsewhere.has(monitor.slug)) {
+    const later = (carriedElsewhere.get(monitor.slug) ?? '') > checkedAtOf(monitor)
+    if (!siteSlugs.has(monitor.slug) && pollableSlugs.has(monitor.slug) && !ownedElsewhere.has(monitor.slug) && !later) {
       carried.set(monitor.slug, monitor)
     }
   }

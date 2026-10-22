@@ -6,7 +6,7 @@ import { CALL_BUDGET } from '../src/budget'
 import { classifyHostError, probeSite } from '../src/probe'
 import { runShard } from '../src/run'
 import { destinationsFrom, parseUrlList } from '../src/settings'
-import { mergeSnapshots, readSnapshot, summariesFromSnapshot } from '../src/snapshot'
+import { handoffFor, mergeSnapshots, readSnapshot, summariesFromSnapshot } from '../src/snapshot'
 import { createFakeContext, monitorNames, monitorsYaml } from './fake-context'
 
 const BODY_LIMIT = 'Plugin HTTP response body exceeds the 8388608 byte limit'
@@ -454,5 +454,18 @@ describe('a configuration change that moves a monitor between shards', () => {
     const merged = mergeSnapshots([{ key: 'snapshot:0', value: handoff }, { key: 'snapshot:1', value: owner }])
     expect(merged.polled.get('echo')?.result).toMatchObject({ status: 'down' })
     expect(merged.results.get('echo')).toMatchObject({ status: 'down' })
+  })
+
+  it('keeps the latest state when two moves in a row leave two shards carrying the monitor', () => {
+    const state = (slug: string, status: 'up' | 'down', checkedAt: string) => ({ slug, result: { slug, status, code: 200, responseTime: 1, checkedAt }, days: [], totals: {} })
+    // `echo` moved from shard 0 to shard 1, which ran and saw it go down, then on to shard 2 before shard 2 ran.
+    const first: ShardSnapshot = { version: 2, shard: 0, updatedAt: '2026-10-22T10:05:00.000Z', monitors: [], handoff: [state('echo', 'up', '2026-10-22T10:00:00.000Z')], deliveries: [] }
+    const second: ShardSnapshot = { version: 2, shard: 1, updatedAt: '2026-10-22T10:15:00.000Z', monitors: [], handoff: [state('echo', 'down', '2026-10-22T10:10:00.000Z')], deliveries: [] }
+    const entries = [{ key: 'snapshot:0', value: first }, { key: 'snapshot:1', value: second }]
+    expect(handoffFor(entries, 0, new Set(), new Set(['echo']))).toEqual([])
+    expect(handoffFor(entries, 1, new Set(), new Set(['echo'])).map(m => m.result?.status)).toEqual(['down'])
+    // Even before shard 0 drops its copy, and with shard 0 written last, readers take the later result.
+    const rewritten = { ...first, updatedAt: '2026-10-22T10:20:00.000Z' }
+    expect(mergeSnapshots([{ key: 'snapshot:0', value: rewritten }, { key: 'snapshot:1', value: second }]).polled.get('echo')?.result).toMatchObject({ status: 'down' })
   })
 })

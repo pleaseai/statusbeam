@@ -94,7 +94,9 @@ describe('a configuration the plugin rules reject', () => {
       const served = await handlerOf(name)({ input, request }, rejected.ctx) as { status: number, body: unknown }
       const empty = await handlerOf(name)({ input, request }, absent.ctx) as { status: number, body: unknown }
       expect(served.status, `${name} ${JSON.stringify(input)}`).toBe(empty.status)
-      expect(JSON.stringify(served.body).replace(/"generatedAt":"[^"]*"/, '')).toBe(JSON.stringify(empty.body).replace(/"generatedAt":"[^"]*"/, ''))
+      // The payload sits as escaped JSON inside a text body, so drop `generatedAt` in either spelling.
+      const withoutTime = (body: unknown) => JSON.stringify(body).replace(/\\*"generatedAt\\*":\\*"[^"\\]*\\*"/g, '')
+      expect(withoutTime(served.body)).toBe(withoutTime(empty.body))
     }
     expect(JSON.stringify(((await handlerOf('status')({ input: {}, request }, rejected.ctx)) as { body: unknown }).body)).toContain('\\"sites\\":[]')
   })

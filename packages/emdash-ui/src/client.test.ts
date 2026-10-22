@@ -95,6 +95,13 @@ describe('read deadline', () => {
     expect(DEFAULT_TIMEOUT_MS).toBe(10_000)
   })
 
+  it('does not time out at once on an invalid or oversized timeoutMs', async () => {
+    for (const timeoutMs of [Number.NaN, -1, Number.POSITIVE_INFINITY, 2 ** 31]) {
+      const answer = stub(() => new Promise<Response>(resolve => setTimeout(() => resolve(json(status)), 20))).fetch
+      expect(await fetchStatus({ baseUrl: 'https://x.test' }, { fetch: answer, timeoutMs }), String(timeoutMs)).toMatchObject({ ok: true })
+    }
+  })
+
   it('yields unavailable (network) when the body never ends past timeoutMs', async () => {
     const started = Date.now()
     const result = await fetchStatus({ baseUrl: 'https://x.test' }, { fetch: stub(stalledBody).fetch, timeoutMs: 50 })

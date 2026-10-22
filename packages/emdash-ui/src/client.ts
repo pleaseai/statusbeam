@@ -53,7 +53,12 @@ export interface FetchOptions {
   fetch?: typeof fetch
   /** Abort signal, e.g. to cancel with the page request. An abort yields `unavailable`. */
   signal?: AbortSignal
-  /** Deadline in ms on the request and the body read together; defaults to {@link DEFAULT_TIMEOUT_MS}. A miss yields `unavailable`. */
+  /**
+   * Deadline in ms on the request and the body read together; defaults to
+   * {@link DEFAULT_TIMEOUT_MS}. A miss yields `unavailable`. A value that is not a
+   * finite, non-negative number uses the default, and one past the largest timer
+   * delay (about 24.8 days) is capped there, so it never fires at once instead.
+   */
   timeoutMs?: number
 }
 
@@ -135,9 +140,19 @@ function untilAborted<T>(pending: Promise<T>, signal: AbortSignal): Promise<T> {
   return Promise.race([pending, aborted]).finally(() => signal.removeEventListener('abort', onAbort))
 }
 
+/** The largest delay `setTimeout` honours; a longer one fires at once. */
+const MAX_TIMER_MS = 2_147_483_647
+
+function deadlineOf(timeoutMs: number | undefined): number {
+  if (timeoutMs === undefined || !Number.isFinite(timeoutMs) || timeoutMs < 0) {
+    return DEFAULT_TIMEOUT_MS
+  }
+  return Math.min(timeoutMs, MAX_TIMER_MS)
+}
+
 async function fetchContract<T>(url: string, schema: Schema<T>, options: FetchOptions): Promise<StatusResult<T>> {
   const fetchImpl = options.fetch ?? fetch
-  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
+  const timeoutMs = deadlineOf(options.timeoutMs)
   const deadline = new AbortController()
   const timer = setTimeout(() => deadline.abort(new Error(`read exceeded the ${timeoutMs} ms deadline`)), timeoutMs)
   const { signal, dispose } = options.signal
