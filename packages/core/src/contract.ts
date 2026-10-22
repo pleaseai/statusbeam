@@ -1,0 +1,149 @@
+import type { UptimePeriod } from './badge'
+import type { SiteSummary } from './types'
+import { z } from 'zod'
+import { overallSeverity } from './types'
+
+/**
+ * The public status contract: the JSON that `/api/status.json`,
+ * `/api/status/<slug>.json` and the badge routes serve, whether they come from
+ * standalone StatusBeam or the EmDash plugin.
+ *
+ * This module is the `@statusbeam/core/contract` subpath entry. Keep its imports
+ * to `zod` plus the pure `./types` and `./badge` modules — importing `./config`
+ * or `./check` would pull `yaml` into the render library.
+ */
+
+/**
+ * Current contract version, carried in the body of the aggregate and per-site
+ * responses (raw plugin routes cannot set custom headers).
+ */
+export const CONTRACT_VERSION = 1
+
+const checkStatusSchema = z.enum(['up', 'degraded', 'down'])
+
+const severitySchema = z.enum(['operational', 'degraded', 'partial_outage', 'major_outage', 'maintenance'])
+
+const dayStatSchema = z.object({
+  date: z.string(),
+  status: checkStatusSchema.nullable(),
+  uptime: z.number(),
+})
+
+const responsePointSchema = z.object({
+  at: z.string(),
+  ms: z.number(),
+})
+
+/** Aggregate `/api/status.json` body. */
+export const statusResponseSchema = z.object({
+  version: z.literal(CONTRACT_VERSION),
+  status: severitySchema,
+  generatedAt: z.string(),
+  sites: z.array(z.object({
+    slug: z.string(),
+    name: z.string(),
+    status: checkStatusSchema,
+    responseTime: z.number(),
+    uptime: z.object({ day: z.string(), week: z.string(), month: z.string() }),
+  })),
+})
+export type StatusResponse = z.infer<typeof statusResponseSchema>
+
+/** Per-site `/api/status/<slug>.json` body: the full `SiteSummary` plus `version`. */
+export const siteResponseSchema = z.object({
+  version: z.literal(CONTRACT_VERSION),
+  slug: z.string(),
+  name: z.string(),
+  status: checkStatusSchema,
+  responseTime: z.number(),
+  uptimeDay: z.string(),
+  uptimeWeek: z.string(),
+  uptimeMonth: z.string(),
+  history: z.array(dayStatSchema),
+  responseHistory: z.array(responsePointSchema).optional(),
+})
+export type SiteResponse = z.infer<typeof siteResponseSchema>
+
+/** shields.io endpoint badge body (`schemaVersion` is shields.io's, not ours). */
+export const shieldsEndpointSchema = z.object({
+  schemaVersion: z.literal(1),
+  label: z.string(),
+  message: z.string(),
+  color: z.string(),
+})
+
+/** Build the aggregate response. `now` is injected so callers (and tests) control `generatedAt`. */
+export function buildStatusResponse(summary: SiteSummary[], now: Date = new Date()): StatusResponse {
+  return {
+    version: CONTRACT_VERSION,
+    status: overallSeverity(summary.map(s => s.status)),
+    generatedAt: now.toISOString(),
+    sites: summary.map(s => ({
+      slug: s.slug,
+      name: s.name,
+      status: s.status,
+      responseTime: s.responseTime,
+      uptime: { day: s.uptimeDay, week: s.uptimeWeek, month: s.uptimeMonth },
+    })),
+  }
+}
+
+/** Build the per-site response: the whole `SiteSummary` behind a `version` field. */
+export function buildSiteResponse(site: SiteSummary): SiteResponse {
+  return { version: CONTRACT_VERSION, ...site }
+}
+
+const PERIODS: readonly UptimePeriod[] = ['day', 'week', 'month']
+
+/** Coerce a `period` query value to a valid uptime window, defaulting to `month`. */
+export function parsePeriod(value: string | null | undefined): UptimePeriod {
+  return PERIODS.includes(value as UptimePeriod) ? (value as UptimePeriod) : 'month'
+}
+
+/** Which producer a path is for. */
+export type RouteFlavor = 'standalone' | 'emdash'
+
+/** URL builders for one flavor; each returns a path (with query string where needed). */
+export interface RoutePaths {
+  status: () => string
+  site: (slug: string) => string
+  badge: () => string
+  siteBadge: (slug: string) => string
+  uptimeBadge: (slug: string, period?: UptimePeriod) => string
+  responseTimeBadge: (slug: string) => string
+}
+
+/** Base path the EmDash host mounts plugin routes under. */
+export const EMDASH_ROUTE_BASE = '/_emdash/api/plugins/statusbeam'
+
+function query(params: Record<string, string | undefined>): string {
+  const pairs = Object.entries(params)
+    .filter((entry): entry is [string, string] => entry[1] !== undefined)
+    .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
+  return pairs.length > 0 ? `?${pairs.join('&')}` : ''
+}
+
+/**
+ * Route-path map for both producers. Standalone puts the slug in the path and
+ * the period in the query; the EmDash plugin has flat route names, so slug and
+ * period are query params.
+ */
+export const routePaths: Record<RouteFlavor, RoutePaths> = {
+  standalone: {
+    status: () => '/api/status.json',
+    site: slug => `/api/status/${encodeURIComponent(slug)}.json`,
+    badge: () => '/api/badge.json',
+    siteBadge: slug => `/api/badge/${encodeURIComponent(slug)}.json`,
+    uptimeBadge: (slug, period) =>
+      `/api/badge/${encodeURIComponent(slug)}/uptime.json${query({ period })}`,
+    responseTimeBadge: slug => `/api/badge/${encodeURIComponent(slug)}/response-time.json`,
+  },
+  emdash: {
+    status: () => `${EMDASH_ROUTE_BASE}/status`,
+    site: slug => `${EMDASH_ROUTE_BASE}/status${query({ slug })}`,
+    badge: () => `${EMDASH_ROUTE_BASE}/badge`,
+    siteBadge: slug => `${EMDASH_ROUTE_BASE}/badge${query({ slug })}`,
+    uptimeBadge: (slug, period) => `${EMDASH_ROUTE_BASE}/badge-uptime${query({ slug, period })}`,
+    responseTimeBadge: slug => `${EMDASH_ROUTE_BASE}/badge-response-time${query({ slug })}`,
+  },
+}

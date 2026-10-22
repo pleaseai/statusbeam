@@ -1,4 +1,5 @@
 import type { APIRoute } from 'astro'
+import { buildSiteResponse } from '@statusbeam/core'
 import { jsonResponse, notFound } from '../../../lib/api'
 import { getSite } from '../../../lib/data'
 
@@ -14,5 +15,5 @@ export const GET: APIRoute = async ({ params }) => {
   if (!site) {
     return notFound(`No site with slug "${slug}"`)
   }
-  return jsonResponse(site, { tagSlugs: [site.slug] })
+  return jsonResponse(buildSiteResponse(site), { tagSlugs: [site.slug] })
 }
