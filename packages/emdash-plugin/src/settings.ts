@@ -17,6 +17,12 @@ export const SLACK_SECRET_KEY = 'slackWebhookUrl'
 /** Encrypted secret setting: generic webhook URLs, one per line (commas and spaces also separate). */
 export const WEBHOOKS_SECRET_KEY = 'webhookUrls'
 
+/** Encrypted secret setting: the shared token inbound webhooks must carry in `?token=`. Unset means every webhook is rejected. */
+export const WEBHOOK_SECRET_KEY = 'webhookSecret'
+
+/** Encrypted secret setting: the Sentry API token used to poll Sentry monitors (separate from the webhook secret). */
+export const SENTRY_TOKEN_SECRET_KEY = 'sentryToken'
+
 /** One notification destination. The URL is a secret: never persist or log it. */
 export interface Destination {
   kind: 'slack' | 'webhook'
@@ -30,6 +36,8 @@ export interface PluginSettings {
   destinations: Destination[]
   /** Secret entries that are not http(s) URLs. They are not delivered to; T008 reports them. */
   invalidDestinations: number
+  /** The shared webhook token, or `null` when unset (the webhook routes then reject everything). */
+  webhookSecret: string | null
 }
 
 /** Whether `entry` is an http(s) URL, the only kind a destination can be. */
@@ -87,5 +95,11 @@ export async function readSettings(ctx: Pick<PluginContext, 'settings'>): Promis
   const entries = await ctx.settings.list()
   const values = new Map(entries.map(entry => [entry.key, entry.value]))
   const { destinations, invalid } = destinationsFrom(values)
-  return { config: configFrom(values.get(CONFIG_SETTINGS_KEY)), destinations, invalidDestinations: invalid }
+  const secret = values.get(WEBHOOK_SECRET_KEY)
+  return {
+    config: configFrom(values.get(CONFIG_SETTINGS_KEY)),
+    destinations,
+    invalidDestinations: invalid,
+    webhookSecret: typeof secret === 'string' && secret !== '' ? secret : null,
+  }
 }

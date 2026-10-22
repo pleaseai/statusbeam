@@ -1,6 +1,7 @@
 import type { SandboxedPlugin } from 'emdash/plugin'
 import { PROBE_DEADLINE_MS } from './budget'
 import { publicRoutes } from './routes/public'
+import { webhookRoutes } from './routes/webhooks'
 import { runMaintenance, runShard } from './run'
 import { MAINTENANCE_TASK, parseShardTask, reconcileShards } from './shards'
 
@@ -22,7 +23,7 @@ function deadlineFrom(data: Record<string, unknown> | undefined): number {
  * `reconcileShards` after a save.
  */
 const plugin: SandboxedPlugin = {
-  routes: { ...publicRoutes },
+  routes: { ...publicRoutes, ...webhookRoutes },
   hooks: {
     // Also runs after first install, so one hook covers install and re-enable.
     'plugin:activate': async (_event, ctx) => {

@@ -27,10 +27,15 @@
         "label": "Generic webhook URLs",
         "description": "One URL per line, or separated by commas or spaces. Each receives the status-change JSON."
       },
+      "webhookSecret": {
+        "type": "secret",
+        "label": "Webhook secret",
+        "description": "Shared token for inbound Statuspage and Sentry webhooks, sent as ?token=. While unset, every inbound webhook is rejected."
+      },
       "sentryToken": {
         "type": "secret",
         "label": "Sentry auth token",
-        "description": "Lets monitors with a Sentry poll backstop read the Issues API. Without it, only webhooks update those monitors."
+        "description": "Lets monitors with a Sentry poll backstop read the Issues API. Separate from the webhook secret. Without it, only webhooks update those monitors."
       }
     }
   },

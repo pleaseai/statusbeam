@@ -3,11 +3,10 @@ import type { PluginContext } from 'emdash/plugin'
 import type { Destination } from './settings'
 import { validateConfig } from '@statusbeam/core'
 import { MAX_SHARDS } from './budget'
-import { CONFIG_SETTINGS_KEY, destinationsFrom, isHttpUrl, SLACK_SECRET_KEY, WEBHOOKS_SECRET_KEY } from './settings'
+import { CONFIG_SETTINGS_KEY, destinationsFrom, isHttpUrl, SENTRY_TOKEN_SECRET_KEY, SLACK_SECRET_KEY, WEBHOOKS_SECRET_KEY } from './settings'
 import { monitorsPerShard, pollableSites, shardCountFor } from './shards'
 
-/** Encrypted secret setting: the Sentry auth token for poll monitors (FR-19). */
-export const SENTRY_TOKEN_SECRET_KEY = 'sentryToken'
+export { SENTRY_TOKEN_SECRET_KEY } from './settings'
 
 /** One finding about a configuration, for the admin page. `path` points at the offending field. */
 export interface PluginIssue {

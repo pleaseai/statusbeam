@@ -126,7 +126,8 @@ export async function runShard(ctx: RunContext, shard: number, options: ShardRun
   const finishedAt = now()
   const effective = new Map([...existing, ...changed.map(({ id, data }) => [id, data] as const)])
   const monitors = results.map((result: CheckResult) => advanceMonitor(
-    previous.monitors.get(result.slug),
+    // Poll-only state: webhook counts live in the webhook's own key and are added when readers merge.
+    previous.polled.get(result.slug),
     result,
     [...new Set([bucketId(result.slug, today), bucketId(result.slug, dayOf(result))])].flatMap(id => effective.get(id) ?? []),
     finishedAt,

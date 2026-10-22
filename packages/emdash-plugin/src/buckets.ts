@@ -42,9 +42,19 @@ export function bucketsOf(ctx: Pick<PluginContext, 'storage'>): BucketCollection
   return collection as unknown as BucketCollection
 }
 
-/** Storage id of a bucket. Slugs are `[a-z0-9-]`, so `:` cannot collide. */
-export function bucketId(slug: string, date: string): string {
-  return `${slug}:${date}`
+/**
+ * Who increments a bucket row. Scheduled shards own the `poll` rows and the
+ * webhook route owns the `webhook` rows, so neither ever read-modify-writes a
+ * row the other writes.
+ */
+export type BucketSource = 'poll' | 'webhook'
+
+/**
+ * Storage id of a bucket. Slugs are `[a-z0-9-]`, so `:` cannot collide: a poll
+ * id has one colon, a webhook id two.
+ */
+export function bucketId(slug: string, date: string, source: BucketSource = 'poll'): string {
+  return source === 'webhook' ? `${slug}:${date}:webhook` : `${slug}:${date}`
 }
 
 /** UTC day of a check, taken from its ISO `checkedAt` the way D1's `date(checked_at)` does. */
@@ -60,16 +70,18 @@ export function touchedBucketIds(results: CheckResult[]): string[] {
 /**
  * Add `results` to the buckets they fall in. `existing` maps bucket id to the
  * stored row; a missing row starts at zero. Returns only the rows that changed,
- * ready for one `putMany`. Pure: it never mutates `existing`.
+ * ready for one `putMany`. Pure: it never mutates `existing`. `source` picks
+ * which rows (`poll` by default) the counts go into.
  */
 export function applyResults(
   existing: Map<string, DayBucket>,
   results: CheckResult[],
+  source: BucketSource = 'poll',
 ): Array<{ id: string, data: DayBucket }> {
   const next = new Map<string, DayBucket>()
   for (const r of results) {
     const date = dayOf(r)
-    const id = bucketId(r.slug, date)
+    const id = bucketId(r.slug, date, source)
     const bucket = next.get(id) ?? { ...(existing.get(id) ?? { slug: r.slug, date, up: 0, degraded: 0, down: 0, total: 0 }) }
     bucket[r.status] += 1
     bucket.total += 1
@@ -91,6 +103,7 @@ export function windowStartDate(now: Date): string {
 /**
  * Read one monitor's buckets inside the 90-day window. One bridge call: 90 days
  * fit one 100-row page. A caller reading several monitors pays one call each.
+ * A day with webhook events has two rows (poll and webhook); a reader sums them.
  */
 export async function readMonitorBuckets(
   ctx: Pick<PluginContext, 'storage'>,
