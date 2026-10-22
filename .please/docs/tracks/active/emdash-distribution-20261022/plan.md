@@ -67,54 +67,54 @@ Considered and not built (beyond the spec's Out of Scope):
 
 **Phase 1 — spike**
 
-- [ ] T001 [SPIKE] Run the probe-semantics spike in all three execution modes and record the results in ADR-0004 (file: docs/adr/0004-emdash-plugin-distribution.md)
+- [ ] T001 [SPIKE] Run the probe-semantics spike in all three execution modes and record the results in ADR-0004 (file: docs/adr/0004-emdash-plugin-distribution.md) [FR-1, FR-2, FR-3, FR-4, FR-5, AC-001, AC-002, AC-003, AC-004]
   Validation: ADR-0004 gains a results table per mode covering: the >8 MiB, slow-body and streaming fixtures (AC-001, AC-002); whether a body, subrequest or CPU-limit rejection is distinguishable from a network error and how it surfaces (FR-2); probes finished per run past the subrequest cap, including notification deliveries and config re-validation (AC-003, FR-3); and the cron minimum interval (FR-4). It ends in either Accepted or a revision of the affected decisions and spec phases (AC-004, FR-5). The harness (`apps/emdash-demo` plus fixtures) is committed with a README that reproduces each run.
   Method: manual runs on Worker Loader, the Node/workerd runner and in-process (`plugins: []`), recorded in the ADR.
   STOP: a mode contradicts the probe contract, the cadence or capacity is unworkable, or a runner is unavailable on the account. Report to the user before marking the ADR.
 
 **Phase 2 — shared contract and core extraction**
 
-- [ ] T002 Define the public status contract in core and serve the standalone endpoints from it (file: packages/core/src/contract.ts)
+- [ ] T002 Define the public status contract in core and serve the standalone endpoints from it (file: packages/core/src/contract.ts) [FR-6]
   Validation: the standalone `/api/status.json`, `/api/status/<slug>.json` and badge responses parse under the exported schemas. They are byte-identical to today apart from the added `version` field. The path map yields both the standalone and the plugin URL for every endpoint. `@statusbeam/core/contract` imports without `yaml`.
   Method: `bun test packages/core` plus a `bun run build` check of the subpath export
-- [ ] T003 Move the rollup, change detection, poll selection, notification delivery, webhook helpers and config issue list from the apps into core, with standalone switched over (file: packages/core/src/rollup.ts)
+- [ ] T003 Move the rollup, change detection, poll selection, notification delivery, webhook helpers and config issue list from the apps into core, with standalone switched over (file: packages/core/src/rollup.ts) [NFR-5]
   Validation: the existing worker and web tests pass unchanged. A configuration with a YAML syntax error and one with schema errors both produce a path-annotated issue list. Rollup output for a fixed check history and `now` equals the current worker output, with no core logic duplicated in the apps (NFR-5).
   Method: `bun test` (repo root), plus a new core rollup test against a recorded worker fixture
 
 **Phase 3 — engine plugin**
 
-- [ ] T004 Scaffold the sandboxed engine plugin and run scheduled checks into day buckets and a snapshot (file: packages/emdash-plugin/src/plugin.ts) (depends on T001, T003)
+- [ ] T004 Scaffold the sandboxed engine plugin and run scheduled checks into day buckets and a snapshot (file: packages/emdash-plugin/src/plugin.ts) (depends on T001, T003) [FR-8, FR-9, NFR-2]
   Validation: a cron run checks every configured monitor through `ctx.http.fetch`, updates the per-day buckets and snapshot, and prunes buckets older than 90 days. 90-day per-day uptime from the buckets equals the standalone rollup for the same check history (FR-8, FR-9). Webhook-only Sentry monitors are not polled. Runs beyond the per-run capacity follow T001's decision (split or cap), so no run exceeds the runner limits (NFR-2).
   Method: `bun test packages/emdash-plugin` with `createPluginTestHost` and `host.http.respond`
-- [ ] T005 Send status-change notifications and grade runtime-limit failures as unsupported or skipped (file: packages/emdash-plugin/src/run.ts) (depends on T004)
+- [ ] T005 Send status-change notifications and grade runtime-limit failures as unsupported or skipped (file: packages/emdash-plugin/src/run.ts) (depends on T004) [FR-10, FR-13, AC-009, AC-010, AC-011, AC-012, AC-013]
   Validation: A status change posts to the Slack and generic-webhook URLs held in secret settings fields this task declares (FR-10), and delivery logs never contain a full URL. A body-limit failure marks the probe unsupported (AC-009); a subrequest- or CPU-limit failure marks it skipped (AC-010). Neither notifies (AC-011) nor changes status or uptime (AC-012), and the monitor shows a persistent warning naming the limit. A GET monitor is never retried as HEAD (AC-013). Standalone results are unaffected by the new core `limit` field.
   Method: `bun test packages/emdash-plugin packages/core`
-- [ ] T006 Serve the public status and badge endpoints as raw routes with HTTP-level parity against standalone (file: packages/emdash-plugin/src/routes/public.ts) (depends on T002, T004)
+- [ ] T006 Serve the public status and badge endpoints as raw routes with HTTP-level parity against standalone (file: packages/emdash-plugin/src/routes/public.ts) (depends on T002, T004) [FR-7, NFR-3, AC-005, AC-006]
   Validation: The plugin status endpoint returns an unwrapped body the contract accepts (AC-005). The badge endpoints return valid shields.io bodies (AC-006). For the same snapshot, every plugin endpoint's response body equals the standalone endpoint's, with `generatedAt` normalized (NFR-3). Successful GETs carry the route's `cacheControl`. An unknown slug returns the standalone 404 body. An invalid `period` falls back to `month` as standalone does.
   Method: `bun test packages/emdash-plugin` with `createPluginRuntimeTestHost`, invoking the `apps/web` route handlers with their data layer mocked to the same snapshot (`mock.module`)
-- [ ] T007 Accept Statuspage and Sentry webhooks on public routes that fail closed (file: packages/emdash-plugin/src/routes/webhooks.ts) (depends on T004)
+- [ ] T007 Accept Statuspage and Sentry webhooks on public routes that fail closed (file: packages/emdash-plugin/src/routes/webhooks.ts) (depends on T004) [FR-11, AC-007, AC-008]
   Validation: With no secret set, every request is rejected (AC-007). A mismatched token is rejected before any grading or storage access, with no status change (AC-008). A valid token with an unknown slug or a check kind that does not match the provider returns 404 and changes nothing. A valid event updates the snapshot and today's bucket like a polled result, and an event arriving during a cron run loses no bucket counts. Non-POST requests get 405.
   Method: `bun test packages/emdash-plugin` with `createPluginRuntimeTestHost`
 
 **Phase 4 — monitor configuration**
 
-- [ ] T008 Validate the YAML with plugin-only rules, keep secrets in encrypted settings, and gate each scheduled run on re-validation (file: packages/emdash-plugin/src/config.ts) (depends on T004)
+- [ ] T008 Validate the YAML with plugin-only rules, keep secrets in encrypted settings, and gate each scheduled run on re-validation (file: packages/emdash-plugin/src/config.ts) (depends on T004) [FR-14, FR-18, FR-19, FR-20, AC-018, AC-019, AC-020, AC-021, AC-022, AC-023, AC-024]
   Validation: The YAML is validated by the core schema (FR-14). `delivery: queue` is an error (AC-018). TCP/SSL monitors warn (AC-019). A Sentry poll with no token warns (AC-020). Too many monitors for one run warns (AC-021). A Slack or webhook URL in the YAML is an error pointing to the encrypted settings (AC-022). Duplicate slugs are an error. A generic-webhook secret line that is not a URL is reported, not dropped. A run whose stored config fails validation checks nothing and changes no status (AC-023), and records an error that stays until a valid save (AC-024).
   Method: `bun test packages/emdash-plugin`
-- [ ] T009 Build the administrator-only Block Kit config page and the status dashboard widget (file: packages/emdash-plugin/src/admin.ts) (depends on T008)
+- [ ] T009 Build the administrator-only Block Kit config page and the status dashboard widget (file: packages/emdash-plugin/src/admin.ts) (depends on T008) [FR-12, FR-15, FR-16, FR-17, AC-014, AC-015, AC-016, AC-017, AC-025, AC-026]
   Validation: Saving an invalid config shows every issue with its path (AC-014) and keeps the stored one (AC-015). A save after someone else's save is refused with a reload message (AC-016). A non-administrator is refused on every page action (AC-017). Validate checks without saving (FR-16). Test site shows graded status and latency (AC-025) and writes no history or status (AC-026). The run-time error from T008 shows as a banner. A YAML too large for a Block Kit string is refused with a message, not truncated. The widget shows overall status and per-severity counts (FR-12).
   Method: `bun test packages/emdash-plugin` with `createPluginRuntimeTestHost` admin interactions, plus a manual pass in `apps/emdash-demo`
   STOP: Block Kit cannot carry unsaved YAML to a Validate action separate from Save. Report the options before changing the FR-16 interaction.
 
 **Phase 5 — render library and docs**
 
-- [ ] T010 Build the Astro status components and contract client in `@statusbeam/emdash-ui` (file: packages/emdash-ui/src/components/StatusBanner.astro) (depends on T002)
+- [ ] T010 Build the Astro status components and contract client in `@statusbeam/emdash-ui` (file: packages/emdash-ui/src/components/StatusBanner.astro) (depends on T002) [FR-21, NFR-1, NFR-4, AC-027]
   Validation: Banner, 90-day bars and per-site detail render from either a standalone or a plugin base URL. Against a standalone deployment they show the same per-site status as its page (AC-027). Every status is conveyed by a text label or icon as well as color (NFR-4). A response that fails the contract renders an unavailable state instead of throwing. The package has no scheduled work, storage or engine imports (NFR-1).
   Method: `bun test packages/emdash-ui` for the contract client (bun cannot import `.astro`), plus `Skill("please:test-browser")` on an `apps/emdash-demo` page pointed at standalone and at the plugin
-- [ ] T011 Add the opt-in native "status" Portable Text block entry point (file: packages/emdash-ui/src/block.ts) (depends on T010)
+- [ ] T011 Add the opt-in native "status" Portable Text block entry point (file: packages/emdash-ui/src/block.ts) (depends on T010) [FR-22]
   Validation: registering the `./block` descriptor in `apps/emdash-demo` adds a "status" block to the post editor. A post embedding it renders with the T010 components. A site that imports only the components registers no plugin (FR-22).
   Method: manual check in `apps/emdash-demo` via `Skill("please:test-browser")`
-- [ ] T012 Document installation and operation, and register both packages for release (file: apps/docs/src/content/docs/emdash.md) (depends on T006, T007, T009, T011)
+- [ ] T012 Document installation and operation, and register both packages for release (file: apps/docs/src/content/docs/emdash.md) (depends on T006, T007, T009, T011) [FR-23, AC-028, AC-029, AC-030]
   Validation: The guide states that a sandbox runner is required (AC-028). It states that in-process mode is a trust decision giving up isolation and limits (AC-029), and which deployment shape keeps checks and page independent of a CMS outage (AC-030). It also covers the unrestricted network capability, the probe-contract limits and the missing cross-origin header. Both packages appear in the release-please config and manifest, and in the `publish.yml` tag map, with CHANGELOGs.
   Method: docs build (`bunx turbo run build --filter=@statusbeam/docs`) plus a review of the release-please dry-run output
 
