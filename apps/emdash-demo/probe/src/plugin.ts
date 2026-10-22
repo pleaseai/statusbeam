@@ -199,7 +199,8 @@ function str(input: unknown, key: string): string | undefined {
 
 const plugin: SandboxedPlugin = {
   hooks: {
-    cron: async (event, ctx) => {
+    // EmDash's default hook timeout is 5 s; the engine deadline check needs longer (under the 30 s wall limit).
+    cron: { timeout: 25_000, handler: async (event, ctx) => {
       const input = capacityInput({ ...event.data, tag: `cron-${event.name}` })
       const started = Date.now()
       // Engine deadline check: abandon a never-completing fetch at 10 s, then keep
@@ -225,7 +226,7 @@ const plugin: SandboxedPlugin = {
       catch (err) {
         console.warn(JSON.stringify({ spikeCronSummaryLost: summary, error: describeError(err) }))
       }
-    },
+    } },
   },
   routes: {
     // Grade one fixture through checkSite + ctx.http.fetch.
