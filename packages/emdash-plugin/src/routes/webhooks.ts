@@ -102,6 +102,9 @@ export async function handleWebhook(
   }
   const graded = gradeWebhookPayload(provider, body, site)
   if ('error' in graded) {
+    // As in the standalone Worker: payload drift (a provider API change) is logged with the Zod reason,
+    // and the caller gets the bare 400. `console` costs no bridge call, unlike `ctx.log`.
+    console.warn(`webhook: payload failed validation for slug "${slug}": ${graded.reason}`)
     return reply(400, 'Invalid payload')
   }
   if (graded.status === null) {

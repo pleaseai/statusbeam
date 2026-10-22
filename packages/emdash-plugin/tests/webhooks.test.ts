@@ -1,7 +1,7 @@
 import type { PluginContext, PluginResponse } from 'emdash/plugin'
 import type { DayBucket } from '../src/buckets'
 import type { WebhookSnapshot } from '../src/snapshot'
-import { describe, expect, it } from 'bun:test'
+import { describe, expect, it, spyOn } from 'bun:test'
 import { handleWebhook, WEBHOOK_MAX_DESTINATIONS, webhookRoutes } from '../src/routes/webhooks'
 import { runShard } from '../src/run'
 import { readSnapshot, summariesFromSnapshot } from '../src/snapshot'
@@ -140,7 +140,16 @@ describe('webhook routing after a valid token', () => {
   it('answers invalid JSON and a wrong-shaped payload with 400, and an event for another component with 204, writing nothing', async () => {
     const fake = newContext()
     expect((await post(fake.ctx, { rawBody: '{oops' })).status).toBe(400)
-    expect((await post(fake.ctx, { body: { page: 7 } })).status).toBe(400)
+    const warn = spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      expect(await post(fake.ctx, { body: { page: 7 } })).toEqual({ status: 400, text: 'Invalid payload' })
+      // The caller gets the bare 400; the Zod reason goes to the log, as in the standalone Worker.
+      expect(warn).toHaveBeenCalledTimes(1)
+      expect(String(warn.mock.calls[0]?.[0])).toMatch(/^webhook: payload failed validation for slug "web": .*page/s)
+    }
+    finally {
+      warn.mockRestore()
+    }
     expect((await post(fake.ctx, { body: {} })).status).toBe(204)
     expect(fake.rows.size + fake.kv.size).toBe(0)
 
