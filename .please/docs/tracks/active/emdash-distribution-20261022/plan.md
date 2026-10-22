@@ -74,10 +74,10 @@ Considered and not built (beyond the spec's Out of Scope):
 
 **Phase 2 — shared contract and core extraction**
 
-- [ ] T002 Define the public status contract in core and serve the standalone endpoints from it (file: packages/core/src/contract.ts) [FR-6]
+- [x] T002 Define the public status contract in core and serve the standalone endpoints from it (file: packages/core/src/contract.ts) [FR-6]
   Validation: the standalone `/api/status.json`, `/api/status/<slug>.json` and badge responses parse under the exported schemas. They are byte-identical to today apart from the added `version` field. The path map yields both the standalone and the plugin URL for every endpoint. `@statusbeam/core/contract` imports without `yaml`.
   Method: `bun test packages/core` plus a `bun run build` check of the subpath export
-- [ ] T003 Move the rollup, change detection, poll selection, notification delivery, webhook helpers and config issue list from the apps into core, with standalone switched over (file: packages/core/src/rollup.ts) [NFR-5]
+- [x] T003 Move the rollup, change detection, poll selection, notification delivery, webhook helpers and config issue list from the apps into core, with standalone switched over (file: packages/core/src/rollup.ts) [NFR-5]
   Validation: the existing worker and web tests pass unchanged. A configuration with a YAML syntax error and one with schema errors both produce a path-annotated issue list. Rollup output for a fixed check history and `now` equals the current worker output, with no core logic duplicated in the apps (NFR-5).
   Method: `bun test` (repo root), plus a new core rollup test against a recorded worker fixture
 
@@ -149,6 +149,11 @@ Considered and not built (beyond the spec's Out of Scope):
 
 ## Progress
 
+- [x] (2026-10-22 16:20 KST) T002 Define the public status contract in core and serve the standalone endpoints from it — `9bb4c21`
+  Evidence: `bun test` → 324 pass, 0 fail; `contract.test.ts` asserts each body equals the legacy payload with only `version: 1` prepended, parses under its schema, and the path map yields both flavors; `grep -c yaml packages/core/dist/contract.js` → 0; `bun run build`/`typecheck`/`lint` green in the track tree.
+- [x] (2026-10-22 16:24 KST) T003 Move the rollup, change detection, poll selection, notification delivery, webhook helpers and config issue list into core — `16c71b5`
+  Evidence: `bun test` → 352 pass, 0 fail (314 before); no existing `*.test.ts` modified (`git diff --name-status 12da16f..HEAD -- '*.test.ts'` shows only additions); `rollup.test.ts` reproduces the pre-refactor worker output recorded in `fixtures/rollup-worker.json`; `config-issues.test.ts` covers syntax and schema issue paths; build/typecheck/lint green.
+
 ## Decision Log
 
 - 2026-10-22: Architecture follows ADR-0004 as amended in #99. No competing architect pass, because the spec leaves no strategy open.
@@ -156,3 +161,5 @@ Considered and not built (beyond the spec's Out of Scope):
 - 2026-10-22: The plan has 12 tasks covering two packages. The single-track ruling was made at spec review (the user kept one track), so the Phase 4 scope prompt was not repeated.
 
 ## Surprises & Discoveries
+
+- Executor worktrees are cut from the main checkout's `main` (12da16f), not from the track branch, so they lack the track files. Their commits are cherry-picked onto the track branch, and Progress is recorded here by the lead.
