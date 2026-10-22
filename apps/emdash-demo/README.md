@@ -25,6 +25,19 @@ not change the versions that `apps/web` and `apps/docs` resolve.
 | `workerd` | Node (`@astrojs/node`) | `sandboxed: [probe]` | `@emdash-cms/sandbox-workerd/sandbox` |
 | `in-process` | Node (`@astrojs/node`) | `plugins: [probe]` | none |
 
+## Status components page
+
+`src/pages/status.astro` renders the `@statusbeam/emdash-ui` components, imported by
+relative path from `packages/emdash-ui`. By default it reads the standalone deployment at
+`https://statusbeam.dev`; set `STATUSBEAM_BASE_URL` at build time to point it at another
+standalone deployment. `/status?source=plugin` reads this site's own StatusBeam plugin
+routes instead.
+
+```sh
+STATUSBEAM_BASE_URL=http://127.0.0.1:4420 bun run build:in-process
+PORT=4410 HOST=127.0.0.1 bun run start    # then open http://127.0.0.1:4410/status
+```
+
 ## Probe routes
 
 All routes are public and live under `/_emdash/api/plugins/statusbeam-spike-probe/`. The
