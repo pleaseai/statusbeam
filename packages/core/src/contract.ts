@@ -9,9 +9,17 @@ import { overallSeverity } from './types'
  * standalone StatusBeam or the EmDash plugin.
  *
  * This module is the `@statusbeam/core/contract` subpath entry. Keep its imports
- * to `zod` plus the pure `./types` and `./badge` modules — importing `./config`
- * or `./check` would pull `yaml` into the render library.
+ * to `zod` plus the pure `./types`, `./badge` and `./i18n` modules — importing
+ * `./config` or `./check` would pull `yaml` into the render library.
  */
+
+// Display helpers the render library (`@statusbeam/emdash-ui`) shares with
+// `apps/web`, so both render the same contract data with the same labels and
+// uptime math. All are pure and yaml-free.
+export { DEFAULT_LOCALE, formatDay, getDict, LOCALES } from './i18n'
+export type { DayKey, Dict, Locale } from './i18n'
+export { formatUptime, toSeverity, windowUptime } from './types'
+export type { CheckStatus, DayStat, Severity } from './types'
 
 /**
  * Current contract version, carried in the body of the aggregate and per-site
