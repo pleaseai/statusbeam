@@ -1,6 +1,7 @@
 import type { PluginDescriptor, PortableTextBlockConfig } from 'emdash'
+import type { StatusBlockOptions } from './block-config'
 import pkg from '../package.json' with { type: 'json' }
-import { BLOCK_FLAVORS, BLOCK_TYPE, BLOCK_VIEWS } from './block-node'
+import { BLOCK_FLAVORS, BLOCK_TYPE, BLOCK_VIEWS, parseAllowedOrigins } from './block-node'
 
 /**
  * Opt-in native plugin descriptor for a "status" Portable Text block.
@@ -43,13 +44,25 @@ export const statusBlock: PortableTextBlockConfig = {
   ],
 }
 
-/** The descriptor to pass in the `plugins` array of the `emdash()` integration. */
-export function statusBeamBlock(): PluginDescriptor {
-  return {
+/**
+ * The descriptor to pass in the `plugins` array of the `emdash()` integration.
+ * `allowedOrigins` restricts every block to those origins; an entry that is not
+ * an http(s) origin throws here, so a typo fails the site build.
+ */
+export function statusBeamBlock(options: StatusBlockOptions = {}): PluginDescriptor {
+  const descriptor: PluginDescriptor = {
     id: PLUGIN_ID,
     version: pkg.version,
     format: 'native',
     entrypoint: '@statusbeam/emdash-ui/plugin',
     componentsEntry: '@statusbeam/emdash-ui/astro',
   }
+  if (options.allowedOrigins === undefined) {
+    return descriptor
+  }
+  const allowed = parseAllowedOrigins(options.allowedOrigins)
+  if (!allowed.ok) {
+    throw new Error(`statusBeamBlock: ${allowed.reason}`)
+  }
+  return { ...descriptor, options: { allowedOrigins: allowed.origins } }
 }

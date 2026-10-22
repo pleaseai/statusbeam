@@ -1,4 +1,5 @@
 ---
+import { renderOptions } from '../block-config'
 import { selectFromBlock } from '../block-node'
 import SiteDetail from '../components/SiteDetail.astro'
 import StatusBanner from '../components/StatusBanner.astro'
@@ -8,8 +9,9 @@ import Unavailable from '../components/Unavailable.astro'
  * Renders the "status" Portable Text block with the library components. EmDash
  * passes the block data as `Astro.props.node`. Only a development server accepts
  * a localhost or private source (a local fixture); a production build refuses it.
+ * The site's `allowedOrigins`, when configured, decide the source instead.
  */
-const selection = selectFromBlock(Astro.props.node ?? {}, { allowPrivateHosts: import.meta.env.DEV })
+const selection = selectFromBlock(Astro.props.node ?? {}, renderOptions(import.meta.env.DEV))
 ---
 
 {selection.ok && selection.view === 'banner' && <StatusBanner {...selection.source} />}

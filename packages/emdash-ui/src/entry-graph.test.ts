@@ -81,3 +81,35 @@ describe('block entry point', () => {
     expect(admin.portableTextBlocks[0]!.fields.map(f => f.action_id)).toEqual(['view', 'slug', 'baseUrl', 'flavor'])
   })
 })
+
+describe('allowedOrigins reach the renderer', () => {
+  it('the descriptor carries normalised origins as options, none when unset, and throws on a bad entry', async () => {
+    const { statusBeamBlock } = await import('./block')
+    expect(statusBeamBlock()).not.toHaveProperty('options')
+    expect(statusBeamBlock({ allowedOrigins: ['HTTPS://Status.Example.com:443/'] }).options).toEqual({ allowedOrigins: ['https://status.example.com'] })
+    expect(() => statusBeamBlock({ allowedOrigins: ['https://status.example.com/prefix'] })).toThrow('statusBeamBlock: allowedOrigins entry "https://status.example.com/prefix"')
+  })
+
+  it('createPlugin(options) is what StatusBlock.astro validates blocks with', async () => {
+    mock.module('emdash', () => ({ definePlugin: (definition: unknown) => definition }))
+    const { statusBeamBlock } = await import('./block')
+    const { createPlugin } = await import('./plugin')
+    const { renderOptions } = await import('./block-config')
+    const { selectFromBlock } = await import('./block-node')
+    try {
+      // EmDash inlines the descriptor's options as JSON into its generated plugins module.
+      createPlugin(JSON.parse(JSON.stringify(statusBeamBlock({ allowedOrigins: ['https://status.example.com'] }).options)))
+      expect(renderOptions(false)).toEqual({ allowPrivateHosts: false, allowedOrigins: ['https://status.example.com'] })
+      expect(selectFromBlock({ baseUrl: 'https://status.example.com' }, renderOptions(false))).toMatchObject({ ok: true })
+      expect(selectFromBlock({ baseUrl: 'https://internal.corp' }, renderOptions(false))).toMatchObject({ ok: false, reason: expect.stringContaining('allowed origins') })
+
+      createPlugin(JSON.parse(JSON.stringify(statusBeamBlock().options ?? {})))
+      expect(renderOptions(true)).toEqual({ allowPrivateHosts: true })
+    }
+    finally {
+      createPlugin()
+    }
+    const renderer = await Bun.file(resolve(import.meta.dir, 'astro/StatusBlock.astro')).text()
+    expect(renderer).toContain('selectFromBlock(Astro.props.node ?? {}, renderOptions(import.meta.env.DEV))')
+  })
+})

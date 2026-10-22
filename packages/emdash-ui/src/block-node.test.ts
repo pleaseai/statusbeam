@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'bun:test'
-import { selectFromBlock } from './block-node'
+import { describe, expect, it, spyOn } from 'bun:test'
+import { parseAllowedOrigins, selectFromBlock } from './block-node'
 
 describe('selectFromBlock', () => {
   it('maps a banner block to a standalone source by default', () => {
@@ -70,5 +70,72 @@ describe('selectFromBlock', () => {
     for (const baseUrl of ['http://127.0.0.1:8080/admin#', 'http://127.0.0.1:8080/?x=1', 'http://u:p@127.0.0.1']) {
       expect(selectFromBlock({ baseUrl }, { allowPrivateHosts: true }), baseUrl).toMatchObject({ ok: false })
     }
+  })
+})
+
+describe('selectFromBlock with allowedOrigins', () => {
+  const allowedOrigins = ['https://status.example.com', 'http://10.0.0.5:8080']
+
+  it('accepts a base URL on an allowed origin, including an approved private address', () => {
+    for (const baseUrl of ['https://status.example.com', 'https://status.example.com/prefix', 'http://10.0.0.5:8080/status']) {
+      expect(selectFromBlock({ baseUrl }, { allowedOrigins }), baseUrl).toMatchObject({ ok: true, source: { baseUrl } })
+    }
+  })
+
+  it('refuses any other origin without making a request', () => {
+    const fetchSpy = spyOn(globalThis, 'fetch')
+    try {
+      for (const baseUrl of ['https://other.example.com', 'http://status.example.com', 'https://status.example.com:8443', 'https://internal.corp', 'http://10.0.0.5']) {
+        expect(selectFromBlock({ baseUrl }, { allowedOrigins }), baseUrl).toEqual({
+          ok: false,
+          reason: `baseUrl origin ${new URL(baseUrl).origin} is not in the site's allowed origins`,
+        })
+      }
+      expect(fetchSpy).not.toHaveBeenCalled()
+    }
+    finally {
+      fetchSpy.mockRestore()
+    }
+  })
+
+  it('keeps the literal-address guard when the list is unset or empty', () => {
+    for (const options of [{}, { allowedOrigins: [] }]) {
+      expect(selectFromBlock({ baseUrl: 'https://internal.corp' }, options)).toMatchObject({ ok: true })
+      expect(selectFromBlock({ baseUrl: 'http://10.0.0.5' }, options)).toMatchObject({ ok: false, reason: expect.stringContaining('must not be a loopback') })
+    }
+  })
+
+  it('compares normalised origins: case, default ports and a trailing slash do not matter', () => {
+    const list = ['HTTPS://Status.Example.COM:443/', 'http://Cms.Test:80']
+    for (const baseUrl of ['https://status.example.com/x', 'https://STATUS.example.com:443', 'http://cms.test/', 'http://cms.test:80/api']) {
+      expect(selectFromBlock({ baseUrl }, { allowedOrigins: list }), baseUrl).toMatchObject({ ok: true })
+    }
+    expect(selectFromBlock({ baseUrl: 'http://cms.test:8080' }, { allowedOrigins: list })).toMatchObject({ ok: false })
+  })
+
+  it('still refuses credentials, a query or a fragment on an allowed origin', () => {
+    for (const baseUrl of ['https://u:p@status.example.com', 'https://status.example.com/?x=1', 'https://status.example.com/#top']) {
+      expect(selectFromBlock({ baseUrl }, { allowedOrigins }), baseUrl).toMatchObject({ ok: false, reason: expect.stringMatching(/credentials|query string or a fragment/) })
+    }
+  })
+
+  it('refuses every block, naming the entry, when a configured entry is not an http(s) origin', () => {
+    for (const bad of ['status.example.com', 'ftp://status.example.com', 'https://status.example.com/prefix', 'https://u@status.example.com', 'https://status.example.com/?x', 'https://status.example.com#']) {
+      expect(selectFromBlock({ baseUrl: 'https://status.example.com' }, { allowedOrigins: ['https://status.example.com', bad] }), bad).toEqual({
+        ok: false,
+        reason: `allowedOrigins entry ${JSON.stringify(bad)} must be an http(s) origin such as https://status.example.com`,
+      })
+    }
+  })
+})
+
+describe('parseAllowedOrigins', () => {
+  it('normalises each entry to its origin', () => {
+    expect(parseAllowedOrigins([' https://Status.Example.com:443/ ', 'http://cms.test:8080'])).toEqual({ ok: true, origins: ['https://status.example.com', 'http://cms.test:8080'] })
+  })
+
+  it('reports a non-array or non-string entry', () => {
+    expect(parseAllowedOrigins('https://status.example.com')).toMatchObject({ ok: false, reason: 'allowedOrigins must be an array of origins' })
+    expect(parseAllowedOrigins([42])).toMatchObject({ ok: false, reason: expect.stringContaining('allowedOrigins entry 42') })
   })
 })
