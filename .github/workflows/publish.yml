@@ -1,7 +1,7 @@
 name: Publish
 
 # release-please cuts one GitHub Release per changed package (tags like
-# `core-v0.1.0`, `cli-v0.1.0`). Each published release fires this workflow, which
+# `core-v0.1.0`, `cli-v0.1.0`, `emdash-ui-v0.1.0`). Each published release fires this workflow, which
 # publishes just that package to npm with provenance. See ADR-0002.
 #
 # A release-triggered run executes the workflow file AT THE TAG'S COMMIT, so a
@@ -48,6 +48,8 @@ jobs:
             web) dir="apps/web" ;;
             cli) dir="packages/cli" ;;
             create-statusbeam) dir="packages/create-statusbeam" ;;
+            emdash-plugin) dir="packages/emdash-plugin" ;;
+            emdash-ui) dir="packages/emdash-ui" ;;
             *) echo "::error::unknown release component '$component' (tag '$TAG')"; exit 1 ;;
           esac
           echo "dir=$dir" >> "$GITHUB_OUTPUT"
@@ -99,7 +101,8 @@ jobs:
           bun run test
 
       - name: Build
-        # Builds the workspace so core/cli/create-statusbeam emit their dist/.
+        # Builds the workspace so core/cli/create-statusbeam/emdash-plugin emit their dist/
+        # (emdash-ui ships .astro/.ts source and has no build).
         run: bun run build
 
       - name: Pack + publish with provenance

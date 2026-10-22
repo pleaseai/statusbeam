@@ -2,7 +2,7 @@
   "$schema": "../../node_modules/@emdash-cms/plugin-cli/schemas/emdash-plugin.schema.json",
 
   "slug": "statusbeam",
-  // Placeholder until the registry publisher is set up (T012).
+  // Placeholder: no registry publisher is set up yet. The package installs from npm.
   "publisher": "did:plc:statusbeamplaceholder",
 
   "license": "MIT",

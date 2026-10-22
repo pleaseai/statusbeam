@@ -5,6 +5,18 @@
   "private": false,
   "description": "StatusBeam engine for EmDash — a sandboxed plugin that runs scheduled checks with the core engine.",
   "license": "MIT",
+  "homepage": "https://github.com/pleaseai/statusbeam/tree/main/packages/emdash-plugin#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pleaseai/statusbeam.git",
+    "directory": "packages/emdash-plugin"
+  },
+  "keywords": [
+    "emdash",
+    "emdash-plugin",
+    "statusbeam",
+    "status-page"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.mts",
@@ -17,6 +29,10 @@
     "dist",
     "emdash-plugin.jsonc"
   ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "scripts": {
     "build": "emdash-plugin build",
     "typecheck": "tsc --noEmit",
