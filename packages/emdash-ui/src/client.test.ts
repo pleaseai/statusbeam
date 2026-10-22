@@ -90,7 +90,9 @@ describe('package surface (NFR-1)', () => {
     const files = new Bun.Glob('**/*.{ts,astro}').scan({ cwd: import.meta.dir })
     const specifiers: string[] = []
     for await (const file of files) {
-      if (file.endsWith('.test.ts')) {
+      // `block.ts`, `plugin.ts` and `astro/` are the opt-in EmDash entry points (FR-22).
+      // They may import `emdash`; entry-graph.test.ts proves the entries never reach them.
+      if (file.endsWith('.test.ts') || file === 'block.ts' || file === 'plugin.ts' || file.startsWith('astro/') || file.startsWith('types/')) {
         continue
       }
       const text = await Bun.file(`${import.meta.dir}/${file}`).text()

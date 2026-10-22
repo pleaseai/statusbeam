@@ -3,6 +3,7 @@
 //   workerd        Node host + workerd child-process runner (@emdash-cms/sandbox-workerd/sandbox)
 //   in-process     Node host, probe listed in `plugins: []` (no runner, no isolation)
 import process from 'node:process'
+import { fileURLToPath } from 'node:url'
 import cloudflare from '@astrojs/cloudflare'
 import node from '@astrojs/node'
 import react from '@astrojs/react'
@@ -11,6 +12,7 @@ import { defineConfig } from 'astro/config'
 import emdash, { local } from 'emdash/astro'
 import { sqlite } from 'emdash/db'
 import probe from 'statusbeam-spike-probe'
+import { statusBeamBlock } from '../../packages/emdash-ui/src/block.ts'
 
 const MODES = ['worker-loader', 'workerd', 'in-process']
 const mode = process.env.SPIKE_MODE ?? 'worker-loader'
@@ -19,11 +21,29 @@ if (!MODES.includes(mode)) {
 }
 const onCloudflare = mode === 'worker-loader'
 
+// T011: `STATUSBEAM_BLOCK=1` registers the opt-in "status" Portable Text block
+// from @statusbeam/emdash-ui (FR-22). Without it the site registers no
+// StatusBeam plugin beyond the spike probe. The package is not installed here
+// (this app is outside the root workspace), so its entry points and `emdash`
+// are aliased to the sources; a real site installs the package and needs none.
+const withBlock = process.env.STATUSBEAM_BLOCK === '1'
+const uiSrc = fileURLToPath(new URL('../../packages/emdash-ui/src/', import.meta.url))
+const blockAlias = withBlock
+  ? [
+      { find: /^@statusbeam\/emdash-ui\/plugin$/, replacement: `${uiSrc}plugin.ts` },
+      { find: /^@statusbeam\/emdash-ui\/astro$/, replacement: `${uiSrc}astro/index.ts` },
+      { find: /^emdash$/, replacement: fileURLToPath(import.meta.resolve('emdash')) },
+    ]
+  : []
+
 const modeConfig = {
   'worker-loader': { sandboxed: [probe], plugins: [], sandboxRunner: onCloudflare ? sandbox() : undefined },
   'workerd': { sandboxed: [probe], plugins: [], sandboxRunner: '@emdash-cms/sandbox-workerd/sandbox' },
   'in-process': { sandboxed: [], plugins: [probe], sandboxRunner: undefined },
 }[mode]
+if (withBlock) {
+  modeConfig.plugins = [...modeConfig.plugins, statusBeamBlock()]
+}
 
 export default defineConfig({
   output: 'server',
@@ -40,5 +60,6 @@ export default defineConfig({
       ...modeConfig,
     }),
   ],
+  vite: { resolve: { alias: blockAlias } },
   devToolbar: { enabled: false },
 })

@@ -1,0 +1,16 @@
+---
+import { selectFromBlock } from '../block-node'
+import SiteDetail from '../components/SiteDetail.astro'
+import StatusBanner from '../components/StatusBanner.astro'
+import Unavailable from '../components/Unavailable.astro'
+
+/**
+ * Renders the "status" Portable Text block with the library components. EmDash
+ * passes the block data as `Astro.props.node`.
+ */
+const selection = selectFromBlock(Astro.props.node ?? {})
+---
+
+{selection.ok && selection.view === 'banner' && <StatusBanner {...selection.source} />}
+{selection.ok && selection.view === 'site' && <SiteDetail {...selection.source} slug={selection.slug} />}
+{!selection.ok && <Unavailable result={{ ok: false, reason: 'contract', detail: selection.reason, url: '' }} />}

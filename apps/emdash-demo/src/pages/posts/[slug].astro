@@ -1,0 +1,41 @@
+---
+import { getEmDashEntry } from 'emdash'
+import { PortableText } from 'emdash/ui'
+
+// T011 demo: renders a seeded post. When the site registers the opt-in
+// `statusBeamBlock()` descriptor (STATUSBEAM_BLOCK=1, see astro.config.mjs), a
+// "statusbeam-status" block in `content` renders through the plugin's
+// `componentsEntry`; EmDash merges it into <PortableText> automatically.
+const { slug } = Astro.params
+const { entry: post } = slug ? await getEmDashEntry('posts', slug) : { entry: undefined }
+if (!post) {
+  return new Response('Not found', { status: 404 })
+}
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{post.data.title}</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: system-ui, sans-serif;
+      }
+      article {
+        max-width: 48rem;
+        margin: 0 auto;
+        padding: 2.5rem 1rem;
+        display: grid;
+        gap: 1rem;
+      }
+    </style>
+  </head>
+  <body>
+    <article>
+      <h1>{post.data.title}</h1>
+      <PortableText value={post.data.content} />
+    </article>
+  </body>
+</html>

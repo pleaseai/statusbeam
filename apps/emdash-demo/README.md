@@ -38,6 +38,24 @@ STATUSBEAM_BASE_URL=http://127.0.0.1:4420 bun run build:in-process
 PORT=4410 HOST=127.0.0.1 bun run start    # then open http://127.0.0.1:4410/status
 ```
 
+## Status Portable Text block
+
+`STATUSBEAM_BLOCK=1` registers the opt-in `statusBeamBlock()` descriptor from
+`@statusbeam/emdash-ui/block` (FR-22). The editor then offers a "Status" block, and
+`src/pages/posts/[slug].astro` renders a post that embeds it with the library components.
+Without the variable the site registers no StatusBeam plugin beyond the probe. The package
+entry points and `emdash` are aliased to the sources in `astro.config.mjs`, because this app
+is not part of the root workspace.
+
+Use a copy of the whole repository outside any checkout (see step 3 below), then run the
+fixture server and the Node in-process dev server. The dev server is needed because the
+`/_emdash/api/auth/dev-bypass` sign-in only exists in development.
+
+```sh
+bun scripts/status-fixture.ts 4420 &
+STATUSBEAM_BLOCK=1 SPIKE_MODE=in-process npx astro dev --host 127.0.0.1 --port 4410
+```
+
 ## Probe routes
 
 All routes are public and live under `/_emdash/api/plugins/statusbeam-spike-probe/`. The
