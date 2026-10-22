@@ -203,3 +203,46 @@ Considered and not built (beyond the spec's Out of Scope):
 - Root `eslint .` lints the gitignored `apps/emdash-demo/.emdash/` that a demo build generates, so lint fails after a local demo run. Fix with an eslint ignore when T012 touches tooling.
 - `@statusbeam/core/contract` now also re-exports the pure display helpers (`getDict`, `formatDay`, `formatUptime`, `windowUptime`, `toSeverity`) so the render library matches apps/web's labels without importing the yaml-bearing core root.
 - Executor worktrees are cut from the main checkout's `main` (12da16f), not from the track branch, so they lack the track files. Their commits are cherry-picked onto the track branch, and Progress is recorded here by the lead.
+
+## Outcomes & Retrospective
+
+### What Was Shipped
+
+- **`@statusbeam/core` is the single engine.** It now holds the rollup, change detection, poll selection, notification delivery, webhook helpers and config issues. It also defines the versioned public contract (`@statusbeam/core/contract`, `version: 1`). The standalone tests passed unchanged throughout.
+- **`@statusbeam/emdash-plugin`** is a sandboxed engine with:
+  - sharded cron checks, each planned against the 10-call bridge budget;
+  - per-day buckets and per-shard snapshots;
+  - coalesced Slack and webhook notifications;
+  - body-limit failures recorded as unsupported;
+  - raw public and badge routes byte-equal to standalone;
+  - fail-closed Statuspage and Sentry webhooks;
+  - a Block Kit config page and a dashboard widget.
+- **`@statusbeam/emdash-ui`** provides Astro components and a contract client that never throws, plus an opt-in native Portable Text block.
+- **Also delivered:**
+  - ADR-0004 is Accepted, backed by spike results and a deadline follow-up on Worker Loader.
+  - An EmDash guide in `apps/docs`.
+  - Release registration for both packages.
+  - A CI step that runs the plugin host tests.
+- **Final gates in the track tree:** build 7/7, typecheck 11/11, lint clean, `bun test` 467 pass, host tests 26 pass.
+
+### What Went Well
+
+- **The spike gate paid off.** The spike found a 10-call bridge budget, limit errors that can be identified only by their message, and the 30 s kill. All three reshaped the design (sharding, up-front budgeting, the message classifier) before any engine code was written.
+- **Moving the engine into core first** made HTTP parity a test of shared code, not of how faithfully a copy was made. T006 proved bodies byte-equal against the real standalone handlers in workerd.
+- **Separating webhook state from shard state** (separate rows and keys, merged when read) removed the cron/webhook race without coordination.
+- **Re-measuring on Worker Loader** caught EmDash's undocumented 5 s default hook timeout, which would have silently killed slow shards in production.
+
+### What Could Improve
+
+- **Executor worktrees started from `main`, not the track branch.** This forced cherry-picks and repeated `bun.lock` conflicts until executors reset to the track tip. Root build and typecheck also fail in nested worktrees, so every gate had to run twice.
+- **Two executors chose different names for the same Sentry secret** (`sentryAuthToken` vs `sentryToken`), and the token was never wired into polling (fixed in `f6ffaeb`). Shared identifiers across parallel tasks belong in the plan up front.
+- **The full demo install was never run end to end.** The engine was exercised by host tests and the spike, and the components and block by the local demo, but never together under a sandbox runner.
+- **The live parity check needed a proxy** because the deployed standalone predates the contract. Redeploying standalone first would have allowed a direct check.
+
+### Tech Debt Created
+
+- The full `apps/emdash-demo` install with the engine under a sandbox runner has not been verified.
+- Whether `ctx.settings.*` and `ctx.cron.*` count against the Worker Loader bridge budget is unverified. The budget assumes they do.
+- `@statusbeam/core` must be released together with `emdash-plugin` and `emdash-ui`. Published core 0.2.0 has no `./contract` export.
+- `statusbeam-web` (demo.statusbeam.dev) needs a redeploy before `emdash-ui` can read it without a `version: 1` proxy.
+- A config save reconciles at most about 3 shard operations. Larger changes wait for the next save or the daily maintenance task.
