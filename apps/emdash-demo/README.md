@@ -158,7 +158,10 @@ Workers paid plan (Worker Loader is paid-only).
 
 ## Cloudflare resources
 
-The spike created these resources on account `20f4dac8c33060fc42fd560d8e90b630`. None
+The spike created these resources on account `20f4dac8c33060fc42fd560d8e90b630`. All of them
+were deleted on 2026-10-22 after the deadline follow-up; recreate them with steps 2 and 4 to rerun.
+
+The spike's original resources on that account were: None
 of them is shared with `statusbeam-worker`, `statusbeam-web` or the `statusbeam.dev`
 zone.
 
@@ -177,5 +180,5 @@ bunx wrangler delete statusbeam-emdash-spike
 bunx wrangler delete statusbeam-emdash-spike-fixtures
 bunx wrangler d1 delete statusbeam-emdash-spike
 bunx wrangler r2 bucket delete statusbeam-emdash-spike-media
-bunx wrangler kv namespace delete --namespace-id 08709f50694a4f029c0ddfcba648c52e
+bunx wrangler kv namespace delete --namespace-id 08709f50694a4f029c0ddfcba648c52e -y
 ```
