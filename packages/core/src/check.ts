@@ -8,6 +8,19 @@ import { checkSentry } from './sentry'
 export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>
 
 /**
+ * Tells a host limit from a target failure by looking at what the injected
+ * fetch threw. Returns the limit it recognises, or `undefined` for an ordinary
+ * failure. The host's wording stays with the caller, not in core.
+ */
+export type ErrorClassifier = (error: unknown) => 'body' | undefined
+
+/** Spread this into a failed {@link CheckResult} to carry a recognised host limit. */
+function limitOf(classify: ErrorClassifier | undefined, error: unknown): Pick<CheckResult, 'limit'> {
+  const limit = classify?.(error)
+  return limit ? { limit } : {}
+}
+
+/**
  * Derive a check status from a completed HTTP response.
  * `up` when the code is expected and fast enough, `degraded` when it is
  * expected but slow, `down` otherwise.
@@ -43,12 +56,12 @@ export function deriveStatus(
  */
 export async function checkSite(
   site: Site,
-  deps: { fetchImpl?: FetchLike, now?: () => number, sentryToken?: string } = {},
+  deps: { fetchImpl?: FetchLike, now?: () => number, sentryToken?: string, classifyError?: ErrorClassifier } = {},
 ): Promise<CheckResult> {
   const fetchImpl = deps.fetchImpl ?? fetch
   const now = deps.now ?? Date.now
   if (site.check === 'statuspage' || site.check === 'incidentio') {
-    return checkStatuspage(site, fetchImpl, now)
+    return checkStatuspage(site, fetchImpl, now, deps.classifyError)
   }
   if (site.check === 'sentry') {
     return checkSentry(site, { fetchImpl, now, token: deps.sentryToken })
@@ -56,11 +69,11 @@ export async function checkSite(
   if (site.check === 'aigateway') {
     return checkAigateway(site, { fetchImpl, now })
   }
-  return checkHttp(site, fetchImpl, now)
+  return checkHttp(site, fetchImpl, now, deps.classifyError)
 }
 
 /** Plain HTTP check: fetch the URL and grade by status code and latency. */
-async function checkHttp(site: Site, fetchImpl: FetchLike, now: () => number): Promise<CheckResult> {
+async function checkHttp(site: Site, fetchImpl: FetchLike, now: () => number, classifyError?: ErrorClassifier): Promise<CheckResult> {
   const start = now()
 
   try {
@@ -85,6 +98,7 @@ async function checkHttp(site: Site, fetchImpl: FetchLike, now: () => number): P
       responseTime: now() - start,
       checkedAt: new Date(start).toISOString(),
       error: err instanceof Error ? err.message : String(err),
+      ...limitOf(classifyError, err),
     }
   }
 }
@@ -193,7 +207,7 @@ export function deriveStatuspageStatus(summary: StatuspageSummary, component?: s
  * call, not the monitored service, so it does not affect the verdict — the
  * status comes entirely from the payload.
  */
-async function checkStatuspage(site: Site, fetchImpl: FetchLike, now: () => number): Promise<CheckResult> {
+async function checkStatuspage(site: Site, fetchImpl: FetchLike, now: () => number, classifyError?: ErrorClassifier): Promise<CheckResult> {
   const start = now()
   const url = statuspageSummaryUrl(site.url)
   const checkedAt = new Date(start).toISOString()
@@ -213,6 +227,7 @@ async function checkStatuspage(site: Site, fetchImpl: FetchLike, now: () => numb
       responseTime: now() - start,
       checkedAt,
       error: err instanceof Error ? err.message : String(err),
+      ...limitOf(classifyError, err),
     }
   }
 
