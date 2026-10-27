@@ -97,7 +97,7 @@ of the host's).
 - [x] T006 Test one monitor on demand from the editor (file: packages/emdash-plugin/src/admin/TestMonitor.tsx) (depends on T005) [FR-9, AC-015, AC-019]
   Validation: testing a monitor shows its status, latency, and response code, including an unsaved edit. History, the snapshot, and notifications are unchanged afterwards.
   Method: component test plus the T004 route test; browser check on the demo admin
-- [ ] T007 Show the status overview page and dashboard widget (file: packages/emdash-plugin/src/admin/StatusPage.tsx) (depends on T004) [FR-8, FR-10, NFR-1, AC-014, AC-016]
+- [x] T007 Show the status overview page and dashboard widget (file: packages/emdash-plugin/src/admin/StatusPage.tsx) (depends on T004) [FR-8, FR-10, NFR-1, AC-014, AC-016]
   Validation: the overview lists every monitor with its status, 90-day bars, and latest latency. A never-checked monitor reads "Not checked yet" with no uptime figure. The widget summarizes overall status. Both refuse non-admins.
   Method: component tests; `Skill("please:test-browser")` on the demo dashboard and page
 - [ ] T008 Move the status Portable Text block into the plugin (file: packages/emdash-plugin/src/block.ts) (depends on T001) [FR-11, AC-017]
