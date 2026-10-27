@@ -13,6 +13,7 @@ import {
   draftFromConfig,
   effectiveSlug,
   findingsFromIssues,
+  findingsWithoutRow,
   hasFindings,
   hasHiddenSettings,
   isRenamed,
@@ -171,7 +172,10 @@ function MonitorsEditor() {
               findings={findings}
               busy={saving}
               onChange={change => editRow(index, change)}
-              onRemove={() => edit(current => ({ ...current, rows: current.rows.filter((_, i) => i !== index) }))}
+              onRemove={() => {
+                edit(current => ({ ...current, rows: current.rows.filter((_, i) => i !== index) }))
+                setFindings(current => findingsWithoutRow(current, index))
+              }}
             />
           ))}
           <Button type="button" variant="secondary" disabled={saving} onClick={() => edit(current => ({ ...current, rows: [...current.rows, newRow()] }))}>

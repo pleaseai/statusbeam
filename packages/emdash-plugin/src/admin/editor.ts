@@ -195,6 +195,21 @@ export function findingsFromIssues(issues: PluginIssue[]): Findings {
   return { fields, other }
 }
 
+/** The findings after a monitor row is removed: its own are dropped and those of the rows after it move up one index. */
+export function findingsWithoutRow(findings: Findings, removed: number): Findings {
+  const fields: Findings['fields'] = {}
+  for (const [key, message] of Object.entries(findings.fields) as Array<[FieldKey, string]>) {
+    const [row, field] = key.split('.')
+    if (field === undefined) {
+      fields[key] = message
+    }
+    else if (Number(row) !== removed) {
+      fields[Number(row) > removed ? `${Number(row) - 1}.${field}` as FieldKey : key] = message
+    }
+  }
+  return { ...findings, fields }
+}
+
 /** True when the monitor carries settings the editor has no field for (a `sentry` or `aigateway` block). */
 export function hasHiddenSettings(monitor: Monitor): boolean {
   return Object.keys(monitor).some(key => !(MONITOR_FIELDS as readonly string[]).includes(key))

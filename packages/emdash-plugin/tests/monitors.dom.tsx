@@ -195,6 +195,19 @@ describe('invalid fields (AC-011)', () => {
     expect(field('Website', en.monitors.field.url).value).toBe('not a url')
   })
 
+  it('does not carry a removed monitor\'s field error over to the monitor that takes its place', async () => {
+    withConfig(TWO_MONITORS)
+    server.save = () => ({ saved: false, reason: 'invalid', issues: [{ severity: 'error', path: 'sites[0].url', message: 'Invalid URL' }] })
+    await openPage()
+    click(en.monitors.save)
+    await screen.findByText(en.monitors.notSavedInvalid)
+    expect(describedBy(field('API', en.monitors.field.url))).toContain('Invalid URL')
+
+    click(en.monitors.remove('API'))
+
+    expect(describedBy(field('Website', en.monitors.field.url))).not.toContain('Invalid URL')
+  })
+
   it('shows a duplicate slug at the slug field before any save request', async () => {
     withConfig(TWO_MONITORS)
     await openPage()
