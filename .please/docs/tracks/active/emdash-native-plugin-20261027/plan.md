@@ -78,7 +78,7 @@ of the host's).
 
 ## Tasks
 
-- [ ] T001 [SPIKE] Prove the native plugin shape in the demo site (file: packages/emdash-plugin/src/plugin.ts) [FR-1, FR-2, AC-001]
+- [x] T001 [SPIKE] Prove the native plugin shape in the demo site (file: packages/emdash-plugin/src/plugin.ts) [FR-1, FR-2, AC-001]
   Validation: `apps/emdash-demo` registers a native `statusbeam` plugin in `plugins: []` with no sandbox runner, in both the Node and the Cloudflare dev builds. In each, a placeholder React page renders, a scheduled task fires, and a header-only probe reports header-time latency on a slow-body fixture while 127.0.0.1 and 169.254.169.254 are refused.
   Method: run the demo site in each mode and record the outputs; `Skill("please:test-browser")` on the admin page
   STOP: either build fails one of these checks — report before T002.
@@ -139,6 +139,31 @@ of the host's).
 - A block whose `baseUrl` is outside `allowedOrigins` or carries credentials — T008 (refused before any fetch).
 - A cookie-authenticated POST to an admin route without `X-EmDash-Request` — T004 (refused by the host CSRF check).
 
+## Progress
+
+- [x] (2026-10-27 18:10 KST) T001 [SPIKE] Prove the native plugin shape in the demo site
+  Evidence: `SPIKE_MODE=native astro dev` and `SPIKE_MODE=native-cf astro dev` (workerd, `runtime: Cloudflare-Workers`), plus `astro build` for both modes (Node build served by `node dist/server/entry.mjs`, Cloudflare build by `wrangler dev --local`) → `plugins: [statusbeam()]` with `sandboxed: []` and no runner in each. agent-browser shows the placeholder page at `/_emdash/admin/plugins/statusbeam/` and the dashboard widget (results/2026-10-27/native-{node,cf}-{page,dashboard}.png). `spike-tick` fired on Node through the `NodeCronScheduler` timer (`ranAt 08:37:00.001`), on Cloudflare dev through the 60 s dev scheduler bridge (`ranAt 08:53:40.945`), and on the Cloudflare build through `scheduled()` (`ranAt 09:01:11.393`). `spike-probe?target=slow-body-3s&body=1` → header mode `up` 837 ms (Node) / 787 ms (CF) against 3607 / 3649 ms for the buffered body. A 9 MiB body is `up` 200 in header mode and hits the 8 MiB limit in body mode. 127.0.0.1, 169.254.169.254, a 302 to 169.254.169.254, and `localhost.direct` (DNS → 127.0.0.1) are all refused by the host guard on both hosts (results/2026-10-27/native-plugin.md). `bun test` → 534 pass, 0 fail. `bun run typecheck` and `bun run build` → all tasks successful. `bun run test:host` in packages/emdash-plugin → 28 passed.
+  Modules for T002: `src/descriptor.ts` (`statusbeam()`, `PLUGIN_ID`), `src/native.ts` (`createPlugin`; spike task and routes to replace), `src/http.ts` (`headerOnlyFetch`, `createProbeHttp`), and `src/admin/index.tsx` (`pages['/']`, `widgets.status`). The descriptor's spike specifiers are `@statusbeam/emdash-plugin/native` and `/admin`. Files outside `Files:`: `packages/emdash-plugin/{package.json,tsconfig.json}` and `bun.lock` (`@types/react` devDependency, `jsx`, `*.tsx` include), `packages/emdash-ui/src/entry-graph.test.ts` (its `mock.module('emdash')` stub replaced the whole module for every later test file, which broke `tests/http.test.ts` in the full suite; the stub now spreads the real module), `apps/emdash-demo/{package.json,README.md}`.
+
 ## Decision Log
 
 - 2026-10-27: no separate architecture agents; the exploration reports settled the strategy questions. T010 merges last so it describes what shipped.
+- Decision: T001 probes public third-party targets (httpbin.org `drip`/`redirect-to`, speed.cloudflare.com `__down`, `localhost.direct`) instead of the ADR-0004 fixture Worker.
+  Rationale: the fixture Worker was deleted on 2026-10-22 (its URLs return 404), and the task forbids deploying one. The targets are fixed in `SPIKE_TARGETS`.
+  Date/Author: 2026-10-27 / implement-executor
+- Decision: the spike descriptor's entrypoint is `@statusbeam/emdash-plugin/native`, not `./plugin`.
+  Rationale: `src/plugin.ts` is still the sandboxed plugin that must keep working until T002/T009. T009 renames the entry when it reshapes the exports.
+  Date/Author: 2026-10-27 / implement-executor
+
+## Surprises & Discoveries
+
+- Observation: `ctx.cron.schedule()` is an upsert that resets `next_run_at` to the next match every time it is called. A route that called it on every request kept postponing the task, so the once-a-minute Cloudflare dev bridge never found it due. T002's reconcile ("on every task run and on save") must schedule only a task that is missing or whose schedule changed.
+  Evidence: `emdash/src/plugins/cron.ts` `ON CONFLICT ... next_run_at = ${nextRun}`. On Cloudflare dev, with `spike-cron` polled every 5 s, `lastRunAt` stayed null across 5 bridge POSTs. After the route stopped rescheduling, the task fired at 08:53:40.
+- Observation: cron fires differently on each host. Node uses the in-process `NodeCronScheduler` timer, which fires on the minute. Cloudflare `astro dev` uses the dev scheduler bridge, which POSTs `/_emdash/api/dev/scheduled-tasks` every 60 s from server start, so a task runs up to about 60 s late. A Cloudflare build uses the Worker's `scheduled()` handler. Under `wrangler dev --test-scheduled` that handler is triggered with `POST /cdn-cgi/local/explorer/api/local/scheduled?worker=<name>`, because `/__scheduled` returns 404 in this Wrangler version. An overdue task runs once on restart, not once per missed tick.
+  Evidence: results/2026-10-27/native-plugin.md "Cron"; native-*-cron-log.txt.
+- Observation: EmDash refuses `localtest.me`, `lvh.me`, `nip.io`, `sslip.io`, `xip.io` and `traefik.me` by name before any DNS lookup. To exercise the DNS-aware check, use a name like `localhost.direct`.
+  Evidence: `emdash/src/security/ssrf.ts` `BLOCKED_HOSTNAME_SUFFIXES`. `localhost.direct` → `Hostname resolves to a non-public IP address` on both hosts.
+- Observation: in `bun test`, `mock.module('emdash', ...)` in packages/emdash-ui replaced `emdash` for every test file loaded after it. A bare stub made `import { createUnrestrictedHttpAccess } from 'emdash'` fail to link. Native host tests in T002+ will hit the same problem with any partial `emdash` stub.
+  Evidence: `SyntaxError: Export named 'createUnrestrictedHttpAccess' not found in module .../emdash/dist/index.mjs` in the full suite only. The test passes once the stub spreads the real module.
+- Observation: the first `astro dev` start in `native-cf` mode after the config change re-optimized dependencies, reloaded, and then hung every request. The next start on the same port also hung. Every later start on other ports worked with the same plugin code. A bisect that removed the plugin imports did not reproduce the hang.
+  Evidence: /tmp/sb-native-cf.log (`optimized dependencies changed. reloading`), curl timeouts on :4431, then `root 200` on :4432–:4436.
