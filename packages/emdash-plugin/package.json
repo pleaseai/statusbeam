@@ -18,23 +18,20 @@
     "status-page"
   ],
   "exports": {
-    ".": {
-      "types": "./dist/index.d.mts",
-      "import": "./dist/index.mjs"
-    },
-    "./sandbox": "./dist/plugin.mjs"
+    ".": "./src/descriptor.ts",
+    "./plugin": "./src/native.ts",
+    "./admin": "./src/admin/index.tsx",
+    "./astro": "./src/astro/index.ts"
   },
-  "main": "dist/index.mjs",
   "files": [
-    "dist",
-    "emdash-plugin.jsonc"
+    "src",
+    "!src/**/*.test.ts"
   ],
   "publishConfig": {
     "access": "public",
     "provenance": true
   },
   "scripts": {
-    "build": "emdash-plugin validate",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "test:admin": "bun test --preload ./tests/dom-preload.ts ./tests/monitors.dom.tsx ./tests/test-monitor.dom.tsx ./tests/overview.dom.tsx",
@@ -43,9 +40,12 @@
   "peerDependencies": {
     "@cloudflare/kumo": "2.6.0",
     "@emdash-cms/admin": "^1.3.1",
+    "astro": "^7",
+    "emdash": "~1.3.1",
     "react": "^19"
   },
   "dependencies": {
+    "@statusbeam/core": "workspace:*",
     "@statusbeam/emdash-ui": "workspace:*",
     "yaml": "^2.5.0",
     "zod": "^4.4.3"
@@ -53,14 +53,13 @@
   "devDependencies": {
     "@cloudflare/kumo": "2.6.0",
     "@emdash-cms/admin": "1.3.1",
-    "@emdash-cms/plugin-cli": "0.13.4",
     "@happy-dom/global-registrator": "^21.0.4",
-    "@statusbeam/core": "workspace:*",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/react": "^16.3.3",
     "@types/react": "^19",
     "@types/react-dom": "^19.3.0",
-    "emdash": "^1.3.1",
+    "astro": "^7",
+    "emdash": "~1.3.1",
     "happy-dom": "^21.0.4",
     "react": "19.2.4",
     "react-dom": "19.2.4",

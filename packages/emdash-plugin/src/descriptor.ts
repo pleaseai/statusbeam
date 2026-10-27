@@ -34,7 +34,7 @@ export function statusbeam(options: StatusBeamOptions = {}): PluginDescriptor {
     id: PLUGIN_ID,
     version: pkg.version,
     format: 'native',
-    entrypoint: '@statusbeam/emdash-plugin/native',
+    entrypoint: '@statusbeam/emdash-plugin/plugin',
     adminEntry: '@statusbeam/emdash-plugin/admin',
     componentsEntry: '@statusbeam/emdash-plugin/astro',
     options: allowed ? { ...options, allowedOrigins: allowed.origins } : options,

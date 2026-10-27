@@ -31,7 +31,7 @@ const native = mode === 'native' || mode === 'native-cf'
 const pluginSrc = fileURLToPath(new URL('../../packages/emdash-plugin/src/', import.meta.url))
 const nativeAlias = native
   ? [
-      { find: /^@statusbeam\/emdash-plugin\/native$/, replacement: `${pluginSrc}native.ts` },
+      { find: /^@statusbeam\/emdash-plugin\/plugin$/, replacement: `${pluginSrc}native.ts` },
       { find: /^@statusbeam\/emdash-plugin\/admin$/, replacement: `${pluginSrc}admin/index.tsx` },
       { find: /^@statusbeam\/emdash-plugin\/astro$/, replacement: `${pluginSrc}astro/index.ts` },
       { find: /^emdash$/, replacement: fileURLToPath(import.meta.resolve('emdash')) },

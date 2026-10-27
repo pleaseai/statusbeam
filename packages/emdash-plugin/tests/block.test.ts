@@ -55,7 +55,7 @@ describe('status block descriptor', () => {
     expect(statusbeam()).toMatchObject({
       id: 'statusbeam',
       format: 'native',
-      entrypoint: '@statusbeam/emdash-plugin/native',
+      entrypoint: '@statusbeam/emdash-plugin/plugin',
       adminEntry: '@statusbeam/emdash-plugin/admin',
       componentsEntry: '@statusbeam/emdash-plugin/astro',
     })

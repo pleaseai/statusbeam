@@ -31,8 +31,8 @@ not change the versions that `apps/web` and `apps/docs` resolve.
 
 `native` and `native-cf` register the StatusBeam engine as one native plugin, with the id
 `statusbeam`. The plugin comes from the `packages/emdash-plugin/src` sources: the
-`statusbeam()` descriptor, the `createPlugin` entrypoint and the React admin entry, aliased in
-`astro.config.mjs`. The probe plugin is not registered in these modes. Run them from this
+`statusbeam()` descriptor, the `createPlugin` entrypoint (`@statusbeam/emdash-plugin/plugin`)
+and the React admin entry (`/admin`), aliased in `astro.config.mjs`. The probe plugin is not registered in these modes. Run them from this
 checkout with the local dev servers, and deploy nothing:
 
 ```sh
