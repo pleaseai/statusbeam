@@ -100,7 +100,7 @@ of the host's).
 - [x] T007 Show the status overview page and dashboard widget (file: packages/emdash-plugin/src/admin/StatusPage.tsx) (depends on T004) [FR-8, FR-10, NFR-1, AC-014, AC-016]
   Validation: the overview lists every monitor with its status, 90-day bars, and latest latency. A never-checked monitor reads "Not checked yet" with no uptime figure. The widget summarizes overall status. Both refuse non-admins.
   Method: component tests; `Skill("please:test-browser")` on the demo dashboard and page
-- [ ] T008 Move the status Portable Text block into the plugin (file: packages/emdash-plugin/src/block.ts) (depends on T001) [FR-11, AC-017]
+- [x] T008 Move the status Portable Text block into the plugin (file: packages/emdash-plugin/src/block.ts) (depends on T001) [FR-11, AC-017]
   Validation: an editor can insert the `statusbeam-status` block and the published page shows that monitor's status, with the source choice (this plugin or a standalone deployment) and the `allowedOrigins` allowlist behaving as before: a `baseUrl` outside the allowlist or carrying credentials is refused before any fetch. `@statusbeam/emdash-ui` exports components and the client only, with no `./plugin`, `./block`, or `./astro` and no `emdash` peer. The plugin lists `@statusbeam/emdash-ui` in `dependencies`, since its block renderer imports the library's components.
   Method: the ported `block-node.test.ts` and a rewritten `entry-graph.test.ts`; browser check of a published page in the demo
 - [ ] T009 Ship the package as a native-only plugin (file: packages/emdash-plugin/package.json) (depends on T003, T008) [FR-12, AC-018]
