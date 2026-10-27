@@ -1,6 +1,6 @@
 import { getDict } from '@statusbeam/core'
 import { describe, expect, it } from 'bun:test'
-import { buildConfig, buildMonitor, clientFindings, draftFromConfig, effectiveSlug, fieldKeyOf, findingsFromIssues, isRenamed, newRow } from '../src/admin/editor'
+import { buildConfig, buildMonitor, clientFindings, draftFromConfig, effectiveSlug, fieldKeyOf, findingsFromIssues, findingsWithoutRow, isRenamed, newRow } from '../src/admin/editor'
 
 const t = getDict('en').admin
 
@@ -15,6 +15,14 @@ describe('the monitor editor model', () => {
       ],
     }
     expect(buildConfig(draftFromConfig(stored))).toEqual(stored)
+  })
+
+  it('keeps a stored empty expectedStatusCodes until the field is edited', () => {
+    const stored = { name: 'X', sites: [{ name: 'API', url: 'https://a.example', expectedStatusCodes: [] }] }
+    const draft = draftFromConfig(stored)
+    expect(buildConfig(draft)).toEqual(stored)
+    draft.rows[0] = { ...draft.rows[0]!, emptyCodes: false }
+    expect(buildMonitor(draft.rows[0]).monitor).not.toHaveProperty('expectedStatusCodes')
   })
 
   it('drops an emptied optional field so the schema default applies', () => {
@@ -61,5 +69,23 @@ describe('the monitor editor model', () => {
     ])
     expect(found.fields).toEqual({ '2.url': 'bad url' })
     expect(found.other.map(issue => issue.message)).toEqual(['org missing', 'careful'])
+  })
+})
+
+describe('findingsWithoutRow', () => {
+  it('drops the removed row\'s other findings and re-indexes the later ones', () => {
+    const other = [
+      { severity: 'error' as const, path: 'sites[1].sentry.org', message: 'gone' },
+      { severity: 'warning' as const, path: 'sites[2].url', message: 'warn' },
+      { severity: 'error' as const, path: 'sites[3].sentry.org', message: 'org' },
+      { severity: 'error' as const, path: 'sites[0].sentry.org', message: 'first' },
+      { severity: 'error' as const, path: 'notifications.delivery', message: 'kept' },
+    ]
+    expect(findingsWithoutRow({ fields: {}, other }, 1).other).toEqual([
+      { severity: 'warning', path: 'sites[1].url', message: 'warn' },
+      { severity: 'error', path: 'sites[2].sentry.org', message: 'org' },
+      { severity: 'error', path: 'sites[0].sentry.org', message: 'first' },
+      { severity: 'error', path: 'notifications.delivery', message: 'kept' },
+    ])
   })
 })

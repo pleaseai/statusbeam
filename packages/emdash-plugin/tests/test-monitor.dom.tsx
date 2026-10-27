@@ -111,6 +111,25 @@ describe('test one monitor (AC-015)', () => {
     await waitFor(() => expect(result('Web').textContent).toBe('Set the Sentry token first.'))
   })
 
+  it('lists the field issues of an invalid monitor under the message', async () => {
+    server.test = () => ({ tested: false, reason: 'invalid', message: 'The monitor is not valid.', issues: [{ severity: 'error', path: 'sentry.org', message: 'org is required' }, { severity: 'error', path: 'url', message: 'not a valid URL' }] })
+    await openPage()
+    fireEvent.click(testButton('API'))
+    await waitFor(() => expect(within(card('API')).getAllByRole('listitem')).toHaveLength(2))
+    const items = within(card('API')).getAllByRole('listitem').map(item => item.textContent)
+    expect(items).toEqual(['sentry.org: org is required', 'url: not a valid URL'])
+    expect(result('API').textContent).toContain('The monitor is not valid.')
+  })
+
+  it('clears the previous outcome when the monitor is edited', async () => {
+    server.test = () => checkResult({ status: 'up' })
+    await openPage()
+    fireEvent.click(testButton('API'))
+    await waitFor(() => expect(result('API').textContent).toContain(dict.day.up))
+    fireEvent.change(within(card('API')).getByLabelText(dict.admin.monitors.field.url), { target: { value: 'https://changed.example.com' } })
+    await waitFor(() => expect(result('API').textContent).toBe(''))
+  })
+
   it('shows a failure when the test request itself fails', async () => {
     server.test = () => {
       throw new Error('boom')

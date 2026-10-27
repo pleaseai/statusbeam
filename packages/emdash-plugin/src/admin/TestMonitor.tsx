@@ -35,6 +35,11 @@ export function TestMonitor({ monitor, busy }: TestMonitorProps) {
     }
   }, [])
 
+  const monitorKey = JSON.stringify(monitor)
+  useEffect(() => {
+    setOutcome(null)
+  }, [monitorKey])
+
   async function run() {
     setRunning(true)
     setOutcome(null)
@@ -70,7 +75,17 @@ function Result({ outcome, dict }: { outcome: Outcome, dict: Dict }) {
   }
   const { response } = outcome
   if (!response.tested) {
-    return <p className="text-kumo-danger">{response.message}</p>
+    const issues = response.reason === 'invalid' ? response.issues : []
+    return (
+      <div className="text-kumo-danger">
+        <p>{response.message}</p>
+        {issues.length > 0 && (
+          <ul className="space-y-1">
+            {issues.map(issue => <li key={`${issue.path}:${issue.message}`}>{issue.path === '' ? issue.message : `${issue.path}: ${issue.message}`}</li>)}
+          </ul>
+        )}
+      </div>
+    )
   }
   const { result } = response
   return (

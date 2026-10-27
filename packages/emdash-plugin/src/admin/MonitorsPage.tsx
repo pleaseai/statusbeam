@@ -256,7 +256,7 @@ function MonitorCard({ t, index, row, findings, busy, onChange, onRemove }: Moni
           placeholder="200"
           error={errorOf('expectedStatusCodes')}
           description={t.monitors.hint.expectedStatusCodes}
-          onChange={event => onChange(current => ({ ...current, codesText: event.target.value }))}
+          onChange={event => onChange(current => ({ ...current, codesText: event.target.value, emptyCodes: false }))}
         />
         <Input
           label={t.monitors.field.maxResponseTime}

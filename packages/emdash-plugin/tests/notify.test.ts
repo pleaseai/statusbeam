@@ -1,6 +1,7 @@
 import type { PollSnapshot } from '../src/snapshot'
 import { siteSchema } from '@statusbeam/core'
 import { describe, expect, it } from 'bun:test'
+import { classifyHostError, probeSite } from '../src/probe'
 import { destinationsFrom, parseUrlList } from '../src/settings'
 import { POLL_SNAPSHOT_KEY, readSnapshot, summariesFromSnapshot } from '../src/snapshot'
 import { createFakeContext, monitorsYaml, runFake } from './fake-context'
@@ -203,5 +204,51 @@ describe('the snapshot history', () => {
     expect(days.at(-1)).toEqual({ date: '2026-10-23', status: 'down', uptime: 0 })
     expect(days[0]?.date).toBe('2026-07-26')
     expect(days.at(-3)).toEqual({ date: '2026-10-21', status: null, uptime: 1 })
+  })
+})
+
+describe('host body limit', () => {
+  const BODY_LIMIT = 'Plugin HTTP response body exceeds the 8388608 byte limit'
+
+  it('recognises the host rejection text in both forms and nothing else', () => {
+    expect(classifyHostError(new Error(BODY_LIMIT))).toBe('body')
+    expect(classifyHostError(new Error(`Bridge call http/fetch failed: {"error":"${BODY_LIMIT}"}`))).toBe('body')
+    expect(classifyHostError(new Error('connection refused'))).toBeUndefined()
+  })
+
+  it('tags the probe result with limit "body" only for the host cap', async () => {
+    const site = siteSchema.parse({ name: 'Big', url: 'https://big.example.com/' })
+    expect(await probeSite(() => Promise.reject(new Error(BODY_LIMIT)), site)).toMatchObject({ status: 'down', code: 0, limit: 'body' })
+    expect((await probeSite(() => Promise.reject(new Error('connection refused')), site)).limit).toBeUndefined()
+  })
+
+  it('counts nothing, notifies nobody and keeps the previous state for an over-cap body-reading check', async () => {
+    const yaml = monitorsYaml([], ['  - name: board', '    check: statuspage', '    url: https://board.example.com/api/v2/summary.json'])
+    const posts: string[] = []
+    let overCap = false
+    const fetch = async (url: string, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        posts.push(url)
+        return new Response('ok', { status: 200 })
+      }
+      if (overCap) {
+        throw new Error(BODY_LIMIT)
+      }
+      return new Response(JSON.stringify({ status: { indicator: 'none' }, components: [] }), { status: 200 })
+    }
+    const fake = createFakeContext({ config: yaml, settings: SECRETS.slack, fetch })
+    const c = clock()
+    await runFake(fake, { now: c.now })
+    const before = fake.kv.get(POLL_SNAPSHOT_KEY) as PollSnapshot
+    const countsBefore = [...fake.rows.values()].map(b => [b.up, b.down, b.total])
+    expect(before.monitors[0]?.result?.status).toBe('up')
+
+    overCap = true
+    c.set('2026-10-22T10:05:00.000Z')
+    await runFake(fake, { now: c.now })
+
+    expect(posts).toEqual([])
+    expect([...fake.rows.values()].map(b => [b.up, b.down, b.total])).toEqual(countsBefore)
+    expect((fake.kv.get(POLL_SNAPSHOT_KEY) as PollSnapshot).monitors).toEqual(before.monitors)
   })
 })

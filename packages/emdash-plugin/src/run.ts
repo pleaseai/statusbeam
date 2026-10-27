@@ -66,7 +66,9 @@ export function pollableSites(sites: Site[], options: { sentryToken?: string } =
  *
  * The monitors probed are the ones in the stored configuration at the start of
  * the run, so a monitor removed from it is neither probed nor kept in the new
- * snapshot. An absent or invalid configuration checks nothing and writes
+ * snapshot. A probe that hit the host's body limit says nothing about the
+ * target: it is not counted in the buckets, not compared for change detection,
+ * and does not replace the monitor's last result. An absent or invalid configuration checks nothing and writes
  * nothing (an invalid one leaves a configuration-error record).
  */
 export async function runCheck(ctx: RunContext, options: CheckRunOptions = {}): Promise<CheckRunResult> {
@@ -96,6 +98,8 @@ export async function runCheck(ctx: RunContext, options: CheckRunOptions = {}): 
   const results = await Promise.all(sites.map(site =>
     probeSite(BODY_CHECKS.has(site.check) ? bodyFetch : headerFetch, site, deadlineMs, () => now().getTime(), sentryToken)))
 
+  const real = results.filter(result => !result.limit)
+
   const today = dayOfDate(startedAt)
   const buckets = bucketsOf(ctx)
   const [existing, entries] = await Promise.all([
@@ -104,25 +108,31 @@ export async function runCheck(ctx: RunContext, options: CheckRunOptions = {}): 
   ])
   const previous = mergeSnapshots(entries)
 
-  const changes = detectStatusChanges(results, previous.results)
+  const changes = detectStatusChanges(real, previous.results)
   let deliveries: DeliveryOutcome[] = []
   if (changes.length > 0 && destinations.length > 0) {
     deliveries = await deliver(bodyFetch, destinations, buildMessages(destinations, changes, now().toISOString()), deadlineMs)
   }
 
-  const changed = applyResults(existing, results)
+  const changed = applyResults(existing, real)
   if (changed.length > 0) {
     await buckets.putMany(changed)
   }
   const finishedAt = now()
   const effective = new Map([...existing, ...changed.map(({ id, data }) => [id, data] as const)])
-  const monitors = results.map(result => advanceMonitor(
-    // Poll-only state: webhook counts live in the webhook's own key and are added when readers merge.
-    previous.polled.get(result.slug),
-    result,
-    [...new Set([bucketId(result.slug, today), bucketId(result.slug, dayOf(result))])].flatMap(id => effective.get(id) ?? []),
-    finishedAt,
-  ))
+  const monitors = results.flatMap((result) => {
+    if (result.limit) {
+      const kept = previous.polled.get(result.slug)
+      return kept ? [kept] : []
+    }
+    return [advanceMonitor(
+      // Poll-only state: webhook counts live in the webhook's own key and are added when readers merge.
+      previous.polled.get(result.slug),
+      result,
+      [...new Set([bucketId(result.slug, today), bucketId(result.slug, dayOf(result))])].flatMap(id => effective.get(id) ?? []),
+      finishedAt,
+    )]
+  })
   const snapshot: PollSnapshot = { version: 2, updatedAt: finishedAt.toISOString(), monitors, deliveries }
   await writePollSnapshot(ctx, snapshot)
 

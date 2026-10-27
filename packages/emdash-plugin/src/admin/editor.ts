@@ -27,6 +27,8 @@ export interface MonitorRow {
   monitor: Monitor
   /** What the user typed for `expectedStatusCodes`. */
   codesText: string
+  /** The stored monitor had an explicit empty `expectedStatusCodes` (every response is down) and the user has not edited the field since. */
+  emptyCodes?: boolean
   /** What the user typed for `maxResponseTime`. */
   maxText: string
   /** The slug this monitor had when it was loaded, or `null` for a monitor added in this session. Its history lives under it. */
@@ -71,7 +73,8 @@ function rowFrom(stored: unknown): MonitorRow {
   const monitor: Monitor = rest
   const codesText = Array.isArray(expectedStatusCodes) ? expectedStatusCodes.join(', ') : ''
   const maxText = typeof maxResponseTime === 'number' ? String(maxResponseTime) : ''
-  return { key: newRowKey(), monitor, codesText, maxText, savedSlug: effectiveSlug(monitor) || null }
+  const emptyCodes = Array.isArray(expectedStatusCodes) && expectedStatusCodes.length === 0
+  return { key: newRowKey(), monitor, codesText, maxText, savedSlug: effectiveSlug(monitor) || null, ...(emptyCodes ? { emptyCodes } : {}) }
 }
 
 /** The draft for a stored configuration. `null` (nothing stored) gives an empty draft. */
@@ -110,7 +113,10 @@ export function buildMonitor(row: MonitorRow): { monitor: Monitor, problems: Par
   const problems: ReturnType<typeof buildMonitor>['problems'] = {}
 
   const codes = row.codesText.split(/[\s,]+/).filter(Boolean)
-  if (codes.length > 0) {
+  if (codes.length === 0 && row.emptyCodes) {
+    monitor.expectedStatusCodes = []
+  }
+  else if (codes.length > 0) {
     const parsed = codes.map(parseWhole)
     if (parsed.every((value): value is number => value !== null)) {
       monitor.expectedStatusCodes = parsed
@@ -167,6 +173,7 @@ export function hasFindings(findings: Findings): boolean {
   return Object.keys(findings.fields).length > 0 || findings.other.some(issue => issue.severity === 'error')
 }
 
+const SITE_ROW_PATH = /^sites\[(\d+)\]/
 const SITE_PATH = /^sites\[(\d+)\]\.([A-Z_]\w*)/i
 
 /** Where an issue path lands: a field of the editor, or `null` when the editor has no field for it. */
@@ -195,7 +202,7 @@ export function findingsFromIssues(issues: PluginIssue[]): Findings {
   return { fields, other }
 }
 
-/** The findings after a monitor row is removed: its own are dropped and those of the rows after it move up one index. */
+/** The findings after a monitor row is removed: its own are dropped and those of the rows after it move up one index, in `other` as well as on the fields. */
 export function findingsWithoutRow(findings: Findings, removed: number): Findings {
   const fields: Findings['fields'] = {}
   for (const [key, message] of Object.entries(findings.fields) as Array<[FieldKey, string]>) {
@@ -207,7 +214,18 @@ export function findingsWithoutRow(findings: Findings, removed: number): Finding
       fields[Number(row) > removed ? `${Number(row) - 1}.${field}` as FieldKey : key] = message
     }
   }
-  return { ...findings, fields }
+  const other = findings.other.flatMap((issue): PluginIssue[] => {
+    const match = SITE_ROW_PATH.exec(issue.path)
+    if (!match) {
+      return [issue]
+    }
+    const row = Number(match[1])
+    if (row === removed) {
+      return []
+    }
+    return [row > removed ? { ...issue, path: `sites[${row - 1}]${issue.path.slice(match[0].length)}` } : issue]
+  })
+  return { fields, other }
 }
 
 /** True when the monitor carries settings the editor has no field for (a `sentry` or `aigateway` block). */
