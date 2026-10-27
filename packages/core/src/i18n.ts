@@ -73,6 +73,68 @@ export interface Dict {
   }
   /** Uptime tooltip breakdown, e.g. "Today 100% · 7d 99.9% · …". */
   breakdown: (parts: { day: string, week: string, month: string, quarter: string }) => string
+  /** Text of the admin pages the EmDash plugin adds to the CMS. */
+  admin: AdminDict
+}
+
+/** Strings of the EmDash admin monitor editor. */
+export interface AdminDict {
+  loading: string
+  /** The page could not read its data (network or server failure). */
+  loadFailed: string
+  /** Shown instead of any configuration to a user who is not an administrator. */
+  forbidden: string
+  monitors: {
+    title: string
+    pageName: string
+    heading: string
+    empty: string
+    add: string
+    monitorN: (n: number) => string
+    remove: (name: string) => string
+    save: string
+    saving: string
+    saved: string
+    /** Nothing was written because a field is invalid. */
+    notSavedInvalid: string
+    /** Nothing was written because someone else saved first; the newer configuration is shown. */
+    notSavedStale: string
+    /** Findings that belong to no field of the editor. */
+    otherFindings: string
+    warning: string
+    field: {
+      name: string
+      slug: string
+      check: string
+      url: string
+      method: string
+      expectedStatusCodes: string
+      maxResponseTime: string
+      component: string
+    }
+    hint: {
+      slug: string
+      expectedStatusCodes: string
+    }
+    /** A slug change saves a new monitor; `old` is the slug it was loaded with. */
+    slugRenamed: (old: string) => string
+    duplicateSlug: (slug: string) => string
+    wholeNumber: string
+    wholeNumbers: string
+    /** A monitor whose kind has settings this editor does not show. */
+    keepsOtherSettings: string
+  }
+  secrets: {
+    heading: string
+    intro: string
+    set: string
+    notSet: string
+    manage: string
+    slackWebhookUrl: string
+    webhookUrls: string
+    webhookSecret: string
+    sentryToken: string
+  }
 }
 
 const en: Dict = {
@@ -126,6 +188,57 @@ const en: Dict = {
   },
   breakdown: ({ day, week, month, quarter }) =>
     `Today ${day} · 7d ${week} · 30d ${month} · 90d ${quarter}`,
+  admin: {
+    loading: 'Loading…',
+    loadFailed: 'Could not load the configuration. Reload the page to try again.',
+    forbidden: 'Only administrators can edit monitors.',
+    monitors: {
+      title: 'Monitors',
+      pageName: 'Status page name',
+      heading: 'Monitors',
+      empty: 'No monitors yet. Add one to start checking.',
+      add: 'Add monitor',
+      monitorN: n => `Monitor ${n}`,
+      remove: name => `Remove ${name}`,
+      save: 'Save',
+      saving: 'Saving…',
+      saved: 'Saved.',
+      notSavedInvalid: 'Not saved. Fix the marked fields and save again.',
+      notSavedStale: 'Not saved. Someone else changed the configuration first, so your edit was discarded. The newer configuration is shown.',
+      otherFindings: 'Other findings',
+      warning: 'Warning',
+      field: {
+        name: 'Name',
+        slug: 'Slug',
+        check: 'Check type',
+        url: 'URL',
+        method: 'HTTP method',
+        expectedStatusCodes: 'Expected status codes',
+        maxResponseTime: 'Slow after (ms)',
+        component: 'Component',
+      },
+      hint: {
+        slug: 'Lowercase letters, digits and hyphens. Leave empty to derive it from the name.',
+        expectedStatusCodes: 'Whole numbers separated by commas, for example 200, 204.',
+      },
+      slugRenamed: old => `Saving stores this as a new monitor. The history of "${old}" stays under the old slug.`,
+      duplicateSlug: slug => `Another monitor already uses the slug "${slug}".`,
+      wholeNumber: 'Enter a whole number.',
+      wholeNumbers: 'Enter whole numbers separated by commas.',
+      keepsOtherSettings: 'Settings this editor does not show are kept as they are.',
+    },
+    secrets: {
+      heading: 'Secrets',
+      intro: 'Secret values are write-only and never shown here.',
+      set: 'set',
+      notSet: 'not set',
+      manage: 'Manage in the plugin settings',
+      slackWebhookUrl: 'Slack webhook URL',
+      webhookUrls: 'Webhook URLs',
+      webhookSecret: 'Webhook secret',
+      sentryToken: 'Sentry token',
+    },
+  },
 }
 
 const zh: Dict = {
@@ -179,6 +292,57 @@ const zh: Dict = {
   },
   breakdown: ({ day, week, month, quarter }) =>
     `今日 ${day} · 7天 ${week} · 30天 ${month} · 90天 ${quarter}`,
+  admin: {
+    loading: '加载中…',
+    loadFailed: '无法加载配置。请刷新页面重试。',
+    forbidden: '只有管理员可以编辑监控项。',
+    monitors: {
+      title: '监控项',
+      pageName: '状态页名称',
+      heading: '监控项',
+      empty: '还没有监控项。添加一个即可开始检查。',
+      add: '添加监控项',
+      monitorN: n => `监控项 ${n}`,
+      remove: name => `删除 ${name}`,
+      save: '保存',
+      saving: '正在保存…',
+      saved: '已保存。',
+      notSavedInvalid: '未保存。请修正标记的字段后重新保存。',
+      notSavedStale: '未保存。其他人已先修改了配置，因此您的修改已被丢弃。下方显示的是较新的配置。',
+      otherFindings: '其他问题',
+      warning: '警告',
+      field: {
+        name: '名称',
+        slug: '标识 (slug)',
+        check: '检查类型',
+        url: 'URL',
+        method: 'HTTP 方法',
+        expectedStatusCodes: '期望的状态码',
+        maxResponseTime: '超过此时间视为变慢 (ms)',
+        component: '组件',
+      },
+      hint: {
+        slug: '小写字母、数字和连字符。留空则根据名称生成。',
+        expectedStatusCodes: '用逗号分隔的整数，例如 200, 204。',
+      },
+      slugRenamed: old => `保存后会作为新的监控项存储。“${old}”的历史记录仍保留在旧标识下。`,
+      duplicateSlug: slug => `另一个监控项已使用标识“${slug}”。`,
+      wholeNumber: '请输入整数。',
+      wholeNumbers: '请输入以逗号分隔的整数。',
+      keepsOtherSettings: '此编辑器未显示的设置将保持不变。',
+    },
+    secrets: {
+      heading: '密钥',
+      intro: '密钥值只能写入，不会在此显示。',
+      set: '已设置',
+      notSet: '未设置',
+      manage: '在插件设置中管理',
+      slackWebhookUrl: 'Slack Webhook URL',
+      webhookUrls: 'Webhook URL 列表',
+      webhookSecret: 'Webhook 密钥',
+      sentryToken: 'Sentry 令牌',
+    },
+  },
 }
 
 const ja: Dict = {
@@ -232,6 +396,57 @@ const ja: Dict = {
   },
   breakdown: ({ day, week, month, quarter }) =>
     `今日 ${day} · 7日 ${week} · 30日 ${month} · 90日 ${quarter}`,
+  admin: {
+    loading: '読み込み中…',
+    loadFailed: '設定を読み込めませんでした。ページを再読み込みしてください。',
+    forbidden: 'モニターを編集できるのは管理者のみです。',
+    monitors: {
+      title: 'モニター',
+      pageName: 'ステータスページ名',
+      heading: 'モニター',
+      empty: 'モニターがまだありません。追加するとチェックが始まります。',
+      add: 'モニターを追加',
+      monitorN: n => `モニター ${n}`,
+      remove: name => `${name} を削除`,
+      save: '保存',
+      saving: '保存中…',
+      saved: '保存しました。',
+      notSavedInvalid: '保存されていません。マークされた項目を修正して、もう一度保存してください。',
+      notSavedStale: '保存されていません。先に他のユーザーが設定を変更したため、あなたの編集は破棄されました。新しい設定を表示しています。',
+      otherFindings: 'その他の指摘',
+      warning: '警告',
+      field: {
+        name: '名前',
+        slug: 'スラッグ',
+        check: 'チェックの種類',
+        url: 'URL',
+        method: 'HTTP メソッド',
+        expectedStatusCodes: '期待するステータスコード',
+        maxResponseTime: '遅延とみなす時間 (ms)',
+        component: 'コンポーネント',
+      },
+      hint: {
+        slug: '小文字の英字、数字、ハイフン。空欄の場合は名前から生成されます。',
+        expectedStatusCodes: 'カンマ区切りの整数 (例: 200, 204)。',
+      },
+      slugRenamed: old => `保存すると新しいモニターとして保存されます。「${old}」の履歴は古いスラッグのまま残ります。`,
+      duplicateSlug: slug => `スラッグ「${slug}」は別のモニターですでに使われています。`,
+      wholeNumber: '整数を入力してください。',
+      wholeNumbers: 'カンマ区切りの整数を入力してください。',
+      keepsOtherSettings: 'このエディターに表示されない設定はそのまま保持されます。',
+    },
+    secrets: {
+      heading: 'シークレット',
+      intro: 'シークレットの値は書き込み専用で、ここには表示されません。',
+      set: '設定済み',
+      notSet: '未設定',
+      manage: 'プラグイン設定で管理',
+      slackWebhookUrl: 'Slack Webhook URL',
+      webhookUrls: 'Webhook URL 一覧',
+      webhookSecret: 'Webhook シークレット',
+      sentryToken: 'Sentry トークン',
+    },
+  },
 }
 
 const ko: Dict = {
@@ -285,6 +500,57 @@ const ko: Dict = {
   },
   breakdown: ({ day, week, month, quarter }) =>
     `오늘 ${day} · 7일 ${week} · 30일 ${month} · 90일 ${quarter}`,
+  admin: {
+    loading: '불러오는 중…',
+    loadFailed: '설정을 불러오지 못했습니다. 페이지를 새로 고쳐 다시 시도하세요.',
+    forbidden: '모니터는 관리자만 편집할 수 있습니다.',
+    monitors: {
+      title: '모니터',
+      pageName: '상태 페이지 이름',
+      heading: '모니터',
+      empty: '아직 모니터가 없습니다. 추가하면 점검이 시작됩니다.',
+      add: '모니터 추가',
+      monitorN: n => `모니터 ${n}`,
+      remove: name => `${name} 삭제`,
+      save: '저장',
+      saving: '저장하는 중…',
+      saved: '저장했습니다.',
+      notSavedInvalid: '저장하지 않았습니다. 표시된 필드를 고친 뒤 다시 저장하세요.',
+      notSavedStale: '저장하지 않았습니다. 다른 사람이 먼저 설정을 바꿨으므로 내 수정은 버려졌습니다. 더 새로운 설정을 보여 줍니다.',
+      otherFindings: '기타 항목',
+      warning: '경고',
+      field: {
+        name: '이름',
+        slug: '슬러그',
+        check: '점검 유형',
+        url: 'URL',
+        method: 'HTTP 메서드',
+        expectedStatusCodes: '기대하는 상태 코드',
+        maxResponseTime: '느린 것으로 보는 시간 (ms)',
+        component: '구성 요소',
+      },
+      hint: {
+        slug: '소문자, 숫자, 하이픈만 쓸 수 있습니다. 비워 두면 이름에서 만듭니다.',
+        expectedStatusCodes: '쉼표로 구분한 정수입니다. 예: 200, 204.',
+      },
+      slugRenamed: old => `저장하면 새 모니터로 저장됩니다. "${old}"의 기록은 이전 슬러그에 그대로 남습니다.`,
+      duplicateSlug: slug => `다른 모니터가 이미 슬러그 "${slug}"을(를) 사용합니다.`,
+      wholeNumber: '정수를 입력하세요.',
+      wholeNumbers: '쉼표로 구분한 정수를 입력하세요.',
+      keepsOtherSettings: '이 편집기에 표시되지 않는 설정은 그대로 유지됩니다.',
+    },
+    secrets: {
+      heading: '시크릿',
+      intro: '시크릿 값은 쓰기 전용이며 여기에 표시되지 않습니다.',
+      set: '설정됨',
+      notSet: '설정 안 됨',
+      manage: '플러그인 설정에서 관리',
+      slackWebhookUrl: 'Slack 웹훅 URL',
+      webhookUrls: '웹훅 URL 목록',
+      webhookSecret: '웹훅 시크릿',
+      sentryToken: 'Sentry 토큰',
+    },
+  },
 }
 
 const DICTS: Record<Locale, Dict> = { en, zh, ja, ko }

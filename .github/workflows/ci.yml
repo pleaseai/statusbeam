@@ -51,6 +51,10 @@ jobs:
         # Kept apart from the coverage/junit run above: it needs its own module stubs and takes neither flag.
         run: bun run --cwd packages/emdash-plugin test:host
 
+      - name: Plugin admin tests
+        # React component tests on a happy-dom document; the preload registers it process-wide, so they run alone.
+        run: bun run --cwd packages/emdash-plugin test:admin
+
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:

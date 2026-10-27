@@ -1,20 +1,12 @@
 /**
- * The descriptor's `adminEntry` (T001 spike placeholder). EmDash imports this
- * module into the admin bundle and looks pages up by path and widgets by id.
- * Components take no props. The admin's CSS is precompiled, so only classes the
- * admin itself uses take effect. T005 and T007 replace both components.
+ * The descriptor's `adminEntry`. EmDash imports this module into the admin
+ * bundle and looks pages up by path and widgets by id. Components take no
+ * props, and the host does not role-gate them: each refuses a non-administrator
+ * itself (see `AdminGate`). The admin's CSS is precompiled, so only classes the
+ * admin itself uses take effect, and layout uses logical properties for RTL.
+ * T007 replaces the widget.
  */
-
-function SpikePage() {
-  return (
-    <div className="space-y-4 p-6">
-      <h1 className="text-2xl font-semibold">StatusBeam</h1>
-      <p className="text-sm text-kumo-subtle" data-testid="statusbeam-spike-page">
-        Native plugin placeholder page (T001 spike).
-      </p>
-    </div>
-  )
-}
+import { MonitorsPage } from './MonitorsPage'
 
 function SpikeWidget() {
   return (
@@ -24,5 +16,5 @@ function SpikeWidget() {
   )
 }
 
-export const pages = { '/': SpikePage }
+export const pages = { '/': MonitorsPage }
 export const widgets = { status: SpikeWidget }
