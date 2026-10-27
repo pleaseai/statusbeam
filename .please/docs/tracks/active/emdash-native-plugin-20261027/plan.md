@@ -88,7 +88,7 @@ of the host's).
 - [x] T003 Serve public and webhook routes from the native plugin (file: packages/emdash-plugin/src/routes/webhooks.ts) (depends on T002) [FR-4, FR-5, NFR-2, AC-007, AC-008, AC-009]
   Validation: status, per-site, and badge routes keep their paths and cache header and parse with core's contract schemas; a never-checked monitor carries `pending: true`; webhooks keep the 405 → 401 → 404 → 400 → 204/200 order, refuse everything while `webhookSecret` is unset, and return 401 for a token of the wrong length or with non-ASCII characters.
   Method: native host tests through `dispatchPluginApiRequest`
-- [ ] T004 Expose admin-only config, validate, save, test, and overview routes (file: packages/emdash-plugin/src/admin.ts) (depends on T002) [FR-7, FR-9, FR-10, NFR-2, NFR-4, AC-010, AC-016]
+- [x] T004 Expose admin-only config, validate, save, test, and overview routes (file: packages/emdash-plugin/src/admin.ts) (depends on T002) [FR-7, FR-9, FR-10, NFR-2, NFR-4, AC-010, AC-016]
   Validation: every admin route gives 401 to anonymous callers, 403 to editors, and refuses a cookie POST without `X-EmDash-Request`; validate returns issues with field paths (such as `sites[2].url`); a stale-revision save writes nothing and returns the current config; a save reconciles the schedule; test writes no bucket, snapshot, or delivery; test refuses a loopback, private, or cloud-metadata URL, also behind a redirect; no response contains a secret value.
   Method: native host tests for each route and role
 - [ ] T005 Edit monitors from a React admin page (file: packages/emdash-plugin/src/admin/MonitorsPage.tsx) (depends on T004) [FR-7, FR-10, NFR-1, AC-010, AC-011, AC-012, AC-016]
