@@ -47,8 +47,8 @@ jobs:
         run: bun run build
 
       - name: Plugin host tests
-        # Runs the EmDash plugin in workerd through vitest, which bun test cannot do.
-        # Kept apart from the coverage/junit run above: it takes neither flag.
+        # Runs the native plugin on EmDash's real runtime (in-memory host, no network).
+        # Kept apart from the coverage/junit run above: it needs its own module stubs and takes neither flag.
         run: bun run --cwd packages/emdash-plugin test:host
 
       - name: Upload coverage to Codecov

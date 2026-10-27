@@ -1,149 +1,104 @@
-import type { HttpAccess, PluginContext, RouteContext } from 'emdash'
-import { checkSite, siteSchema } from '@statusbeam/core'
-import { definePlugin } from 'emdash'
+import type { HttpAccess, PluginContext } from 'emdash'
+import { createUnrestrictedHttpAccess, definePlugin } from 'emdash'
 import pkg from '../package.json' with { type: 'json' }
 import { PLUGIN_ID } from './descriptor'
 import { createProbeHttp } from './http'
+import { runCheck, runMaintenance } from './run'
+import { CHECK_TASK, MAINTENANCE_TASK, reconcileSchedule } from './schedule'
+import { SENTRY_TOKEN_SECRET_KEY, SLACK_SECRET_KEY, WEBHOOK_SECRET_KEY, WEBHOOKS_SECRET_KEY } from './settings'
 
 /**
- * The native plugin (T001 spike, ADR-0005 track). The descriptor's
- * `entrypoint`: EmDash imports `createPlugin` from here and calls it with the
- * descriptor's `options`. It runs in `plugins: []`, with no sandbox runner.
+ * The native plugin (ADR-0005). The descriptor's `entrypoint`: EmDash imports
+ * `createPlugin` from here and calls it with the descriptor's `options`. It runs
+ * in `plugins: []`, with no sandbox runner.
  *
- * Spike scope only: one scheduled task that records its runs, a public probe
- * route over fixed targets, and a placeholder admin page and widget. T002
- * replaces the task and the probe route with the engine.
+ * One 5-minute `check` task probes every monitor; a daily `maintenance` task
+ * prunes history. Routes (T003, T004) and the admin pages (T005 to T007) are
+ * added to this definition by later tasks.
  */
-
-/** The spike's scheduled task. Every minute is the floor on both hosts. */
-export const SPIKE_TASK = 'spike-tick'
-const SPIKE_SCHEDULE = '* * * * *'
-const RUNS_KEY = 'spike:cron-runs'
-const MAX_RUNS = 20
 
 /**
- * Fixed probe targets, so the public route cannot be aimed anywhere else. The
- * ADR-0004 fixture Worker is gone, so the public targets are third-party
- * endpoints: httpbin's `drip` sends headers at once and the body over 3 s, and
- * Cloudflare's speed-test download serves a 9 MiB body.
+ * Timeout for the `cron` hook. EmDash's default hook timeout is 5 s, which ends
+ * a run whose slowest probe takes longer and drops all of its writes. A run
+ * needs the probe deadline plus its reads and writes.
  */
-export const SPIKE_TARGETS: Record<string, string> = {
-  'slow-body-3s': 'https://httpbin.org/drip?duration=3&numbytes=10&delay=0&code=200',
-  'big-9mib': 'https://speed.cloudflare.com/__down?bytes=9437184',
-  'ok': 'https://httpbin.org/status/200',
-  'loopback': 'http://127.0.0.1/',
-  // A public name whose A record is 127.0.0.1, not on the host's wildcard-DNS
-  // denylist: only the guard's DNS lookup can refuse it.
-  'dns-loopback': 'http://localhost.direct/',
-  'metadata': 'http://169.254.169.254/latest/meta-data/',
-  'redirect-to-metadata': 'https://httpbin.org/redirect-to?url=http%3A%2F%2F169.254.169.254%2Flatest%2Fmeta-data%2F',
-}
+export const CRON_HOOK_TIMEOUT_MS = 25_000
 
-interface CronRun {
-  name: string
-  scheduledAt: string
-  ranAt: string
-}
+const SETTINGS_SCHEMA = {
+  [SLACK_SECRET_KEY]: {
+    type: 'secret',
+    label: 'Slack webhook URL',
+    description: 'Incoming-webhook URL. Status changes post here.',
+  },
+  [WEBHOOKS_SECRET_KEY]: {
+    type: 'secret',
+    label: 'Generic webhook URLs',
+    description: 'One URL per line, or separated by commas or spaces. Each receives the status-change JSON.',
+  },
+  [WEBHOOK_SECRET_KEY]: {
+    type: 'secret',
+    label: 'Webhook secret',
+    description: 'Shared token for inbound Statuspage and Sentry webhooks, sent as ?token=. While unset, every inbound webhook is rejected.',
+  },
+  [SENTRY_TOKEN_SECRET_KEY]: {
+    type: 'secret',
+    label: 'Sentry auth token',
+    description: 'Lets monitors with a Sentry poll backstop read the Issues API. Separate from the webhook secret. Without it, only webhooks update those monitors.',
+  },
+} as const
 
-async function recordRun(ctx: PluginContext, run: CronRun): Promise<void> {
-  const runs = (await ctx.kv.get<CronRun[]>(RUNS_KEY)) ?? []
-  await ctx.kv.set(RUNS_KEY, [run, ...runs].slice(0, MAX_RUNS))
-}
-
-/**
- * Schedule the task unless it already is. `schedule()` is an upsert that moves
- * the next run to the next match, so calling it on every request would keep
- * postponing a task that a once-a-minute trigger never finds due.
- */
-async function scheduleSpikeTask(ctx: PluginContext): Promise<void> {
-  if (!ctx.cron) {
-    return
-  }
-  const tasks = await ctx.cron.list()
-  if (!tasks.some(task => task.name === SPIKE_TASK && task.schedule === SPIKE_SCHEDULE)) {
-    await ctx.cron.schedule(SPIKE_TASK, { schedule: SPIKE_SCHEDULE })
-  }
-}
-
-interface ProbeReport {
-  mode: 'header' | 'body'
-  status: string
-  code: number
-  responseTime: number
-  error?: string
-  /** Time from the final hop's dispatch to its headers, header mode only. */
-  headersMs?: number
-  wallMs: number
+/** What a test can replace. The site cannot: `createPlugin` is called with JSON options only. */
+export interface NativePluginDeps {
+  /**
+   * The `fetch` under the host's SSRF guard, for header-only probes and for
+   * every other outbound request. The guard itself always runs.
+   */
+  fetchImpl?: typeof fetch
+  now?: () => Date
+  deadlineMs?: number
 }
 
 /**
- * One `checkSite` over `http`. In header mode the raw fetch under the host's
- * guard is wrapped once more to time the final hop's headers, which excludes the
- * guard's DNS lookups from the figure.
+ * Converge the cron tasks on the two this plugin needs. A failure is logged and
+ * never ends the run it rides on: the next run reconciles again.
  */
-async function probeOnce(mode: ProbeReport['mode'], http: HttpAccess, url: string, timing: { headersMs?: number }): Promise<ProbeReport> {
-  const site = siteSchema.parse({ name: 'spike', url, maxResponseTime: 2000 })
-  const started = Date.now()
-  const result = await checkSite(site, { fetchImpl: (target, init) => http.fetch(target, init) })
-  return {
-    mode,
-    status: result.status,
-    code: result.code,
-    responseTime: result.responseTime,
-    ...(result.error ? { error: result.error } : {}),
-    ...(timing.headersMs === undefined ? {} : { headersMs: timing.headersMs }),
-    wallMs: Date.now() - started,
+async function reconcile(ctx: PluginContext): Promise<void> {
+  try {
+    await reconcileSchedule(ctx)
+  }
+  catch (error) {
+    ctx.log.warn('statusbeam: could not reconcile the scheduled tasks', { error: error instanceof Error ? error.message : String(error) })
   }
 }
 
-async function probeRoute(ctx: RouteContext): Promise<unknown> {
-  const params = new URL(ctx.request.url).searchParams
-  const name = params.get('target') ?? ''
-  const url = SPIKE_TARGETS[name]
-  if (!url) {
-    return { error: `unknown target "${name}"`, targets: Object.keys(SPIKE_TARGETS) }
-  }
-  const timing: { headersMs?: number } = {}
-  const timedFetch = (async (input: string | URL | Request, init?: RequestInit) => {
-    const sent = Date.now()
-    const response = await globalThis.fetch(input, init)
-    timing.headersMs = Date.now() - sent
-    return response
-  }) as typeof fetch
-  const reports = [await probeOnce('header', createProbeHttp(PLUGIN_ID, timedFetch), url, timing)]
-  if (params.get('body') === '1' && ctx.http) {
-    reports.push(await probeOnce('body', ctx.http, url, {}))
-  }
-  // The user agent tells the hosts apart: `Cloudflare-Workers` under workerd, `Node.js/...` on Node.
-  return { target: name, url, runtime: globalThis.navigator?.userAgent ?? null, reports }
-}
-
-export function createPlugin(_options: Record<string, unknown> = {}) {
+export function createNativePlugin(deps: NativePluginDeps = {}) {
+  const probeHttp: HttpAccess = createProbeHttp(PLUGIN_ID, deps.fetchImpl)
+  // Without an injected `fetch` the host's own `ctx.http` serves body reads and deliveries.
+  const bodyHttp = deps.fetchImpl ? createUnrestrictedHttpAccess(PLUGIN_ID, deps.fetchImpl) : undefined
   return definePlugin({
     id: PLUGIN_ID,
     version: pkg.version,
     capabilities: ['network:request:unrestricted'],
+    storage: { buckets: { indexes: ['date', ['slug', 'date']] } },
     hooks: {
+      // Also runs after first install, so one hook covers install and re-enable.
       'plugin:activate': async (_event, ctx) => {
-        await scheduleSpikeTask(ctx)
+        await reconcile(ctx)
       },
-      'cron': async (event, ctx) => {
-        if (event.name !== SPIKE_TASK) {
-          return
-        }
-        const run = { name: event.name, scheduledAt: event.scheduledAt, ranAt: new Date().toISOString() }
-        ctx.log.info('statusbeam spike cron fired', run)
-        await recordRun(ctx, run)
-      },
-    },
-    routes: {
-      'spike-probe': { public: true, handler: probeRoute },
-      'spike-cron': {
-        public: true,
-        handler: async (ctx) => {
-          // Covers a site where activate never ran; a no-op once scheduled.
-          await scheduleSpikeTask(ctx)
-          return { tasks: (await ctx.cron?.list()) ?? null, runs: (await ctx.kv.get<CronRun[]>(RUNS_KEY)) ?? [] }
+      'cron': {
+        timeout: CRON_HOOK_TIMEOUT_MS,
+        handler: async (event, ctx) => {
+          if (event.name !== CHECK_TASK && event.name !== MAINTENANCE_TASK) {
+            return
+          }
+          await reconcile(ctx)
+          const options = { probeHttp, ...(bodyHttp ? { bodyHttp } : {}), ...(deps.now ? { now: deps.now } : {}), ...(deps.deadlineMs ? { deadlineMs: deps.deadlineMs } : {}) }
+          if (event.name === MAINTENANCE_TASK) {
+            await runMaintenance(ctx, options)
+          }
+          else {
+            await runCheck(ctx, options)
+          }
         },
       },
     },
@@ -151,6 +106,12 @@ export function createPlugin(_options: Record<string, unknown> = {}) {
       entry: '@statusbeam/emdash-plugin/admin',
       pages: [{ path: '/', label: 'StatusBeam', icon: 'chart-line' }],
       widgets: [{ id: 'status', title: 'StatusBeam', size: 'half' }],
+      // Notification destinations and tokens live in encrypted settings, never in the YAML: a webhook URL embeds its credential.
+      settingsSchema: SETTINGS_SCHEMA,
     },
   })
+}
+
+export function createPlugin(_options: Record<string, unknown> = {}) {
+  return createNativePlugin()
 }

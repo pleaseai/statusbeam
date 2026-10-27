@@ -43,7 +43,7 @@ export function bucketsOf(ctx: Pick<PluginContext, 'storage'>): BucketCollection
 }
 
 /**
- * Who increments a bucket row. Scheduled shards own the `poll` rows and the
+ * Who increments a bucket row. The scheduled check owns the `poll` rows and the
  * webhook route owns the `webhook` rows, so neither ever read-modify-writes a
  * row the other writes.
  */
@@ -101,8 +101,7 @@ export function windowStartDate(now: Date): string {
 }
 
 /**
- * Read one monitor's buckets inside the 90-day window. One bridge call: 90 days
- * fit one 100-row page. A caller reading several monitors pays one call each.
+ * Read one monitor's buckets inside the 90-day window: 90 days fit one 100-row page.
  * A day with webhook events has two rows (poll and webhook); a reader sums them.
  */
 export async function readMonitorBuckets(
@@ -118,30 +117,23 @@ export async function readMonitorBuckets(
 }
 
 /**
- * Delete buckets that fell out of the 90-day window, spending at most
- * `maxCalls` bridge calls (one `query` and one `deleteMany` per page of up to
- * 100 expired rows). Returns how many it deleted and how many calls it used.
+ * Delete buckets that fell out of the 90-day window, a page of up to 100 expired
+ * rows at a time until none are left. Returns how many it deleted.
  */
-export async function pruneExpiredBuckets(
-  ctx: Pick<PluginContext, 'storage'>,
-  now: Date,
-  maxCalls: number,
-): Promise<{ deleted: number, calls: number }> {
+export async function pruneExpiredBuckets(ctx: Pick<PluginContext, 'storage'>, now: Date): Promise<number> {
   const buckets = bucketsOf(ctx)
   const cutoff = windowStartDate(now)
   let deleted = 0
-  let calls = 0
-  while (calls + 2 <= maxCalls) {
+  for (;;) {
     const page = await buckets.query({ where: { date: { lt: cutoff } }, limit: QUERY_PAGE_LIMIT })
-    calls += 1
     if (page.items.length === 0) {
-      break
+      return deleted
     }
-    deleted += await buckets.deleteMany(page.items.map(item => item.id))
-    calls += 1
-    if (!page.hasMore) {
-      break
+    const removed = await buckets.deleteMany(page.items.map(item => item.id))
+    deleted += removed
+    // A page that deleted nothing would be read again forever.
+    if (removed === 0) {
+      return deleted
     }
   }
-  return { deleted, calls }
 }

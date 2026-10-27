@@ -1,10 +1,9 @@
 import type { SecretsView } from '../src/config'
 import { describe, expect, it } from 'bun:test'
-import { CALL_BUDGET } from '../src/budget'
 import { clearConfigError, CONFIG_ERROR_KEY, readConfigError, secretsFrom, validatePluginConfig } from '../src/config'
-import { runMaintenance, runShard } from '../src/run'
-import { reconcileShards } from '../src/shards'
-import { createFakeContext, monitorNames, monitorsYaml } from './fake-context'
+import { runMaintenance } from '../src/run'
+import { reconcileSchedule } from '../src/schedule'
+import { createFakeContext, monitorsYaml, runFake } from './fake-context'
 
 const NONE: SecretsView = { destinations: 0, sentryToken: false, invalidEntries: [], extraSlackUrls: 0 }
 const VALID = monitorsYaml(['alpha', 'beta'])
@@ -54,34 +53,6 @@ describe('validatePluginConfig', () => {
     expect(issuesOf(hookOnly)).toEqual([])
   })
 
-  it('warns how many monitors fit and how many would go unchecked when the tasks cannot probe them all (AC-021)', () => {
-    expect(issuesOf(monitorsYaml(monitorNames(40)))).toEqual([])
-
-    const over = validatePluginConfig(monitorsYaml(monitorNames(45)), NONE)
-    expect(over.ok).toBe(true)
-    expect(over.issues).toEqual([expect.objectContaining({ severity: 'warning', path: 'sites' })])
-    expect(over.issues[0]?.message).toContain('probes 40')
-    expect(over.issues[0]?.message).toContain('5 would go unchecked')
-
-    // Sentry poll monitors count once a token is set, as the run and the reconcile schedule them.
-    const sentryPolls = monitorNames(5).map(name => `  - name: s${name}\n    check: sentry\n    url: https://s.example.com/\n    sentry:\n      org: acme`)
-    const mixed = `${monitorsYaml(monitorNames(40))}\n${sentryPolls.join('\n')}`
-    expect(issuesOf(mixed, NONE, 'warning').filter(issue => issue.path === 'sites')).toEqual([])
-    const counted = issuesOf(mixed, { ...NONE, sentryToken: true })
-    expect(counted).toEqual([expect.objectContaining({ severity: 'warning', path: 'sites' })])
-    expect(counted[0]?.message).toContain('45 monitors are pollable')
-    expect(counted[0]?.message).toContain('5 would go unchecked')
-
-    const withDestinations = issuesOf(monitorsYaml(monitorNames(17)), { ...NONE, destinations: 3 })
-    expect(withDestinations[0]?.message).toContain('probes 16')
-    expect(withDestinations[0]?.message).toContain('1 would go unchecked')
-  })
-
-  it('makes destinations that leave no call for a probe an error, matching the run-time capacity error', () => {
-    const errors = issuesOf(monitorsYaml(['a']), { ...NONE, destinations: 5 }, 'error')
-    expect(errors).toEqual([expect.objectContaining({ path: 'notifications', code: 'capacity' })])
-  })
-
   it('rejects a Slack or webhook URL in the YAML and points to the encrypted settings (AC-022)', () => {
     const yaml = `${VALID}\nnotifications:\n  slack:\n    webhookUrl: https://hooks.slack.com/services/SECRET\n  webhooks:\n    - url: https://hooks.example.com/SECRET2\n    - url: https://hooks.example.com/SECRET3`
     const result = validatePluginConfig(yaml, NONE)
@@ -128,10 +99,10 @@ describe('the run gate', () => {
   const INVALID = `${VALID}\nnotifications:\n  delivery: queue`
   const at = (time: string) => ({ now: () => new Date(time) })
 
-  /** A valid run first, so there are buckets, a snapshot and shard tasks to protect. */
+  /** A valid run first, so there are buckets, a snapshot and tasks to protect. */
   async function seeded() {
-    const fake = createFakeContext({ config: VALID, tasks: [0, 1].map(i => ({ name: `check-${i}`, schedule: '*/5 * * * *' })) })
-    await runShard(fake.ctx, 0, at('2026-10-22T10:00:00.000Z'))
+    const fake = createFakeContext({ config: VALID, tasks: [{ name: 'check', schedule: '*/5 * * * *' }] })
+    await runFake(fake, at('2026-10-22T10:00:00.000Z'))
     return fake
   }
 
@@ -143,69 +114,43 @@ describe('the run gate', () => {
     fake.setConfig(INVALID)
     fake.bridgeCalls.length = 0
 
-    const result = await runShard(fake.ctx, 0, at('2026-10-22T10:05:00.000Z'))
+    const result = await runFake(fake, at('2026-10-22T10:05:00.000Z'))
 
-    expect(result).toEqual({ probed: 0, calls: 2, planned: 2, unsupported: 0, deliveries: 0 })
+    expect(result).toEqual({ probed: 0, deliveries: 0 })
     expect(fake.bridgeCalls).toEqual(['settings.list', 'kv.set'])
     expect(state(fake)).toBe(before)
   })
 
-  it('records the errors, keeps them across further invalid runs, and leaves the shard tasks alone (AC-024)', async () => {
+  it('records the errors, keeps them across further invalid runs, and leaves the tasks alone (AC-024)', async () => {
     const fake = await seeded()
     fake.setConfig(INVALID)
-    await runShard(fake.ctx, 0, at('2026-10-22T10:05:00.000Z'))
+    await runFake(fake, at('2026-10-22T10:05:00.000Z'))
     expect(await readConfigError(fake.ctx)).toMatchObject({ version: 1, issues: [{ severity: 'error', path: 'notifications.delivery' }] })
 
-    await runShard(fake.ctx, 1, at('2026-10-22T10:10:00.000Z'))
-    await reconcileShards(fake.ctx)
+    await runFake(fake, at('2026-10-22T10:10:00.000Z'))
+    await reconcileSchedule(fake.ctx)
     await runMaintenance(fake.ctx, at('2026-10-22T10:15:00.000Z'))
     expect(await readConfigError(fake.ctx)).not.toBeNull()
-    expect([...fake.tasks.keys()].filter(n => n.startsWith('check-')).sort()).toEqual(['check-0', 'check-1'])
+    expect([...fake.tasks.keys()].sort()).toEqual(['check', 'maintenance'])
   })
 
-  it('clears the record in the first run that validates, within the call budget', async () => {
+  it('clears the record in the first run that validates', async () => {
     const fake = await seeded()
     fake.setConfig(INVALID)
-    await runShard(fake.ctx, 0)
+    await runFake(fake)
     expect(fake.kv.has(CONFIG_ERROR_KEY)).toBe(true)
 
     fake.setConfig(VALID)
     fake.bridgeCalls.length = 0
-    const result = await runShard(fake.ctx, 0)
+    const result = await runFake(fake)
     expect(fake.kv.has(CONFIG_ERROR_KEY)).toBe(false)
     expect(result.probed).toBe(2)
     expect(fake.bridgeCalls.filter(c => c === 'kv.delete')).toHaveLength(1)
-    expect(result.calls).toBe(fake.bridgeCalls.length)
-    expect(result.calls).toBeLessThanOrEqual(result.planned)
-    expect(result.calls).toBeLessThanOrEqual(CALL_BUDGET)
-  })
-
-  it('never exceeds the budget in a full shard: the save or the maintenance task clears the record instead', async () => {
-    const full = monitorsYaml(monitorNames(5))
-    const invalid = `${full}\nnotifications:\n  delivery: queue`
-    const fake = createFakeContext({ config: invalid })
-    await runShard(fake.ctx, 0)
-    fake.setConfig(full)
-    fake.bridgeCalls.length = 0
-    const result = await runShard(fake.ctx, 0)
-    expect(result).toMatchObject({ probed: 5, calls: CALL_BUDGET, planned: CALL_BUDGET })
-    expect(fake.kv.has(CONFIG_ERROR_KEY)).toBe(true)
-
-    await reconcileShards(fake.ctx, { clearConfigError: true })
-    expect(fake.kv.has(CONFIG_ERROR_KEY)).toBe(false)
-
-    fake.setConfig(invalid)
-    await runShard(fake.ctx, 0)
-    fake.setConfig(full)
-    fake.bridgeCalls.length = 0
-    await runMaintenance(fake.ctx)
-    expect(fake.kv.has(CONFIG_ERROR_KEY)).toBe(false)
-    expect(fake.bridgeCalls.length).toBeLessThanOrEqual(CALL_BUDGET)
   })
 
   it('records nothing for an absent configuration, and clearing a record is one call', async () => {
     const fake = createFakeContext()
-    await runShard(fake.ctx, 0)
+    await runFake(fake)
     expect(fake.bridgeCalls).toEqual(['settings.list'])
     fake.kv.set(CONFIG_ERROR_KEY, { version: 1 })
     fake.bridgeCalls.length = 0

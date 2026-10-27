@@ -1,68 +1,43 @@
 import type { CheckResult, DayCounts, SiteSummary } from '@statusbeam/core'
 import type { DayBucket } from '../src/buckets'
-import type { ShardSnapshot } from '../src/snapshot'
+import type { PollSnapshot } from '../src/snapshot'
 import { readFileSync } from 'node:fs'
-import { buildSiteSummaries, groupDayStats } from '@statusbeam/core'
+import { buildSiteSummaries, groupDayStats, siteSchema } from '@statusbeam/core'
 import { describe, expect, it } from 'bun:test'
 import { applyResults, pruneExpiredBuckets, toDayCounts } from '../src/buckets'
-import { CALL_BUDGET, CRON_HOOK_TIMEOUT_MS, fitsBudget, MAX_SHARDS, monitorsPerTask, plannedCalls, PROBE_DEADLINE_MS, reservedCallsFor, SCHEDULER_CLAIM_LIMIT } from '../src/budget'
-import plugin from '../src/plugin'
-import { runShard } from '../src/run'
-import { MAINTENANCE_TASK, monitorsPerShard, pollableSites, reconcileShards, shardCountFor, shardSites } from '../src/shards'
-import { readSnapshot } from '../src/snapshot'
-import { createFakeContext, monitorNames, monitorsYaml } from './fake-context'
+import { pollableSites, runMaintenance } from '../src/run'
+import { CHECK_SCHEDULE, CHECK_TASK, MAINTENANCE_SCHEDULE, MAINTENANCE_TASK, reconcileSchedule } from '../src/schedule'
+import { POLL_SNAPSHOT_KEY, readSnapshot, summariesFromSnapshot } from '../src/snapshot'
+import { createFakeContext, monitorNames, monitorsYaml, runFake } from './fake-context'
 
-describe('the call budget model', () => {
-  it('fits five monitors per task with no destinations, and one fewer per destination', () => {
-    expect(CALL_BUDGET).toBe(10)
-    expect([0, 1, 2].map(destinations => monitorsPerTask(reservedCallsFor(destinations)))).toEqual([5, 4, 3])
-    expect(plannedCalls(5)).toBe(CALL_BUDGET)
-    expect(fitsBudget(5)).toBe(true)
-    expect(fitsBudget(6)).toBe(false)
-    expect(fitsBudget(5, 1)).toBe(false)
-  })
-
-  it('keeps the shard cap below the scheduler claim limit', () => {
-    expect(MAX_SHARDS).toBeLessThan(SCHEDULER_CLAIM_LIMIT)
+describe('pollableSites', () => {
+  it('lists every pollable monitor in slug order and leaves out Sentry monitors without a token', () => {
+    const sites = [...monitorNames(12)].reverse().map(name => siteSchema.parse({ name, url: `https://${name}.example.com/` }))
+    const sentry = siteSchema.parse({ name: 'errors', check: 'sentry', url: 'https://sentry.example.com/', sentry: { org: 'acme' } })
+    expect(pollableSites([...sites, sentry]).map(s => s.slug)).toEqual(monitorNames(12))
+    expect(pollableSites([...sites, sentry], { sentryToken: 'tok' }).map(s => s.slug)).toEqual(['errors', ...monitorNames(12)].sort())
   })
 })
 
-describe('the cron hook', () => {
-  it('outlasts the probe deadline and stays under the Worker Loader wall limit', () => {
-    // EmDash's default 5 s hook timeout would end a shard before a slow probe's 10 s deadline.
-    const cron = plugin.hooks?.cron as { timeout?: number }
-    expect(cron.timeout).toBe(CRON_HOOK_TIMEOUT_MS)
-    expect(CRON_HOOK_TIMEOUT_MS).toBeGreaterThan(PROBE_DEADLINE_MS)
-    expect(CRON_HOOK_TIMEOUT_MS).toBeLessThan(30_000)
-  })
-})
+describe('runCheck', () => {
+  it('checks all 12 monitors in one run and writes their buckets and one snapshot', async () => {
+    const names = monitorNames(12)
+    const seen: string[] = []
+    const fake = createFakeContext({ config: monitorsYaml(names), fetch: async (url) => {
+      seen.push(url)
+      return new Response('ok', { status: 200 })
+    } })
 
-describe('sharding', () => {
-  it('uses ceil(n / per-task) shards, capped at MAX_SHARDS, with fewer monitors per task as destinations grow', () => {
-    expect([0, 1, 5, 6, 10, 11, 40, 41, 500].map(n => shardCountFor(n))).toEqual([0, 1, 1, 2, 2, 3, 8, 8, 8])
-    expect([0, 1, 4, 5, 8, 9].map(n => shardCountFor(n, 1))).toEqual([0, 1, 1, 2, 2, 3])
-    expect([3, 4].map(n => shardCountFor(n, 2))).toEqual([1, 2])
-  })
+    const result = await runFake(fake)
 
-  it('keeps one shard to record the capacity error when the destinations leave no call for a probe', () => {
-    expect(shardCountFor(9, 5)).toBe(1)
-    expect(shardCountFor(0, 5)).toBe(0)
+    expect(result).toEqual({ probed: 12, deliveries: 0 })
+    expect(seen.sort()).toEqual(names.map(n => `https://${n}.example.com/`))
+    expect([...fake.rows.values()].map(b => [b.slug, b.up, b.total]).sort()).toEqual(names.map(n => [n, 1, 1]))
+    const snapshot = fake.kv.get(POLL_SNAPSHOT_KEY) as PollSnapshot
+    expect(snapshot.monitors.map(m => m.slug)).toEqual(names)
+    expect(snapshot.monitors.every(m => m.result?.status === 'up' && m.result.code === 200)).toBe(true)
   })
 
-  it('puts every pollable monitor in exactly one shard, deterministically, in slug order', () => {
-    for (const count of [1, 4, 5, 6, 20, 24]) {
-      const config = { sites: [...monitorNames(count)].reverse().map(name => ({ name, slug: name, url: `https://${name}.example.com/`, check: 'http', method: 'GET', expectedStatusCodes: [200], maxResponseTime: 5000 })) }
-      const sorted = pollableSites(config as never)
-      for (const destinations of [0, 1, 2]) {
-        const shards = Array.from({ length: shardCountFor(count, destinations) }, (_, i) => shardSites(sorted, i, destinations).map(s => s.slug))
-        expect(shards.flat()).toEqual(monitorNames(count))
-        expect(shards.every(shard => shard.length <= monitorsPerShard(destinations))).toBe(true)
-      }
-    }
-  })
-})
-
-describe('runShard', () => {
   it('polls a Sentry monitor with the sentryToken secret and skips it without one', async () => {
     const yaml = monitorsYaml(['web'], ['  - name: errors', '    check: sentry', '    url: https://sentry.example.com/', '    sentry:', '      org: acme'])
     const seen: Array<{ url: string, auth: string | null }> = []
@@ -71,35 +46,42 @@ describe('runShard', () => {
       return new Response(new URL(url).hostname === 'sentry.io' ? '[]' : 'ok', { status: 200 })
     }
 
-    await runShard(createFakeContext({ config: yaml, settings: { sentryToken: 'tok' }, fetch }).ctx, 0)
+    await runFake(createFakeContext({ config: yaml, settings: { sentryToken: 'tok' }, fetch }))
     const polled = seen.find(s => s.url.includes('/organizations/acme/'))
     expect(polled?.auth).toBe('Bearer tok')
 
     seen.length = 0
-    await runShard(createFakeContext({ config: yaml, fetch }).ctx, 0)
+    await runFake(createFakeContext({ config: yaml, fetch }))
     expect(seen.map(s => s.url)).toEqual(['https://web.example.com/'])
   })
 
-  it('stays within the call budget for a full shard and never logs', async () => {
-    const fake = createFakeContext({ config: monitorsYaml(monitorNames(5)) })
-    const result = await runShard(fake.ctx, 0)
-    expect(result).toEqual({ probed: 5, calls: CALL_BUDGET, planned: CALL_BUDGET, unsupported: 0, deliveries: 0 })
-    expect(fake.bridgeCalls).toHaveLength(CALL_BUDGET)
-    expect(fake.bridgeCalls.filter(c => c.startsWith('log.'))).toEqual([])
-    expect(fake.bridgeCalls.filter(c => c === 'http.fetch')).toHaveLength(5)
-    expect(fake.bridgeCalls.filter(c => c === 'storage.putMany')).toHaveLength(1)
+  it('sends body-reading checks through ctx.http and plain checks through the header-only client', async () => {
+    const yaml = monitorsYaml(['web'], ['  - name: errors', '    check: sentry', '    url: https://sentry.example.com/', '    sentry:', '      org: acme'])
+    const viaCtx: string[] = []
+    const viaProbe: string[] = []
+    const fake = createFakeContext({ config: yaml, settings: { sentryToken: 'tok' }, fetch: async (url) => {
+      viaCtx.push(url)
+      return new Response('[]', { status: 200 })
+    } })
+    await runFake(fake, { probeHttp: { fetch: async (url) => {
+      viaProbe.push(String(url))
+      return new Response(null, { status: 200 })
+    } } })
+    expect(viaProbe).toEqual(['https://web.example.com/'])
+    expect(viaCtx.every(url => url.includes('sentry'))).toBe(true)
+    expect(viaCtx.length).toBeGreaterThan(0)
   })
 
-  it('grades a probe that misses the deadline down with code 0 and still probes the others', async () => {
+  it('grades a probe that misses the deadline down with code 0, while the others finish', async () => {
     const fake = createFakeContext({
       config: monitorsYaml(['aaa', 'hang', 'zzz']),
       fetch: url => (url.includes('hang') ? new Promise<Response>(() => {}) : Promise.resolve(new Response('ok', { status: 200 }))),
     })
     const started = Date.now()
-    await runShard(fake.ctx, 0, { deadlineMs: 50 })
+    await runFake(fake, { deadlineMs: 50 })
     expect(Date.now() - started).toBeLessThan(2000)
 
-    const snapshot = fake.kv.get('snapshot:0') as ShardSnapshot
+    const snapshot = fake.kv.get(POLL_SNAPSHOT_KEY) as PollSnapshot
     const bySlug = new Map(snapshot.monitors.map(m => [m.slug, m.result]))
     expect(bySlug.get('hang')).toMatchObject({ status: 'down', code: 0 })
     expect(bySlug.get('aaa')).toMatchObject({ status: 'up', code: 200 })
@@ -107,14 +89,48 @@ describe('runShard', () => {
     expect([...fake.rows.values()].map(b => [b.slug, b.down, b.up])).toEqual([['aaa', 0, 1], ['hang', 1, 0], ['zzz', 0, 1]])
   })
 
+  it('does not wait for a hung monitor before finishing the others', async () => {
+    const finished: string[] = []
+    const fake = createFakeContext({
+      config: monitorsYaml(['fast', 'hang']),
+      fetch: async (url) => {
+        if (url.includes('hang')) {
+          return new Promise<Response>(() => {})
+        }
+        finished.push(url)
+        return new Response('ok', { status: 200 })
+      },
+    })
+    const run = runFake(fake, { deadlineMs: 300 })
+    await new Promise(resolve => setTimeout(resolve, 100))
+    expect(finished).toEqual(['https://fast.example.com/'])
+    await run
+  })
+
+  it('does not check a monitor removed from the configuration, and drops it from the snapshot', async () => {
+    const seen: string[] = []
+    const fake = createFakeContext({ config: monitorsYaml(['a', 'b', 'c']), fetch: async (url) => {
+      seen.push(url)
+      return new Response('ok', { status: 200 })
+    } })
+    await runFake(fake)
+    seen.length = 0
+
+    fake.setConfig(monitorsYaml(['a', 'c']))
+    await runFake(fake)
+
+    expect(seen.sort()).toEqual(['https://a.example.com/', 'https://c.example.com/'])
+    expect((fake.kv.get(POLL_SNAPSHOT_KEY) as PollSnapshot).monitors.map(m => m.slug)).toEqual(['a', 'c'])
+    expect((await readSnapshot(fake.ctx)).monitors.has('b')).toBe(false)
+  })
+
   it('checks nothing and writes nothing without a valid configuration', async () => {
-    // An absent configuration writes nothing; an invalid one writes only the configuration-error record (T008, AC-024).
-    const cases: Array<[string | undefined, string[], string[]]> = [[undefined, ['settings.list'], []], ['sites: [broken', ['settings.list', 'kv.set'], ['snapshot:config-error']]]
-    for (const [config, calls, kvKeys] of cases) {
+    // An absent configuration writes nothing; an invalid one writes only the configuration-error record.
+    const cases: Array<[string | undefined, string[]]> = [[undefined, []], ['sites: [broken', ['snapshot:config-error']]]
+    for (const [config, kvKeys] of cases) {
       const fake = createFakeContext({ config })
-      const result = await runShard(fake.ctx, 0)
+      const result = await runFake(fake)
       expect(result.probed).toBe(0)
-      expect(fake.bridgeCalls).toEqual(calls)
       expect([...fake.kv.keys()]).toEqual(kvKeys)
       expect(fake.rows.size).toBe(0)
     }
@@ -161,6 +177,41 @@ describe('buckets against the standalone rollup', () => {
     expect(JSON.parse(JSON.stringify(summary))).toEqual(fixture.expectedSummary)
   })
 
+  it('gives the same 90-day figures as the standalone rollup for the same results (AC-006)', async () => {
+    // 90 days of runs, one every 6 hours, with a deterministic mix of statuses.
+    const start = new Date('2026-07-25T00:00:00.000Z')
+    const runs = Array.from({ length: 90 * 4 }, (_, i) => new Date(start.getTime() + i * 6 * 3_600_000))
+    const statusAt = (i: number) => (i % 11 === 0 ? 500 : 200)
+    let current = runs[0] as Date
+    let index = 0
+    const fake = createFakeContext({ config: monitorsYaml(['a']), fetch: async () => new Response('x', { status: statusAt(index) }) })
+    const counts = new Map<string, DayCounts>()
+    for (const [i, at] of runs.entries()) {
+      index = i
+      current = at
+      await runFake(fake, { now: () => current })
+      const day = at.toISOString().slice(0, 10)
+      const row = counts.get(day) ?? { slug: 'a', day, up: 0, degraded: 0, down: 0, total: 0 }
+      row[statusAt(i) === 200 ? 'up' : 'down'] += 1
+      row.total += 1
+      counts.set(day, row)
+    }
+
+    const now = new Date(runs.at(-1) as Date)
+    const sites = [siteSchema.parse({ name: 'a', url: 'https://a.example.com/' })]
+    const fromPlugin = summariesFromSnapshot(await readSnapshot(fake.ctx), sites, now)
+    // The standalone worker's path: `GROUP BY slug, date(checked_at)` rows into core's rollup.
+    const fromWorker = buildSiteSummaries({
+      sites,
+      results: [(fake.kv.get(POLL_SNAPSHOT_KEY) as PollSnapshot).monitors[0]?.result as CheckResult],
+      previous: new Map(),
+      historyBySlug: groupDayStats([...counts.values()]),
+      now,
+    })
+    expect(fromPlugin[0]?.history).toHaveLength(90)
+    expect(JSON.parse(JSON.stringify(fromPlugin))).toEqual(JSON.parse(JSON.stringify(fromWorker)))
+  })
+
   it('counts a check on the UTC day of its checkedAt', () => {
     const rows = applyResults(new Map(), [
       { slug: 'a', status: 'up', code: 200, responseTime: 1, checkedAt: '2026-10-21T23:59:59.000Z' },
@@ -173,73 +224,58 @@ describe('buckets against the standalone rollup', () => {
 describe('pruneExpiredBuckets', () => {
   const bucket = (date: string): DayBucket => ({ slug: 'a', date, up: 1, degraded: 0, down: 0, total: 1 })
 
-  it('deletes buckets before the 90-day window across pages, within its call allowance', async () => {
-    const old = Array.from({ length: 130 }, (_, i) => bucket(`2026-05-${String((i % 28) + 1).padStart(2, '0')}`)).map((b, i) => ({ ...b, slug: `s${i}` }))
+  it('deletes buckets before the 90-day window across pages', async () => {
+    const old = Array.from({ length: 230 }, (_, i) => bucket(`2026-05-${String((i % 28) + 1).padStart(2, '0')}`)).map((b, i) => ({ ...b, slug: `s${i}` }))
     const fake = createFakeContext({ buckets: [...old, bucket('2026-07-25'), bucket('2026-10-22')] })
-    const result = await pruneExpiredBuckets(fake.ctx, new Date('2026-10-22T12:00:00.000Z'), 4)
-    expect(result.deleted).toBe(130)
-    expect(result.calls).toBe(4)
+    const result = await runMaintenance(fake.ctx, { now: () => new Date('2026-10-22T12:00:00.000Z') })
+    expect(result.deleted).toBe(230)
     expect([...fake.rows.values()].map(b => b.date).sort()).toEqual(['2026-07-25', '2026-10-22'])
+    expect(await pruneExpiredBuckets(fake.ctx, new Date('2026-10-22T12:00:00.000Z'))).toBe(0)
   })
 })
 
-describe('reconcileShards', () => {
-  it('schedules the shard tasks and the maintenance task, within the call budget', async () => {
-    const fake = createFakeContext({ config: monitorsYaml(monitorNames(11)) })
-    const result = await reconcileShards(fake.ctx)
-    expect([...fake.tasks.keys()].sort()).toEqual(['check-0', 'check-1', 'check-2', MAINTENANCE_TASK])
-    expect(fake.tasks.get('check-2')).toMatchObject({ schedule: '*/5 * * * *', data: { shard: 2 } })
-    expect(result.deferred).toBe(0)
-    expect(fake.bridgeCalls.length).toBeLessThanOrEqual(CALL_BUDGET)
+describe('reconcileSchedule', () => {
+  it('creates the check and maintenance tasks when neither exists', async () => {
+    const fake = createFakeContext()
+    const result = await reconcileSchedule(fake.ctx)
+    expect(result).toEqual({ scheduled: [CHECK_TASK, MAINTENANCE_TASK], cancelled: [] })
+    expect(fake.tasks.get(CHECK_TASK)).toMatchObject({ schedule: CHECK_SCHEDULE })
+    expect(fake.tasks.get(MAINTENANCE_TASK)).toMatchObject({ schedule: MAINTENANCE_SCHEDULE })
   })
 
-  it('caps the shards at MAX_SHARDS, spends at most the budget, and defers what does not fit', async () => {
-    const fake = createFakeContext({ config: monitorsYaml(monitorNames(60)) })
-    const result = await reconcileShards(fake.ctx)
-    expect(result.shards).toBe(MAX_SHARDS)
-    expect(result.uncovered).toBe(60 - MAX_SHARDS * 5)
-    expect(fake.bridgeCalls.length).toBeLessThanOrEqual(CALL_BUDGET)
-    // The maintenance task goes first, so the one deferred operation is the last shard, which maintenance finishes.
-    expect([...fake.tasks.keys()]).toEqual([MAINTENANCE_TASK, ...Array.from({ length: MAX_SHARDS - 1 }, (_, i) => `check-${i}`)])
-    expect(result.deferred).toBe(1)
-
-    const again = await reconcileShards(createFakeContext({ config: monitorsYaml(monitorNames(60)), tasks: [...fake.tasks.values()] }).ctx)
-    expect(again.deferred).toBe(0)
-    expect(again.scheduled).toEqual([`check-${MAX_SHARDS - 1}`])
+  it('never calls schedule() for a task that is already as wanted, so it cannot starve', async () => {
+    const fake = createFakeContext({ tasks: [{ name: CHECK_TASK, schedule: CHECK_SCHEDULE }, { name: MAINTENANCE_TASK, schedule: MAINTENANCE_SCHEDULE }] })
+    const result = await reconcileSchedule(fake.ctx)
+    expect(result).toEqual({ scheduled: [], cancelled: [] })
+    expect(fake.bridgeCalls).toEqual(['cron.list'])
   })
 
-  it('schedules the maintenance task on a first activation that needs every shard', async () => {
-    const fake = createFakeContext({ config: monitorsYaml(monitorNames(MAX_SHARDS * 5)) })
-    const activate = plugin.hooks?.['plugin:activate'] as (event: unknown, ctx: unknown) => Promise<void>
-    await activate({}, fake.ctx)
-    expect(fake.tasks.has(MAINTENANCE_TASK)).toBe(true)
-    expect(fake.bridgeCalls.length).toBeLessThanOrEqual(CALL_BUDGET)
-  })
-
-  it('cancels surplus shards when the monitor count drops and leaves them alone for an unusable configuration', async () => {
-    const tasks = [0, 1, 2].map(i => ({ name: `check-${i}`, schedule: '*/5 * * * *' }))
-    const shrunk = createFakeContext({ config: monitorsYaml(monitorNames(2)), tasks })
-    const result = await reconcileShards(shrunk.ctx)
-    expect(result.cancelled.sort()).toEqual(['check-1', 'check-2'])
-
-    const broken = createFakeContext({ config: 'sites: [broken', tasks })
-    await reconcileShards(broken.ctx)
-    expect([...broken.tasks.keys()].sort()).toEqual(['check-0', 'check-1', 'check-2', MAINTENANCE_TASK])
+  it('updates a task whose schedule changed and removes a stale one', async () => {
+    const fake = createFakeContext({ tasks: [
+      { name: CHECK_TASK, schedule: '* * * * *' },
+      { name: MAINTENANCE_TASK, schedule: MAINTENANCE_SCHEDULE },
+      { name: 'check-0', schedule: CHECK_SCHEDULE },
+      { name: 'check-1', schedule: CHECK_SCHEDULE },
+    ] })
+    const result = await reconcileSchedule(fake.ctx)
+    expect(result).toEqual({ scheduled: [CHECK_TASK], cancelled: ['check-0', 'check-1'] })
+    expect([...fake.tasks.keys()].sort()).toEqual([CHECK_TASK, MAINTENANCE_TASK])
+    expect(fake.tasks.get(CHECK_TASK)?.schedule).toBe(CHECK_SCHEDULE)
   })
 })
 
 describe('readSnapshot', () => {
-  it('merges the shard snapshots, with the newest snapshot winning for a monitor in two of them', async () => {
+  it('reads the poll snapshot and ignores other entries', async () => {
     const fake = createFakeContext()
     const result = (slug: string, status: CheckResult['status'], checkedAt: string): CheckResult => ({ slug, status, code: 200, responseTime: 1, checkedAt })
     const monitor = (r: CheckResult) => ({ slug: r.slug, result: r, days: [], totals: {} })
-    const shard = (n: number, updatedAt: string, results: CheckResult[]): ShardSnapshot => ({ version: 2, shard: n, updatedAt, monitors: results.map(monitor), deliveries: [] })
-    fake.kv.set('snapshot:0', shard(0, '2026-10-22T10:05:00.000Z', [result('a', 'up', '2026-10-22T10:05:00.000Z'), result('b', 'down', '2026-10-22T10:00:00.000Z')]))
-    fake.kv.set('snapshot:1', shard(1, '2026-10-22T10:10:00.000Z', [result('b', 'up', '2026-10-22T10:10:00.000Z')]))
+    const poll: PollSnapshot = { version: 2, updatedAt: '2026-10-22T10:10:00.000Z', monitors: [monitor(result('a', 'up', '2026-10-22T10:10:00.000Z')), monitor(result('b', 'down', '2026-10-22T10:10:00.000Z'))], deliveries: [] }
+    fake.kv.set(POLL_SNAPSHOT_KEY, poll)
+    fake.kv.set('snapshot:0', { ...poll, monitors: [monitor(result('stale', 'up', '2026-10-22T09:00:00.000Z'))] })
     fake.kv.set('state:other', { unrelated: true })
 
     const merged = await readSnapshot(fake.ctx)
-    expect([...merged.results].map(([slug, r]) => [slug, r.status])).toEqual([['a', 'up'], ['b', 'up']])
+    expect([...merged.results].map(([slug, r]) => [slug, r.status])).toEqual([['a', 'up'], ['b', 'down']])
     expect(merged.updatedAt).toBe('2026-10-22T10:10:00.000Z')
     expect(fake.bridgeCalls).toEqual(['kv.list'])
   })

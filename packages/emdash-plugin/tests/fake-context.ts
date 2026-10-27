@@ -1,5 +1,7 @@
 import type { PluginContext } from 'emdash/plugin'
 import type { DayBucket } from '../src/buckets'
+import type { CheckRunOptions } from '../src/run'
+import { runCheck } from '../src/run'
 
 export type FakeFetch = (url: string, init?: RequestInit) => Promise<Response>
 
@@ -133,4 +135,9 @@ export function monitorsYaml(names: string[], extra: string[] = []): string {
 
 export function monitorNames(count: number): string[] {
   return Array.from({ length: count }, (_, i) => `m${String(i).padStart(3, '0')}`)
+}
+
+/** One scheduled check over a fake context; plain HTTP checks use the context's own `http.fetch`. */
+export function runFake(fake: ReturnType<typeof createFakeContext>, options: CheckRunOptions = {}) {
+  return runCheck(fake.ctx, { probeHttp: fake.ctx.http as NonNullable<CheckRunOptions['probeHttp']>, ...options })
 }

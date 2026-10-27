@@ -1,14 +1,15 @@
 import type { CheckResult, Site } from '@statusbeam/core'
-import type { PluginContext } from 'emdash/plugin'
 import { checkSite } from '@statusbeam/core'
-import { PROBE_DEADLINE_MS } from './budget'
 
-type HostFetch = NonNullable<PluginContext['http']>['fetch']
+type ProbeFetch = (url: string, init?: RequestInit) => Promise<Response>
+
+/** Deadline for one probe or one delivery. A response that has not finished by then is `down`, without delaying the others. */
+export const PROBE_DEADLINE_MS = 10_000
 
 /**
- * Reject after `ms`. The bridge takes no `AbortSignal`, so a plugin-side timer is
- * the only way to stop waiting on a response that never completes; the abandoned
- * fetch is left to the host, and its late outcome is swallowed.
+ * Reject after `ms`. The timer is the backstop behind the `AbortSignal`: a
+ * lookup or response that ignores the signal still ends at the deadline. The
+ * abandoned fetch is left to settle on its own and its late outcome is swallowed.
  */
 export function withDeadline<T>(pending: Promise<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -20,51 +21,33 @@ export function withDeadline<T>(pending: Promise<T>, ms: number): Promise<T> {
 }
 
 /**
- * The host's response-body cap, recognised by message text. The rejection has no
- * error code and the text differs in wrapping per mode (spike, 2026-10-22):
- * `Plugin HTTP response body exceeds the 8388608 byte limit` on Worker Loader and
- * in-process, the same text inside `Bridge call http/fetch failed: {...}` on
- * Node/workerd. A substring match tolerates both.
+ * `fetchImpl` under a deadline. The request carries an `AbortSignal` that fires
+ * at the deadline (combined with any signal the checker passes), so the host
+ * stops waiting and releases the connection, and the caller also stops waiting.
  */
-const BODY_LIMIT_PATTERN = /response body exceeds the \d+ byte limit/i
-
-/** Core's `classifyError` for this host: `'body'` for the host's body cap, otherwise `undefined`. */
-export function classifyHostError(error: unknown): 'body' | undefined {
-  const message = error instanceof Error ? error.message : typeof error === 'string' ? error : ''
-  return BODY_LIMIT_PATTERN.test(message) ? 'body' : undefined
-}
-
-/**
- * The fetch init without `signal`. Core's Sentry and AI Gateway checkers pass
- * `AbortSignal.timeout(...)`, which the bridge cannot carry; {@link withDeadline}
- * is the timeout here instead.
- */
-function withoutSignal(init: RequestInit | undefined): RequestInit | undefined {
-  if (!init || !('signal' in init)) {
-    return init
+export function fetchWithDeadline(fetchImpl: ProbeFetch, ms: number): ProbeFetch {
+  return (url, init) => {
+    const timeout = AbortSignal.timeout(ms)
+    const signal = init?.signal ? AbortSignal.any([init.signal, timeout]) : timeout
+    return withDeadline(fetchImpl(url, { ...init, signal }), ms)
   }
-  const { signal: _signal, ...rest } = init
-  return rest
 }
 
 /**
- * Run one check through the core engine with `ctx.http.fetch` injected and a
- * deadline on the fetch (any `signal` in the init is dropped first). A miss rejects inside `checkSite`, which grades it
- * `down` with `code: 0` exactly like a network failure. A body-limit rejection
- * comes back with `limit: 'body'`: the host's cap ended the request, so the
- * result says nothing about the target. The method is never rewritten: a
- * configured GET stays a GET, and nothing retries a limit failure.
+ * Run one check through the core engine with `fetchImpl` under a deadline. A
+ * miss rejects inside `checkSite`, which grades it `down` with `code: 0` exactly
+ * like a network failure. The method is never rewritten: a configured GET stays
+ * a GET.
  */
 export function probeSite(
-  fetchImpl: HostFetch,
+  fetchImpl: ProbeFetch,
   site: Site,
   deadlineMs = PROBE_DEADLINE_MS,
   now?: () => number,
   sentryToken?: string,
 ): Promise<CheckResult> {
   return checkSite(site, {
-    fetchImpl: (url, init) => withDeadline(fetchImpl(url, withoutSignal(init)), deadlineMs),
-    classifyError: classifyHostError,
+    fetchImpl: fetchWithDeadline(fetchImpl, deadlineMs),
     ...(now ? { now } : {}),
     ...(sentryToken ? { sentryToken } : {}),
   })
