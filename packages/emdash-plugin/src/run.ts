@@ -133,7 +133,15 @@ export async function runCheck(ctx: RunContext, options: CheckRunOptions = {}): 
       finishedAt,
     )]
   })
-  const snapshot: PollSnapshot = { version: 2, updatedAt: finishedAt.toISOString(), monitors, deliveries }
+  // A Sentry poll monitor skipped for want of a token keeps its last poll state, so restoring the token
+  // resumes from it. Webhook-only Sentry monitors have no poll state to keep: their webhook snapshot is
+  // merged by readers. A monitor removed from the configuration is not carried.
+  const probedSlugs = new Set(sites.map(site => site.slug))
+  const carried = config.sites.flatMap((site) => {
+    const kept = !probedSlugs.has(site.slug) && site.check === 'sentry' && site.sentry !== undefined ? previous.polled.get(site.slug) : undefined
+    return kept ? [kept] : []
+  })
+  const snapshot: PollSnapshot = { version: 2, updatedAt: finishedAt.toISOString(), monitors: [...monitors, ...carried], deliveries }
   await writePollSnapshot(ctx, snapshot)
 
   // The configuration validated, so an earlier error record is stale.

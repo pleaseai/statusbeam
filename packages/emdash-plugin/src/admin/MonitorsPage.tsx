@@ -276,7 +276,7 @@ function MonitorCard({ t, index, row, findings, busy, onChange, onRemove }: Moni
       {isRenamed(row) && <p className="text-sm text-kumo-warning" role="note">{t.monitors.slugRenamed(row.savedSlug ?? '')}</p>}
       {hasHiddenSettings(row.monitor) && <p className="text-xs text-kumo-subtle">{t.monitors.keepsOtherSettings}</p>}
 
-      <MonitorActions monitor={built.monitor} busy={busy || Object.keys(built.problems).length > 0} />
+      <MonitorActions monitor={built.monitor} inputKey={JSON.stringify([row.monitor, row.codesText, row.maxText, row.emptyCodes ?? false])} busy={busy || Object.keys(built.problems).length > 0} />
     </section>
   )
 }

@@ -10,6 +10,8 @@ import { useAdminLocale } from './i18n'
 export interface TestMonitorProps {
   /** The monitor as it would be saved right now; this exact copy is tested, so an unsaved edit is checked before a save. */
   monitor: Monitor
+  /** Identity of the raw inputs behind `monitor`; any change discards the shown result and ignores an in-flight response. */
+  inputKey: string
   /** True while the editor saves; a test waits for it. */
   busy: boolean
 }
@@ -21,7 +23,7 @@ type Outcome = { kind: 'response', response: TestResponse } | { kind: 'failed' }
  * its status, response time and response code. The route records nothing, so a
  * test leaves history, the snapshot and notifications as they were.
  */
-export function TestMonitor({ monitor, busy }: TestMonitorProps) {
+export function TestMonitor({ monitor, inputKey, busy }: TestMonitorProps) {
   const locale = useAdminLocale()
   const dict = getDict(locale)
   const t = dict.admin.monitors.test
@@ -35,7 +37,7 @@ export function TestMonitor({ monitor, busy }: TestMonitorProps) {
     }
   }, [])
 
-  const monitorKey = JSON.stringify(monitor)
+  const monitorKey = `${JSON.stringify(monitor)}\n${inputKey}`
   const requestId = useRef(0)
   useEffect(() => {
     requestId.current += 1

@@ -55,6 +55,30 @@ describe('runCheck', () => {
     expect(seen.map(s => s.url)).toEqual(['https://web.example.com/'])
   })
 
+  it('keeps a Sentry poll monitor\'s state while its token is missing and drops a monitor removed from the config', async () => {
+    const sentry = ['  - name: errors', '    check: sentry', '    url: https://sentry.example.com/', '    sentry:', '      org: acme']
+    const fake = createFakeContext({
+      config: monitorsYaml(['web'], sentry),
+      settings: { sentryToken: 'tok' },
+      fetch: async url => new Response(new URL(url).hostname === 'sentry.io' ? '[]' : 'ok', { status: 200 }),
+    })
+    await runFake(fake)
+    const before = (await readSnapshot(fake.ctx)).polled.get('errors')
+    expect(before?.result).not.toBeNull()
+
+    fake.settings.delete('sentryToken')
+    await runFake(fake)
+    const kept = await readSnapshot(fake.ctx)
+    expect(kept.polled.get('errors')).toEqual(before)
+    expect(kept.polled.has('web')).toBe(true)
+
+    fake.setConfig(monitorsYaml([], sentry))
+    await runFake(fake)
+    const afterRemoval = await readSnapshot(fake.ctx)
+    expect(afterRemoval.polled.get('errors')).toEqual(before)
+    expect(afterRemoval.polled.has('web')).toBe(false)
+  })
+
   it('sends body-reading checks through ctx.http and plain checks through the header-only client', async () => {
     const yaml = monitorsYaml(['web'], ['  - name: errors', '    check: sentry', '    url: https://sentry.example.com/', '    sentry:', '      org: acme'])
     const viaCtx: string[] = []

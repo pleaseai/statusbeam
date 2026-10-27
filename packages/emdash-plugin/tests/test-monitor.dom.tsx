@@ -130,6 +130,15 @@ describe('test one monitor (AC-015)', () => {
     await waitFor(() => expect(result('API').textContent).toBe(''))
   })
 
+  it('clears the outcome when a numeric input becomes invalid and the sent monitor does not change', async () => {
+    server.test = () => checkResult({ status: 'up' })
+    await openPage()
+    fireEvent.click(testButton('API'))
+    await waitFor(() => expect(result('API').textContent).toContain(dict.day.up))
+    fireEvent.change(within(card('API')).getByLabelText(dict.admin.monitors.field.maxResponseTime), { target: { value: 'abc' } })
+    await waitFor(() => expect(result('API').textContent).toBe(''))
+  })
+
   it('shows a failure when the test request itself fails', async () => {
     server.test = () => {
       throw new Error('boom')
