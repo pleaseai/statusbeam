@@ -40,8 +40,9 @@ bun run dev:native -- --host 127.0.0.1 --port 4430
 bun run dev:native-cf -- --host 127.0.0.1 --port 4431
 ```
 
-To sign in, open `/_emdash/api/setup/dev-bypass?redirect=/_emdash/admin`. The placeholder
-page is at `/_emdash/admin/plugins/statusbeam/`, and the widget is on the dashboard. The
+To sign in, open `/_emdash/api/setup/dev-bypass?redirect=/_emdash/admin`. The status
+overview is at `/_emdash/admin/plugins/statusbeam/`, the monitor editor at `.../monitors`, and the
+widget is on the dashboard. The
 public `spike-probe?target=<name>&body=1` and `spike-cron` routes live under
 `/_emdash/api/plugins/statusbeam/`. The 2026-10-27 results and the targets are in
 [`results/2026-10-27/native-plugin.md`](results/2026-10-27/native-plugin.md).

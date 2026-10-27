@@ -4,17 +4,10 @@
  * props, and the host does not role-gate them: each refuses a non-administrator
  * itself (see `AdminGate`). The admin's CSS is precompiled, so only classes the
  * admin itself uses take effect, and layout uses logical properties for RTL.
- * T007 replaces the widget.
  */
 import { MonitorsPage } from './MonitorsPage'
+import { StatusPage } from './StatusPage'
+import { StatusWidget } from './StatusWidget'
 
-function SpikeWidget() {
-  return (
-    <p className="p-4 text-sm text-kumo-subtle" data-testid="statusbeam-spike-widget">
-      StatusBeam native plugin placeholder widget.
-    </p>
-  )
-}
-
-export const pages = { '/': MonitorsPage }
-export const widgets = { status: SpikeWidget }
+export const pages = { '/': StatusPage, '/monitors': MonitorsPage }
+export const widgets = { status: StatusWidget }

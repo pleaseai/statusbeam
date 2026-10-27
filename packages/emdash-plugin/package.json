@@ -37,7 +37,7 @@
     "build": "emdash-plugin validate",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
-    "test:admin": "bun test --preload ./tests/dom-preload.ts ./tests/monitors.dom.tsx ./tests/test-monitor.dom.tsx",
+    "test:admin": "bun test --preload ./tests/dom-preload.ts ./tests/monitors.dom.tsx ./tests/test-monitor.dom.tsx ./tests/overview.dom.tsx",
     "test:host": "bun test --preload ./tests/host-preload.ts ./tests/engine.host.ts ./tests/public.host.ts ./tests/webhooks.host.ts ./tests/admin.host.ts"
   },
   "peerDependencies": {

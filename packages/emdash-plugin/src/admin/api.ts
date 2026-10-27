@@ -1,4 +1,4 @@
-import type { ADMIN_ROUTE, ConfigResponse, SaveResponse } from '../routes/admin'
+import type { ADMIN_ROUTE, ConfigResponse, OverviewResponse, SaveResponse } from '../routes/admin'
 import { apiFetch, parseApiResponse } from '@emdash-cms/admin'
 
 /**
@@ -24,6 +24,10 @@ const ROUTE: typeof ADMIN_ROUTE = {
 /** Where EmDash's generated settings page for the plugin lives (secrets are edited there). */
 export const SETTINGS_PAGE_HREF = '/_emdash/admin/plugins-manager/statusbeam/settings'
 
+/** Where the plugin's admin pages live: the status overview, and the monitor editor beside it. */
+export const OVERVIEW_PAGE_HREF = '/_emdash/admin/plugins/statusbeam/'
+export const MONITORS_PAGE_HREF = '/_emdash/admin/plugins/statusbeam/monitors'
+
 /** `GET` a route and return its `data`. */
 export async function getAdmin<T>(route: keyof typeof ROUTE, failed: string): Promise<T> {
   return parseApiResponse<T>(await apiFetch(`${BASE}/${ROUTE[route]}`), failed)
@@ -45,4 +49,8 @@ export function loadConfig(failed: string): Promise<ConfigResponse> {
 
 export function saveConfig(config: Record<string, unknown>, revision: string | null, failed: string): Promise<SaveResponse> {
   return postAdmin<SaveResponse>('save', { config, revision }, failed)
+}
+
+export function loadOverview(failed: string): Promise<OverviewResponse> {
+  return getAdmin<OverviewResponse>('overview', failed)
 }

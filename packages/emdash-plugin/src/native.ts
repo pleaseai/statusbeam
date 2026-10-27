@@ -112,7 +112,10 @@ export function createNativePlugin(deps: NativePluginDeps = {}) {
     },
     admin: {
       entry: '@statusbeam/emdash-plugin/admin',
-      pages: [{ path: '/', label: 'StatusBeam', icon: 'chart-line' }],
+      pages: [
+        { path: '/', label: 'Status', icon: 'chart-line' },
+        { path: '/monitors', label: 'Monitors', icon: 'list' },
+      ],
       widgets: [{ id: 'status', title: 'StatusBeam', size: 'half' }],
       // Notification destinations and tokens live in encrypted settings, never in the YAML: a webhook URL embeds its credential.
       settingsSchema: SETTINGS_SCHEMA,

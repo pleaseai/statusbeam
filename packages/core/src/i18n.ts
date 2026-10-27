@@ -149,6 +149,20 @@ export interface AdminDict {
     webhookSecret: string
     sentryToken: string
   }
+  /** The status overview page and the dashboard widget. */
+  overview: {
+    title: string
+    /** No monitor is configured, so there is nothing to list. */
+    empty: string
+    /** Heading of the findings that reject the stored configuration. */
+    configIssues: string
+    /** Label of the 90-day uptime figure. */
+    uptime: string
+    /** Link from the overview to the monitor editor. */
+    manage: string
+    /** Link from the widget to the overview page. */
+    view: string
+  }
 }
 
 const en: Dict = {
@@ -261,6 +275,14 @@ const en: Dict = {
       webhookUrls: 'Webhook URLs',
       webhookSecret: 'Webhook secret',
       sentryToken: 'Sentry token',
+    },
+    overview: {
+      title: 'Status overview',
+      empty: 'No monitors are configured yet. Add one to start checking.',
+      configIssues: 'The stored configuration is rejected',
+      uptime: 'Uptime (90 days)',
+      manage: 'Edit monitors',
+      view: 'View the status overview',
     },
   },
 }
@@ -376,6 +398,14 @@ const zh: Dict = {
       webhookSecret: 'Webhook 密钥',
       sentryToken: 'Sentry 令牌',
     },
+    overview: {
+      title: '状态总览',
+      empty: '尚未配置监控项。添加一个即可开始检查。',
+      configIssues: '已存储的配置被拒绝',
+      uptime: '可用率（90 天）',
+      manage: '编辑监控项',
+      view: '查看状态总览',
+    },
   },
 }
 
@@ -490,6 +520,14 @@ const ja: Dict = {
       webhookSecret: 'Webhook シークレット',
       sentryToken: 'Sentry トークン',
     },
+    overview: {
+      title: 'ステータス概要',
+      empty: 'モニターがまだ設定されていません。追加すると確認を開始します。',
+      configIssues: '保存されている設定が拒否されました',
+      uptime: '稼働率（90日）',
+      manage: 'モニターを編集',
+      view: 'ステータス概要を表示',
+    },
   },
 }
 
@@ -603,6 +641,14 @@ const ko: Dict = {
       webhookUrls: '웹훅 URL 목록',
       webhookSecret: '웹훅 시크릿',
       sentryToken: 'Sentry 토큰',
+    },
+    overview: {
+      title: '상태 개요',
+      empty: '설정된 모니터가 없습니다. 모니터를 추가하면 확인이 시작됩니다.',
+      configIssues: '저장된 설정이 거부되었습니다',
+      uptime: '가동률(90일)',
+      manage: '모니터 편집',
+      view: '상태 개요 보기',
     },
   },
 }
