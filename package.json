@@ -21,10 +21,10 @@
     "deploy": "bun run --filter '@statusbeam/worker' deploy && bun run --filter '@statusbeam/web' deploy"
   },
   "devDependencies": {
-    "@pleaseai/eslint-config": "^0.0.4",
-    "@types/bun": "^1.3.14",
-    "eslint": "^10.7.0",
-    "turbo": "^2.10.5",
-    "typescript": "^6.0"
+    "@pleaseai/eslint-config": "^0.1.0",
+    "@types/bun": "^1.4.3",
+    "eslint": "^10.13.0",
+    "turbo": "^2.11.9",
+    "typescript": "^7.0"
   }
 }
