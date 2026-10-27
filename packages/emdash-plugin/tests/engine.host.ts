@@ -1,107 +1,10 @@
-import type { DayBucket } from '../src/buckets'
-import type { NativePluginDeps } from '../src/native'
 import type { PollSnapshot } from '../src/snapshot'
-import { mkdtempSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'bun:test'
-import { createDialect } from 'emdash/db/sqlite'
-import { EmDashRuntime, handlePluginSettingsUpdate } from 'emdash/internal/plugin-test-runtime'
-import { PLUGIN_ID } from '../src/descriptor'
+import type { Internet } from './host-harness'
+import { describe, expect, it } from 'bun:test'
 import { createNativePlugin, CRON_HOOK_TIMEOUT_MS } from '../src/native'
 import { CHECK_TASK, MAINTENANCE_TASK } from '../src/schedule'
-import { POLL_SNAPSHOT_KEY } from '../src/snapshot'
+import { bodyText, HOOK, monitors, newHost, SLACK, url } from './host-harness'
 
-/**
- * These tests run the native plugin on EmDash's real runtime
- * (`EmDashRuntime`, in-memory SQLite) and fire its `cron` hook the way the
- * scheduler does. The host's own SSRF guard stays in place: monitors use public
- * IP literals, which it accepts without a DNS lookup, and the underlying `fetch`
- * is the one seam, standing in for the internet. Nothing touches the network.
- */
-
-// Public IP literals: the guard resolves hostnames over DoH, but not these.
-const HOST = '93.184.215.14'
-const SLACK = `https://${HOST}/slack/SLACKSECRET`
-const HOOK = `https://${HOST}/hook/HOOKSECRET`
-
-type Internet = (url: string, init?: RequestInit) => Response | Promise<Response>
-
-interface Host {
-  runtime: EmDashRuntime
-  cron: (name: string) => Promise<boolean>
-  setConfig: (yaml: string) => Promise<void>
-  setSecrets: (secrets: Record<string, string>) => Promise<void>
-  snapshot: () => Promise<PollSnapshot | null>
-  buckets: () => Promise<DayBucket[]>
-  tasks: () => Promise<Array<{ name: string, schedule: string, nextRunAt: string }>>
-}
-
-const runtimes: EmDashRuntime[] = []
-const dirs: string[] = []
-afterEach(async () => {
-  for (const runtime of runtimes.splice(0)) {
-    await runtime.shutdown()
-  }
-  for (const dir of dirs.splice(0)) {
-    rmSync(dir, { recursive: true, force: true })
-  }
-})
-
-async function newHost(internet: Internet, deps: NativePluginDeps = {}): Promise<Host> {
-  const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => internet(String(input instanceof Request ? input.url : input), init)) as typeof fetch
-  const plugin = createNativePlugin({ fetchImpl, ...deps })
-  // A file per host, and an entrypoint of its own: the runtime caches the database by entrypoint for the whole process.
-  const dir = mkdtempSync(join(tmpdir(), 'statusbeam-host-'))
-  dirs.push(dir)
-  const runtime = await EmDashRuntime.create({
-    config: { database: { entrypoint: `statusbeam-host-${dir}`, type: 'sqlite', config: { url: `file:${join(dir, 'db.sqlite')}` } } } as never,
-    plugins: [plugin],
-    createDialect: (config: { config?: unknown }) => createDialect((config.config ?? config) as never),
-    createStorage: null,
-    sandboxEnabled: false,
-    sandboxedPluginEntries: [],
-    createSandboxRunner: null,
-  })
-  runtimes.push(runtime)
-  const option = (key: string) => `plugin:${PLUGIN_ID}:${key}`
-  const read = async <T>(key: string): Promise<T | null> => {
-    const row = await runtime.db.selectFrom('options').select('value').where('name', '=', option(key)).executeTakeFirst()
-    return row ? JSON.parse(row.value) as T : null
-  }
-  return {
-    runtime,
-    cron: async (name) => {
-      const result = await runtime.hooks.invokeCronHook(PLUGIN_ID, { name, scheduledAt: new Date().toISOString() })
-      return result.success
-    },
-    setConfig: async (yaml) => {
-      const value = JSON.stringify(yaml)
-      await runtime.db.insertInto('options').values({ name: option('settings:config'), value }).onConflict(oc => oc.column('name').doUpdateSet({ value })).execute()
-    },
-    setSecrets: async (secrets) => {
-      const result = await handlePluginSettingsUpdate(runtime.db, PLUGIN_ID, plugin.admin.settingsSchema ?? {}, secrets)
-      expect(result.success).toBe(true)
-    },
-    snapshot: () => read<PollSnapshot>(POLL_SNAPSHOT_KEY),
-    buckets: async () => {
-      const rows = await runtime.db.selectFrom('_plugin_storage').select('data').where('plugin_id', '=', PLUGIN_ID).where('collection', '=', 'buckets').execute()
-      return rows.map(row => JSON.parse(row.data) as DayBucket)
-    },
-    tasks: async () => {
-      const rows = await runtime.db.selectFrom('_emdash_cron_tasks').select(['task_name', 'schedule', 'next_run_at']).where('plugin_id', '=', PLUGIN_ID).execute()
-      return rows.map(row => ({ name: row.task_name, schedule: row.schedule, nextRunAt: row.next_run_at }))
-    },
-  }
-}
-
-/** The host hands the request body on as bytes. */
-async function bodyText(body: BodyInit | null | undefined): Promise<string> {
-  return typeof body === 'string' ? body : new Response(body).text()
-}
-
-const url = (name: string) => `https://${HOST}/${name}`
-const monitors = (names: string[]) => ['name: Test', 'sites:', ...names.flatMap(name => [`  - name: ${name}`, `    url: ${url(name)}`])].join('\n')
 const names12 = Array.from({ length: 12 }, (_, i) => `m${String(i + 1).padStart(2, '0')}`)
 const ok: Internet = () => new Response('ok', { status: 200 })
 const resultOf = (snapshot: PollSnapshot | null, slug: string) => snapshot?.monitors.find(m => m.slug === slug)?.result
@@ -136,7 +39,14 @@ describe('the native check task on the EmDash runtime', () => {
         // Headers at once; a body that arrives after 3 s, if the reader waited.
         return new Response(new ReadableStream({
           start(controller) {
-            setTimeout(() => controller.close(), 3000).unref?.()
+            setTimeout(() => {
+              try {
+                controller.close()
+              }
+              catch {
+                // The reader cancelled the body once it had the headers; closing a cancelled stream throws.
+              }
+            }, 3000).unref?.()
           },
         }), { status: 200 })
       }
