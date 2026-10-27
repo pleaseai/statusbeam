@@ -41,6 +41,16 @@ async function entryGraph(entry: string): Promise<{ files: Set<string>, bare: Se
   return { files, bare }
 }
 
+/**
+ * Stub the one `emdash` function the plugin uses, so the shape handed to it can
+ * be asserted. `mock.module` is process-wide under `bun test`, so the stub keeps
+ * the rest of `emdash` for other test files that import it.
+ */
+async function stubDefinePlugin(): Promise<void> {
+  const real = await import('emdash')
+  mock.module('emdash', () => ({ ...real, definePlugin: (definition: unknown) => definition }))
+}
+
 describe('entry graphs (FR-22, NFR-1)', () => {
   it.each(['./index.ts', './client.ts'])('%s never reaches the block, the renderer or emdash', async (entry) => {
     const { files, bare } = await entryGraph(entry)
@@ -68,9 +78,7 @@ describe('block entry point', () => {
   })
 
   it('plugin declares only admin.portableTextBlocks (no hooks, routes, storage, cron)', async () => {
-    // `emdash` is an optional peer, not installed in the root workspace: stub the
-    // one function used so the shape handed to it can be asserted.
-    mock.module('emdash', () => ({ definePlugin: (definition: unknown) => definition }))
+    await stubDefinePlugin()
     const { createPlugin } = await import('./plugin')
     const plugin = createPlugin() as unknown as Record<string, unknown>
     expect(Object.keys(plugin).sort()).toEqual(['admin', 'id', 'version'])
@@ -91,7 +99,7 @@ describe('allowedOrigins reach the renderer', () => {
   })
 
   it('createPlugin(options) is what StatusBlock.astro validates blocks with', async () => {
-    mock.module('emdash', () => ({ definePlugin: (definition: unknown) => definition }))
+    await stubDefinePlugin()
     const { statusBeamBlock } = await import('./block')
     const { createPlugin } = await import('./plugin')
     const { renderOptions } = await import('./block-config')

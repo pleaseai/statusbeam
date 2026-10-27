@@ -1,0 +1,40 @@
+{
+  "success": true,
+  "data": {
+    "tasks": [
+      {
+        "name": "spike-tick",
+        "schedule": "* * * * *",
+        "nextRunAt": "2026-10-27T08:56:00.000Z",
+        "lastRunAt": "2026-10-27T08:55:33.091Z"
+      }
+    ],
+    "runs": [
+      {
+        "name": "spike-tick",
+        "scheduledAt": "2026-10-27T08:39:00.000Z",
+        "ranAt": "2026-10-27T08:55:33.092Z"
+      },
+      {
+        "name": "spike-tick",
+        "scheduledAt": "2026-10-27T08:38:00.000Z",
+        "ranAt": "2026-10-27T08:38:00.002Z"
+      },
+      {
+        "name": "spike-tick",
+        "scheduledAt": "2026-10-27T08:37:00.000Z",
+        "ranAt": "2026-10-27T08:37:00.001Z"
+      },
+      {
+        "name": "spike-tick",
+        "scheduledAt": "2026-10-27T08:36:00.000Z",
+        "ranAt": "2026-10-27T08:36:07.817Z"
+      },
+      {
+        "name": "spike-tick",
+        "scheduledAt": "2026-10-27T08:35:00.000Z",
+        "ranAt": "2026-10-27T08:35:00.001Z"
+      }
+    ]
+  }
+}

@@ -44,6 +44,7 @@
     "@emdash-cms/plugin-cli": "0.13.4",
     "@emdash-cms/plugin-test": "0.2.10",
     "@statusbeam/core": "workspace:*",
+    "@types/react": "^19",
     "emdash": "^1.3.1",
     "vite": "^8",
     "vitest": "^4.1.0"

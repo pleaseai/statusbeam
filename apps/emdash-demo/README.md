@@ -24,6 +24,27 @@ not change the versions that `apps/web` and `apps/docs` resolve.
 | `worker-loader` | Cloudflare Worker `statusbeam-emdash-spike` | `sandboxed: [probe]` | `sandbox()` from `@emdash-cms/cloudflare` |
 | `workerd` | Node (`@astrojs/node`) | `sandboxed: [probe]` | `@emdash-cms/sandbox-workerd/sandbox` |
 | `in-process` | Node (`@astrojs/node`) | `plugins: [probe]` | none |
+| `native` | Node (`@astrojs/node`) | `plugins: [statusbeam()]` | none |
+| `native-cf` | Cloudflare (`@astrojs/cloudflare`, workerd) | `plugins: [statusbeam()]` | none |
+
+## Native plugin modes
+
+`native` and `native-cf` register the StatusBeam engine as one native plugin, with the id
+`statusbeam`. The plugin comes from the `packages/emdash-plugin/src` sources: the
+`statusbeam()` descriptor, the `createPlugin` entrypoint and the React admin entry, aliased in
+`astro.config.mjs`. The probe plugin is not registered in these modes. Run them from this
+checkout with the local dev servers, and deploy nothing:
+
+```sh
+bun run dev:native -- --host 127.0.0.1 --port 4430
+bun run dev:native-cf -- --host 127.0.0.1 --port 4431
+```
+
+To sign in, open `/_emdash/api/setup/dev-bypass?redirect=/_emdash/admin`. The placeholder
+page is at `/_emdash/admin/plugins/statusbeam/`, and the widget is on the dashboard. The
+public `spike-probe?target=<name>&body=1` and `spike-cron` routes live under
+`/_emdash/api/plugins/statusbeam/`. The 2026-10-27 results and the targets are in
+[`results/2026-10-27/native-plugin.md`](results/2026-10-27/native-plugin.md).
 
 ## Status components page
 
