@@ -49,19 +49,22 @@ TypeScript throughout. Workspaces under `apps/*` and `packages/*`.
 
 ## EmDash distribution
 
-[EmDash](https://github.com/emdash-cms) is an Astro-based CMS (ADR-0004). StatusBeam
-ships two packages for it:
+[EmDash](https://github.com/emdash-cms) is an Astro-based CMS (ADR-0005, superseding ADR-0004).
+StatusBeam ships two packages for it:
 
-- **`packages/emdash-plugin`** (`@statusbeam/emdash-plugin`) — the check engine as a
-  sandboxed EmDash plugin. `emdash-plugin build` bundles `@statusbeam/core` (a
-  devDependency) into `dist/`. Needs a sandbox runner (Worker Loader or the
-  Node/workerd runner).
-- **`packages/emdash-ui`** (`@statusbeam/emdash-ui`) — Astro status components that
-  read the public JSON of a standalone deployment or the plugin, plus an opt-in
-  Portable Text block. It ships `.astro`/`.ts` source with no build step.
-- **Tests**: the plugin's host tests run in workerd through vitest and
-  `@emdash-cms/plugin-test` (`bun run --cwd packages/emdash-plugin test:host`), not
-  under `bun test`. CI runs them after the build.
+- **`packages/emdash-plugin`** (`@statusbeam/emdash-plugin`) — one native EmDash plugin (id
+  `statusbeam`, ADR-0005): the check engine, the React admin pages (status overview, monitor
+  editor, dashboard widget), and the "Status" Portable Text block. Sites register it with
+  `plugins: [statusbeam()]`; no sandbox runner. Ships `.ts`/`.tsx`/`.astro` source with no build
+  step. Peers: `emdash ~1.3.1` (pinned because header-time probing relies on the undocumented
+  `createUnrestrictedHttpAccess` export), `astro`, `react`, `@cloudflare/kumo`,
+  `@emdash-cms/admin`.
+- **`packages/emdash-ui`** (`@statusbeam/emdash-ui`) — Astro status components and a client that
+  read the public JSON of a standalone deployment or the plugin. Library only (`.`, `./client`),
+  no plugin entry; source, no build step.
+- **Tests**: the plugin's native host tests run it on `emdash/internal/plugin-test-runtime` under
+  bun (`bun run --cwd packages/emdash-plugin test:host`), and its admin component tests run on
+  happy-dom (`test:admin`). Neither is part of the root `bun test`; CI and publish run both.
 - **`apps/emdash-demo`** is a private spike and reference site outside the root
   workspace, with its own lockfile.
 
