@@ -94,7 +94,7 @@ of the host's).
 - [x] T005 Edit monitors from a React admin page (file: packages/emdash-plugin/src/admin/MonitorsPage.tsx) (depends on T004) [FR-7, FR-10, NFR-1, AC-010, AC-011, AC-012, AC-016]
   Validation: an administrator can add, edit, and remove monitors and save. An invalid field, including a duplicate slug, shows its error next to that field and nothing is saved. Renaming a slug saves it as a new monitor. A stale save shows the newer config. Each secret shows only "set" or "not set", with a link to the plugin settings page. A non-admin sees a refusal and no config. Text uses core's dictionary in en/zh/ja/ko with English otherwise, and the layout holds in an RTL locale.
   Method: component tests with a mocked `apiFetch`; `Skill("please:test-browser")` on the demo admin in `en` and `ar`
-- [ ] T006 Test one monitor on demand from the editor (file: packages/emdash-plugin/src/admin/TestMonitor.tsx) (depends on T005) [FR-9, AC-015, AC-019]
+- [x] T006 Test one monitor on demand from the editor (file: packages/emdash-plugin/src/admin/TestMonitor.tsx) (depends on T005) [FR-9, AC-015, AC-019]
   Validation: testing a monitor shows its status, latency, and response code, including an unsaved edit. History, the snapshot, and notifications are unchanged afterwards.
   Method: component test plus the T004 route test; browser check on the demo admin
 - [ ] T007 Show the status overview page and dashboard widget (file: packages/emdash-plugin/src/admin/StatusPage.tsx) (depends on T004) [FR-8, FR-10, NFR-1, AC-014, AC-016]
