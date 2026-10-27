@@ -1,6 +1,9 @@
 import type { HttpAccess, PluginContext } from 'emdash'
+import type { StatusBlockOptions } from './block-config'
 import { createUnrestrictedHttpAccess, definePlugin } from 'emdash'
 import pkg from '../package.json' with { type: 'json' }
+import { statusBlock } from './block'
+import { setBlockOptions } from './block-config'
 import { PLUGIN_ID } from './descriptor'
 import { createProbeHttp } from './http'
 import { adminRoutes } from './routes/admin'
@@ -16,8 +19,8 @@ import { SENTRY_TOKEN_SECRET_KEY, SLACK_SECRET_KEY, WEBHOOK_SECRET_KEY, WEBHOOKS
  * in `plugins: []`, with no sandbox runner.
  *
  * One 5-minute `check` task probes every monitor; a daily `maintenance` task
- * prunes history. The public, webhook and admin routes are here; the admin
- * pages (T005 to T007) are added by later tasks.
+ * prunes history. The public, webhook and admin routes, the admin pages and the
+ * Status Portable Text block are here.
  */
 
 /**
@@ -119,10 +122,13 @@ export function createNativePlugin(deps: NativePluginDeps = {}) {
       widgets: [{ id: 'status', title: 'StatusBeam', size: 'half' }],
       // Notification destinations and tokens live in encrypted settings, never in the YAML: a webhook URL embeds its credential.
       settingsSchema: SETTINGS_SCHEMA,
+      portableTextBlocks: [statusBlock],
     },
   })
 }
 
-export function createPlugin(_options: Record<string, unknown> = {}) {
+export function createPlugin(options: StatusBlockOptions = {}) {
+  // The block renderer cannot receive the descriptor's options, so it reads them from here (see block-config).
+  setBlockOptions(options)
   return createNativePlugin()
 }

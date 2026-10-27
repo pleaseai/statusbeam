@@ -1,6 +1,6 @@
+import { fetchStatus } from '@statusbeam/emdash-ui/client'
 import { describe, expect, it, spyOn } from 'bun:test'
-import { blockFetchOptions, parseAllowedOrigins, selectFromBlock } from './block-node'
-import { fetchStatus } from './client'
+import { blockFetchOptions, parseAllowedOrigins, selectFromBlock } from '../src/block-node'
 
 describe('selectFromBlock', () => {
   it('maps a banner block to a standalone source by default', () => {

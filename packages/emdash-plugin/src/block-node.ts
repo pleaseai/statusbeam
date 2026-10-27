@@ -1,5 +1,5 @@
 import type { RouteFlavor } from '@statusbeam/core/contract'
-import type { FetchOptions, StatusSource } from './client'
+import type { FetchOptions, StatusSource } from '@statusbeam/emdash-ui/client'
 
 /**
  * The "status" Portable Text block's data shape and its mapping to the T010

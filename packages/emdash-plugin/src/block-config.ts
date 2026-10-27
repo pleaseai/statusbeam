@@ -19,7 +19,7 @@ export interface StatusBlockOptions {
   allowedOrigins?: string[]
 }
 
-const KEY = Symbol.for('@statusbeam/emdash-ui/block-options')
+const KEY = Symbol.for('@statusbeam/emdash-plugin/block-options')
 
 type Registry = typeof globalThis & { [KEY]?: StatusBlockOptions }
 

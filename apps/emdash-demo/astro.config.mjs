@@ -23,32 +23,18 @@ if (!MODES.includes(mode)) {
 const onCloudflare = mode === 'worker-loader' || mode === 'native-cf'
 const native = mode === 'native' || mode === 'native-cf'
 
-// T011: `STATUSBEAM_BLOCK=1` registers the opt-in "status" Portable Text block
-// from @statusbeam/emdash-ui (FR-22). Without it the site registers no
-// StatusBeam plugin beyond the spike probe. The package is not installed here
-// (this app is outside the root workspace), so its entry points and `emdash`
-// are aliased to the sources; a real site installs the package and needs none.
-// The descriptor is imported only then, so a staged copy outside the monorepo
-// (scripts/stage.sh, probe spike only) builds without the package sources.
-const withBlock = process.env.STATUSBEAM_BLOCK === '1'
-const uiSrc = fileURLToPath(new URL('../../packages/emdash-ui/src/', import.meta.url))
-const blockAlias = withBlock
-  ? [
-      { find: /^@statusbeam\/emdash-ui\/plugin$/, replacement: `${uiSrc}plugin.ts` },
-      { find: /^@statusbeam\/emdash-ui\/astro$/, replacement: `${uiSrc}astro/index.ts` },
-      { find: /^emdash$/, replacement: fileURLToPath(import.meta.resolve('emdash')) },
-    ]
-  : []
-
 // T001 (native plugin track): the native modes register the StatusBeam engine
-// as one native plugin from the package sources, aliased like the block above.
-// `react` is deduped so the plugin's admin entry renders with the admin's copy.
+// as one native plugin from the package sources, aliased because this app is
+// outside the root workspace (a real site installs the package and needs none).
+// The plugin also registers the Status Portable Text block: `componentsEntry`
+// is its `astro` entry. `react` is deduped so the plugin's admin entry renders with the admin's copy.
 const pluginSrc = fileURLToPath(new URL('../../packages/emdash-plugin/src/', import.meta.url))
 const nativeAlias = native
   ? [
       { find: /^@statusbeam\/emdash-plugin\/native$/, replacement: `${pluginSrc}native.ts` },
       { find: /^@statusbeam\/emdash-plugin\/admin$/, replacement: `${pluginSrc}admin/index.tsx` },
-      ...(withBlock ? [] : [{ find: /^emdash$/, replacement: fileURLToPath(import.meta.resolve('emdash')) }]),
+      { find: /^@statusbeam\/emdash-plugin\/astro$/, replacement: `${pluginSrc}astro/index.ts` },
+      { find: /^emdash$/, replacement: fileURLToPath(import.meta.resolve('emdash')) },
     ]
   : []
 
@@ -62,10 +48,6 @@ const modeConfig = {
 if (native) {
   const { statusbeam } = await import('../../packages/emdash-plugin/src/descriptor.ts')
   modeConfig.plugins = [statusbeam()]
-}
-if (withBlock) {
-  const { statusBeamBlock } = await import('../../packages/emdash-ui/src/block.ts')
-  modeConfig.plugins = [...modeConfig.plugins, statusBeamBlock()]
 }
 
 export default defineConfig({
@@ -83,6 +65,6 @@ export default defineConfig({
       ...modeConfig,
     }),
   ],
-  vite: { resolve: { alias: [...blockAlias, ...nativeAlias], ...(native ? { dedupe: ['react', 'react-dom'] } : {}) } },
+  vite: { resolve: { alias: nativeAlias, ...(native ? { dedupe: ['react', 'react-dom'] } : {}) } },
   devToolbar: { enabled: false },
 })

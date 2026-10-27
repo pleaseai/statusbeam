@@ -5,8 +5,8 @@
 # this repo is a nested git worktree (see README.md, step 3).
 #
 # A staged copy serves the probe spike only: pages that import monorepo
-# packages by relative path (src/pages/status.astro) are left out, and
-# STATUSBEAM_BLOCK=1 does not build there (see README.md).
+# packages by relative path (src/pages/status.astro) are left out, and the
+# native modes (with their Status block) do not build there (see README.md).
 #
 # The copy uses `rsync --delete`, so the target must be a directory this script
 # staged before (it carries a .statusbeam-stage marker), a new directory, or an
