@@ -26,6 +26,34 @@ export const HOOK = `https://${HOST}/hook/HOOKSECRET`
 
 export type Internet = (url: string, init?: RequestInit) => Response | Promise<Response>
 
+/** The caller `dispatchPluginApiRequest` authenticates; omitted means anonymous. */
+export interface TestUser {
+  id: string
+  email: string
+  name: string | null
+  role: number
+  createdAt: string
+}
+
+export interface DispatchInit {
+  method?: string
+  query?: Record<string, string>
+  body?: string
+  headers?: Record<string, string>
+  /** The authenticated user (a session cookie caller). */
+  user?: TestUser
+  /** Token scopes of a bearer-token caller. A token caller needs no `X-EmDash-Request` header. */
+  tokenScopes?: string[]
+}
+
+const account = (role: number): TestUser => ({ id: `user-${role}`, email: `user${role}@example.com`, name: null, role, createdAt: '2026-01-01T00:00:00.000Z' })
+/** Administrator (role 50): holds `plugins:manage`. */
+export const ADMIN = account(50)
+/** Editor (role 40): does not. */
+export const EDITOR = account(40)
+/** What the admin UI sends on every request. */
+export const CSRF_HEADER = { 'X-EmDash-Request': '1' }
+
 export interface Host {
   runtime: EmDashRuntime
   cron: (name: string) => Promise<boolean>
@@ -41,7 +69,7 @@ export interface Host {
   kvKeys: () => Promise<string[]>
   readKv: <T>(key: string) => Promise<T | null>
   /** Send a request through EmDash's production plugin-route boundary (`dispatchPluginApiRequest`). */
-  dispatch: (route: string, init?: { method?: string, query?: Record<string, string>, body?: string, headers?: Record<string, string> }) => Promise<Response>
+  dispatch: (route: string, init?: DispatchInit) => Promise<Response>
   tasks: () => Promise<Array<{ name: string, schedule: string, nextRunAt: string }>>
 }
 
@@ -112,7 +140,7 @@ export async function newHost(internet: Internet, deps: NativePluginDeps = {}): 
         headers: init.headers ?? {},
         ...(init.body === undefined ? {} : { body: init.body }),
       })
-      return dispatchPluginApiRequest({ runtime, pluginId: PLUGIN_ID, path: route, request })
+      return dispatchPluginApiRequest({ runtime, pluginId: PLUGIN_ID, path: route, request, ...(init.user ? { user: init.user } : {}), ...(init.tokenScopes ? { tokenScopes: init.tokenScopes } : {}) })
     },
     bucketRows: async () => {
       const rows = await runtime.db.selectFrom('_plugin_storage').select(['id', 'data']).where('plugin_id', '=', PLUGIN_ID).where('collection', '=', 'buckets').execute()

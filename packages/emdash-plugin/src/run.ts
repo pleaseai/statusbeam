@@ -35,7 +35,7 @@ export interface CheckRunResult {
 }
 
 /** Check types that read the response body, so they cannot use the header-only client. */
-const BODY_CHECKS = new Set<string>(['statuspage', 'incidentio', 'sentry', 'aigateway'])
+export const BODY_CHECKS = new Set<string>(['statuspage', 'incidentio', 'sentry', 'aigateway'])
 
 /** UTC day of a date as `YYYY-MM-DD`. */
 function dayOfDate(date: Date): string {

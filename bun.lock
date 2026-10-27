@@ -112,6 +112,10 @@
     "packages/emdash-plugin": {
       "name": "@statusbeam/emdash-plugin",
       "version": "0.0.0",
+      "dependencies": {
+        "yaml": "^2.5.0",
+        "zod": "^4.4.3",
+      },
       "devDependencies": {
         "@emdash-cms/plugin-cli": "0.13.4",
         "@statusbeam/core": "workspace:*",

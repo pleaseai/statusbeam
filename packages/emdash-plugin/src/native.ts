@@ -3,6 +3,7 @@ import { createUnrestrictedHttpAccess, definePlugin } from 'emdash'
 import pkg from '../package.json' with { type: 'json' }
 import { PLUGIN_ID } from './descriptor'
 import { createProbeHttp } from './http'
+import { adminRoutes } from './routes/admin'
 import { publicRoutes } from './routes/public'
 import { webhookRoutes } from './routes/webhooks'
 import { runCheck, runMaintenance } from './run'
@@ -15,8 +16,8 @@ import { SENTRY_TOKEN_SECRET_KEY, SLACK_SECRET_KEY, WEBHOOK_SECRET_KEY, WEBHOOKS
  * in `plugins: []`, with no sandbox runner.
  *
  * One 5-minute `check` task probes every monitor; a daily `maintenance` task
- * prunes history. The public and webhook routes are here; the admin routes
- * (T004) and the admin pages (T005 to T007) are added by later tasks.
+ * prunes history. The public, webhook and admin routes are here; the admin
+ * pages (T005 to T007) are added by later tasks.
  */
 
 /**
@@ -106,6 +107,7 @@ export function createNativePlugin(deps: NativePluginDeps = {}) {
     },
     routes: {
       ...publicRoutes,
+      ...adminRoutes({ probeHttp, ...(bodyHttp ? { bodyHttp } : {}), ...(deps.now ? { now: deps.now } : {}), ...(deps.deadlineMs ? { deadlineMs: deps.deadlineMs } : {}) }),
       ...webhookRoutes({ ...(bodyHttp ? { http: bodyHttp } : {}), ...(deps.now ? { now: deps.now } : {}), ...(deps.deadlineMs ? { deadlineMs: deps.deadlineMs } : {}) }),
     },
     admin: {
