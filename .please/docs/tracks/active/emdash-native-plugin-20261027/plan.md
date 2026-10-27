@@ -78,35 +78,35 @@ of the host's).
 
 ## Tasks
 
-- [ ] T001 [SPIKE] Prove the native plugin shape in the demo site (file: packages/emdash-plugin/src/plugin.ts)
+- [ ] T001 [SPIKE] Prove the native plugin shape in the demo site (file: packages/emdash-plugin/src/plugin.ts) [FR-1, FR-2, AC-001]
   Validation: `apps/emdash-demo` registers a native `statusbeam` plugin in `plugins: []` with no sandbox runner, in both the Node and the Cloudflare dev builds. In each, a placeholder React page renders, a scheduled task fires, and a header-only probe reports header-time latency on a slow-body fixture while 127.0.0.1 and 169.254.169.254 are refused.
   Method: run the demo site in each mode and record the outputs; `Skill("please:test-browser")` on the admin page
   STOP: either build fails one of these checks — report before T002.
-- [ ] T002 Run every monitor from one native scheduled task (file: packages/emdash-plugin/src/run.ts) (depends on T001)
+- [ ] T002 Run every monitor from one native scheduled task (file: packages/emdash-plugin/src/run.ts) (depends on T001) [FR-1, FR-2, FR-3, FR-6, NFR-2, NFR-4, AC-002, AC-003, AC-004, AC-005, AC-006, AC-013]
   Validation: one run checks all of 12 monitors; a slow body is timed to headers; a body over 8 MiB is graded by status code; a hung response is `down` at the deadline while the rest finish; a private address is refused, also behind a redirect; a removed monitor is not checked next run; a status change sends one Slack and one generic webhook notification and an unchanged status sends none; the plugin and the standalone rollup give identical 90-day figures for the same results.
   Method: `bun test` plus native host tests on `emdash/internal/plugin-test-runtime`, replacing the vitest/workerd harness; the CI "Plugin host tests" step switches to them in the same change so CI stays green
-- [ ] T003 Serve public and webhook routes from the native plugin (file: packages/emdash-plugin/src/routes/webhooks.ts) (depends on T002)
+- [ ] T003 Serve public and webhook routes from the native plugin (file: packages/emdash-plugin/src/routes/webhooks.ts) (depends on T002) [FR-4, FR-5, NFR-2, AC-007, AC-008, AC-009]
   Validation: status, per-site, and badge routes keep their paths and cache header and parse with core's contract schemas; a never-checked monitor carries `pending: true`; webhooks keep the 405 → 401 → 404 → 400 → 204/200 order, refuse everything while `webhookSecret` is unset, and return 401 for a token of the wrong length or with non-ASCII characters.
   Method: native host tests through `dispatchPluginApiRequest`
-- [ ] T004 Expose admin-only config, validate, save, test, and overview routes (file: packages/emdash-plugin/src/admin.ts) (depends on T002)
+- [ ] T004 Expose admin-only config, validate, save, test, and overview routes (file: packages/emdash-plugin/src/admin.ts) (depends on T002) [FR-7, FR-9, FR-10, NFR-2, NFR-4, AC-010, AC-016]
   Validation: every admin route gives 401 to anonymous callers, 403 to editors, and refuses a cookie POST without `X-EmDash-Request`; validate returns issues with field paths (such as `sites[2].url`); a stale-revision save writes nothing and returns the current config; a save reconciles the schedule; test writes no bucket, snapshot, or delivery; test refuses a loopback, private, or cloud-metadata URL, also behind a redirect; no response contains a secret value.
   Method: native host tests for each route and role
-- [ ] T005 Edit monitors from a React admin page (file: packages/emdash-plugin/src/admin/MonitorsPage.tsx) (depends on T004)
+- [ ] T005 Edit monitors from a React admin page (file: packages/emdash-plugin/src/admin/MonitorsPage.tsx) (depends on T004) [FR-7, FR-10, NFR-1, AC-010, AC-011, AC-012, AC-016]
   Validation: an administrator can add, edit, and remove monitors and save. An invalid field, including a duplicate slug, shows its error next to that field and nothing is saved. Renaming a slug saves it as a new monitor. A stale save shows the newer config. Each secret shows only "set" or "not set", with a link to the plugin settings page. A non-admin sees a refusal and no config. Text uses core's dictionary in en/zh/ja/ko with English otherwise, and the layout holds in an RTL locale.
   Method: component tests with a mocked `apiFetch`; `Skill("please:test-browser")` on the demo admin in `en` and `ar`
-- [ ] T006 Test one monitor on demand from the editor (file: packages/emdash-plugin/src/admin/TestMonitor.tsx) (depends on T005)
+- [ ] T006 Test one monitor on demand from the editor (file: packages/emdash-plugin/src/admin/TestMonitor.tsx) (depends on T005) [FR-9, AC-015, AC-019]
   Validation: testing a monitor shows its status, latency, and response code, including an unsaved edit. History, the snapshot, and notifications are unchanged afterwards.
   Method: component test plus the T004 route test; browser check on the demo admin
-- [ ] T007 Show the status overview page and dashboard widget (file: packages/emdash-plugin/src/admin/StatusPage.tsx) (depends on T004)
+- [ ] T007 Show the status overview page and dashboard widget (file: packages/emdash-plugin/src/admin/StatusPage.tsx) (depends on T004) [FR-8, FR-10, NFR-1, AC-014, AC-016]
   Validation: the overview lists every monitor with its status, 90-day bars, and latest latency. A never-checked monitor reads "Not checked yet" with no uptime figure. The widget summarizes overall status. Both refuse non-admins.
   Method: component tests; `Skill("please:test-browser")` on the demo dashboard and page
-- [ ] T008 Move the status Portable Text block into the plugin (file: packages/emdash-plugin/src/block.ts) (depends on T001)
+- [ ] T008 Move the status Portable Text block into the plugin (file: packages/emdash-plugin/src/block.ts) (depends on T001) [FR-11, AC-017]
   Validation: an editor can insert the `statusbeam-status` block and the published page shows that monitor's status, with the source choice (this plugin or a standalone deployment) and the `allowedOrigins` allowlist behaving as before: a `baseUrl` outside the allowlist or carrying credentials is refused before any fetch. `@statusbeam/emdash-ui` exports components and the client only, with no `./plugin`, `./block`, or `./astro` and no `emdash` peer. The plugin lists `@statusbeam/emdash-ui` in `dependencies`, since its block renderer imports the library's components.
   Method: the ported `block-node.test.ts` and a rewritten `entry-graph.test.ts`; browser check of a published page in the demo
-- [ ] T009 Ship the package as a native-only plugin (file: packages/emdash-plugin/package.json) (depends on T003, T008)
+- [ ] T009 Ship the package as a native-only plugin (file: packages/emdash-plugin/package.json) (depends on T003, T008) [FR-12, AC-018]
   Validation: the package exposes `.`, `./plugin`, `./admin`, `./astro` and no sandboxed entry. `emdash-plugin.jsonc` and the plugin CLI are gone. `publish.yml` gates on the native host tests instead of `test:host`. The demo site registers the plugin through `statusbeam()`. The `emdash` peer range is pinned to `~1.3.1`, the line `createUnrestrictedHttpAccess` and `emdash/internal/plugin-test-runtime` were verified on. `publish.yml` waits for the `@statusbeam/emdash-ui` version the plugin pins, as it does for core.
   Method: `bun run build && bun run typecheck && bun test` at the root; CI green on the PR
-- [ ] T010 Record ADR-0005 and update the EmDash docs (file: docs/adr/0005-emdash-native-plugin.md) (depends on T006, T007, T008, T009)
+- [ ] T010 Record ADR-0005 and update the EmDash docs (file: docs/adr/0005-emdash-native-plugin.md) (depends on T006, T007, T008, T009) [FR-13, NFR-3]
   Validation: ADR-0005 passes doc-lint and states the native-plugin decision, the rejected alternatives, and the parts of ADR-0004 it keeps (the component library and the core-owned wire contract). ADR-0004's status reads "Superseded by ADR-0005" with its body untouched, and the ADR index matches. The EmDash guide shows the `plugins: []` install as a trusted dependency and says a plugin-hosted page goes down with the CMS.
   Method: doc-lint on the new ADR (`Skill("standards:doc-lint")`); docs site build (`Skill("run-docs")`)
 
