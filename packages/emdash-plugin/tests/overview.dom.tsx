@@ -54,11 +54,11 @@ function days(statuses: Array<'up' | 'degraded' | 'down' | null>): Monitor['hist
 }
 
 function monitor(overrides: Partial<Monitor> & Pick<Monitor, 'slug' | 'name'>): Monitor {
-  return { status: 'up', responseTime: 120, uptimeDay: '100%', uptimeWeek: '100%', uptimeMonth: '100%', history: days(Array.from({ length: 90 }).fill('up')), ...overrides }
+  return { status: 'up', responseTime: 120, uptimeDay: '100%', uptimeWeek: '100%', uptimeMonth: '100%', history: days(Array.from<'up'>({ length: 90 }).fill('up')), ...overrides }
 }
 
 function pendingMonitor(slug: string, name: string): Monitor {
-  return monitor({ slug, name, status: 'down', pending: true, responseTime: 0, history: days(Array.from({ length: 90 }).fill(null)) })
+  return monitor({ slug, name, status: 'down', pending: true, responseTime: 0, history: days(Array.from<null>({ length: 90 }).fill(null)) })
 }
 
 function ready(monitors: Monitor[], status: OverviewResponse['status'] = 'operational'): OverviewResponse {
@@ -84,7 +84,7 @@ const card = (name: string) => screen.getByRole('region', { name })
 describe('status overview page (AC-014)', () => {
   it('lists every monitor with its status, 90 bars and latest latency', async () => {
     server.overview = ready([
-      monitor({ slug: 'api', name: 'API', status: 'up', responseTime: 123, history: days(Array.from({ length: 90 }).fill('up')) }),
+      monitor({ slug: 'api', name: 'API', status: 'up', responseTime: 123, history: days(Array.from<'up'>({ length: 90 }).fill('up')) }),
       monitor({ slug: 'web', name: 'Web', status: 'degraded', responseTime: 2500 }),
       monitor({ slug: 'db', name: 'DB', status: 'down', responseTime: 0 }),
     ], 'major_outage')

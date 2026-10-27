@@ -99,6 +99,10 @@ export interface AdminDict {
     notSavedInvalid: string
     /** Nothing was written because someone else saved first; the newer configuration is shown. */
     notSavedStale: string
+    /** The request failed; the edits are still in the form. */
+    saveFailed: string
+    /** Saved, but the check schedule could not be updated. */
+    savedScheduleFailed: (error: string) => string
     /** Findings that belong to no field of the editor. */
     otherFindings: string
     warning: string
@@ -233,6 +237,8 @@ const en: Dict = {
       saved: 'Saved.',
       notSavedInvalid: 'Not saved. Fix the marked fields and save again.',
       notSavedStale: 'Not saved. Someone else changed the configuration first, so your edit was discarded. The newer configuration is shown.',
+      saveFailed: 'Could not save. Your edits are still here; try again.',
+      savedScheduleFailed: error => `Saved, but the check schedule could not be updated: ${error}. Save again to retry.`,
       otherFindings: 'Other findings',
       warning: 'Warning',
       field: {
@@ -355,6 +361,8 @@ const zh: Dict = {
       saved: '已保存。',
       notSavedInvalid: '未保存。请修正标记的字段后重新保存。',
       notSavedStale: '未保存。其他人已先修改了配置，因此您的修改已被丢弃。下方显示的是较新的配置。',
+      saveFailed: '无法保存。您的修改仍保留在此，请重试。',
+      savedScheduleFailed: error => `已保存，但无法更新检查计划：${error}。请再次保存以重试。`,
       otherFindings: '其他问题',
       warning: '警告',
       field: {
@@ -477,6 +485,8 @@ const ja: Dict = {
       saved: '保存しました。',
       notSavedInvalid: '保存されていません。マークされた項目を修正して、もう一度保存してください。',
       notSavedStale: '保存されていません。先に他のユーザーが設定を変更したため、あなたの編集は破棄されました。新しい設定を表示しています。',
+      saveFailed: '保存できませんでした。編集内容はそのまま残っています。もう一度お試しください。',
+      savedScheduleFailed: error => `保存しましたが、チェックのスケジュールを更新できませんでした: ${error}。もう一度保存して再試行してください。`,
       otherFindings: 'その他の指摘',
       warning: '警告',
       field: {
@@ -599,6 +609,8 @@ const ko: Dict = {
       saved: '저장했습니다.',
       notSavedInvalid: '저장하지 않았습니다. 표시된 필드를 고친 뒤 다시 저장하세요.',
       notSavedStale: '저장하지 않았습니다. 다른 사람이 먼저 설정을 바꿨으므로 내 수정은 버려졌습니다. 더 새로운 설정을 보여 줍니다.',
+      saveFailed: '저장하지 못했습니다. 수정 내용은 그대로 남아 있으니 다시 시도하세요.',
+      savedScheduleFailed: error => `저장했지만 점검 일정을 갱신하지 못했습니다: ${error}. 다시 저장해 재시도하세요.`,
       otherFindings: '기타 항목',
       warning: '경고',
       field: {

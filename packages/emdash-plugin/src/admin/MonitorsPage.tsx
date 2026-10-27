@@ -25,7 +25,7 @@ import { MonitorActions } from './MonitorActions'
 type Strings = AdminDict
 
 /** What the editor last told the user about a save. */
-type Notice = 'saved' | 'invalid' | 'stale' | null
+type Notice = 'saved' | 'scheduleFailed' | 'invalid' | 'stale' | null
 
 interface Loaded {
   draft: Draft
@@ -54,6 +54,7 @@ function MonitorsEditor() {
   const [notice, setNotice] = useState<Notice>(null)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [scheduleError, setScheduleError] = useState<string | null>(null)
 
   useEffect(() => {
     let active = true
@@ -84,16 +85,17 @@ function MonitorsEditor() {
   }
 
   const draft = loaded.draft
-  const edit = (next: Draft) => {
-    setLoaded({ ...loaded, draft: next })
+  const edit = (change: (current: Draft) => Draft) => {
+    setLoaded(prev => prev && { ...prev, draft: change(prev.draft) })
     setNotice(null)
   }
   const editRow = (index: number, change: (row: MonitorRow) => MonitorRow) => {
-    edit({ ...draft, rows: draft.rows.map((row, i) => (i === index ? change(row) : row)) })
+    edit(current => ({ ...current, rows: current.rows.map((row, i) => (i === index ? change(row) : row)) }))
   }
 
   const save = async () => {
     setSaveError(null)
+    setScheduleError(null)
     const local = clientFindings(draft, t)
     if (hasFindings(local)) {
       setFindings(local)
@@ -102,11 +104,17 @@ function MonitorsEditor() {
     }
     setSaving(true)
     try {
-      const result = await saveConfig(buildConfig(draft), loaded.revision, t.loadFailed)
+      const result = await saveConfig(buildConfig(draft), loaded.revision, t.monitors.saveFailed)
       if (result.saved) {
         setLoaded(loadedFrom({ config: result.config, revision: result.revision, secretsSet: loaded.secretsSet }))
         setFindings(findingsFromIssues(result.issues))
-        setNotice('saved')
+        if (result.scheduleError === undefined) {
+          setNotice('saved')
+        }
+        else {
+          setScheduleError(result.scheduleError)
+          setNotice('scheduleFailed')
+        }
       }
       else if (result.reason === 'invalid') {
         setFindings(findingsFromIssues(result.issues))
@@ -119,7 +127,7 @@ function MonitorsEditor() {
       }
     }
     catch (error) {
-      setSaveError(error instanceof Error ? error.message : t.loadFailed)
+      setSaveError(error instanceof Error ? error.message : t.monitors.saveFailed)
     }
     finally {
       setSaving(false)
@@ -138,36 +146,39 @@ function MonitorsEditor() {
       <h1 className="text-2xl font-semibold">{t.monitors.title}</h1>
 
       {notice === 'saved' && <Banner variant="default" description={t.monitors.saved} role="status" />}
+      {notice === 'scheduleFailed' && <Banner variant="alert" description={t.monitors.savedScheduleFailed(scheduleError ?? '')} role="alert" />}
       {notice === 'invalid' && <Banner variant="error" description={t.monitors.notSavedInvalid} role="alert" />}
       {notice === 'stale' && <Banner variant="alert" description={t.monitors.notSavedStale} role="alert" />}
       {saveError !== null && <Banner variant="error" description={saveError} role="alert" />}
 
-      <Input
-        label={t.monitors.pageName}
-        value={draft.name}
-        error={findings.fields.name}
-        onChange={event => edit({ ...draft, name: event.target.value })}
-      />
+      <fieldset disabled={saving} className="m-0 min-w-0 space-y-6 border-0 p-0">
+        <Input
+          label={t.monitors.pageName}
+          value={draft.name}
+          error={findings.fields.name}
+          onChange={event => edit(current => ({ ...current, name: event.target.value }))}
+        />
 
-      <section className="space-y-4" aria-labelledby="statusbeam-monitors-heading">
-        <h2 id="statusbeam-monitors-heading" className="text-xl font-semibold">{t.monitors.heading}</h2>
-        {draft.rows.length === 0 && <p className="text-sm text-kumo-subtle">{t.monitors.empty}</p>}
-        {draft.rows.map((row, index) => (
-          <MonitorCard
-            key={row.key}
-            t={t}
-            index={index}
-            row={row}
-            findings={findings}
-            busy={saving}
-            onChange={change => editRow(index, change)}
-            onRemove={() => edit({ ...draft, rows: draft.rows.filter((_, i) => i !== index) })}
-          />
-        ))}
-        <Button type="button" variant="secondary" disabled={saving} onClick={() => edit({ ...draft, rows: [...draft.rows, newRow()] })}>
-          {t.monitors.add}
-        </Button>
-      </section>
+        <section className="space-y-4" aria-labelledby="statusbeam-monitors-heading">
+          <h2 id="statusbeam-monitors-heading" className="text-xl font-semibold">{t.monitors.heading}</h2>
+          {draft.rows.length === 0 && <p className="text-sm text-kumo-subtle">{t.monitors.empty}</p>}
+          {draft.rows.map((row, index) => (
+            <MonitorCard
+              key={row.key}
+              t={t}
+              index={index}
+              row={row}
+              findings={findings}
+              busy={saving}
+              onChange={change => editRow(index, change)}
+              onRemove={() => edit(current => ({ ...current, rows: current.rows.filter((_, i) => i !== index) }))}
+            />
+          ))}
+          <Button type="button" variant="secondary" disabled={saving} onClick={() => edit(current => ({ ...current, rows: [...current.rows, newRow()] }))}>
+            {t.monitors.add}
+          </Button>
+        </section>
+      </fieldset>
 
       <OtherFindings t={t} findings={findings} />
 
@@ -260,7 +271,7 @@ function MonitorCard({ t, index, row, findings, busy, onChange, onRemove }: Moni
       {isRenamed(row) && <p className="text-sm text-kumo-warning" role="note">{t.monitors.slugRenamed(row.savedSlug ?? '')}</p>}
       {hasHiddenSettings(row.monitor) && <p className="text-xs text-kumo-subtle">{t.monitors.keepsOtherSettings}</p>}
 
-      <MonitorActions monitor={buildMonitor(row).monitor} savedSlug={row.savedSlug} busy={busy} />
+      <MonitorActions monitor={buildMonitor(row).monitor} busy={busy} />
     </section>
   )
 }

@@ -2,7 +2,7 @@ import type { CheckResult, DayCounts } from '@statusbeam/core'
 import type { PluginContext } from 'emdash/plugin'
 import { historyWindowStart } from '@statusbeam/core'
 
-/** The storage collection declared in `emdash-plugin.jsonc`. */
+/** The storage collection declared under `storage` in `native.ts`. */
 export const BUCKETS_COLLECTION = 'buckets'
 
 /** Rows one `query()` returns at most. */

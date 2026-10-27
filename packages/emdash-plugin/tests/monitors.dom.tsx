@@ -94,6 +94,17 @@ function describedBy(input: HTMLElement): string {
 }
 
 describe('editing monitors (AC-011)', () => {
+  it('warns when the config is saved but the check schedule could not be updated', async () => {
+    withConfig(TWO_MONITORS)
+    server.save = body => ({ saved: true, revision: 'r2', config: body.config, issues: [], schedule: null, scheduleError: 'cron unavailable' })
+    await openPage()
+
+    click(en.monitors.save)
+
+    await screen.findByText(en.monitors.savedScheduleFailed('cron unavailable'))
+    expect(screen.queryByText(en.monitors.saved)).toBeNull()
+  })
+
   it('adds, edits and removes monitors and saves them with the loaded revision', async () => {
     withConfig(TWO_MONITORS)
     server.save = body => ({ saved: true, revision: 'r2', config: body.config, issues: [], schedule: null })
@@ -328,7 +339,7 @@ describe('who may see the editor (AC-016)', () => {
 })
 
 describe('text and direction (NFR-1)', () => {
-  it.each(LOCALES)('shows %s text from core\'s dictionary', async (locale) => {
+  it.each([...LOCALES])('shows %s text from core\'s dictionary', async (locale) => {
     document.documentElement.setAttribute('lang', locale)
     withConfig(TWO_MONITORS)
     await openPage()

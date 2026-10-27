@@ -158,18 +158,18 @@ export interface ConfigErrorRecord {
   issues: PluginIssue[]
 }
 
-/** The recorded configuration error, or `null` . The admin page shows it as a banner. */
+/** The recorded configuration error, or `null`. */
 export async function readConfigError(ctx: Pick<PluginContext, 'kv'>): Promise<ConfigErrorRecord | null> {
   return ctx.kv.get<ConfigErrorRecord>(CONFIG_ERROR_KEY)
 }
 
-/** Record the failure . It stays until {@link clearConfigError}. */
+/** Record the failure. It stays until {@link clearConfigError}. */
 export async function recordConfigError(ctx: Pick<PluginContext, 'kv'>, issues: PluginIssue[], now: Date): Promise<void> {
   const record: ConfigErrorRecord = { version: 1, recordedAt: now.toISOString(), issues: issues.filter(issue => issue.severity === 'error') }
   await ctx.kv.set(CONFIG_ERROR_KEY, record)
 }
 
-/** Drop the recorded error . */
+/** Drop the recorded error. */
 export async function clearConfigError(ctx: Pick<PluginContext, 'kv'>): Promise<void> {
   await ctx.kv.delete(CONFIG_ERROR_KEY)
 }
