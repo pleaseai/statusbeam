@@ -1,0 +1,3 @@
+- [emdash-demo native testing](emdash-demo-native-testing.md) — run/verify native statusbeam plugin on Node+CF, cron triggers, bun mock.module leak
+- [emdash native host tests](emdash-native-host-tests.md) — booting EmDashRuntime under bun: preload stubs, per-host db entrypoint, settings/cron helpers
+- [emdash admin component tests](emdash-admin-component-tests.md) — test:admin happy-dom setup, mocking @emdash-cms/admin, locale/settings-href facts

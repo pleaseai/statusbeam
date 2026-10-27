@@ -1,0 +1,1 @@
+- [EmDash native plugin facts](emdash-native-plugin-facts.md) — verified emdash 1.3.1 native vs sandboxed plugin behavior, fetch/SSRF, admin, test spikes

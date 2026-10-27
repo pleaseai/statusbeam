@@ -17,7 +17,8 @@
     "claude-md-management@pleaseai": true,
     "bun@pleaseai": true,
     "turborepo@pleaseai": true,
-    "agent-browser@pleaseai": true
+    "agent-browser@pleaseai": true,
+    "emdash@emdash": true
   },
   "extraKnownMarketplaces": {
     "pleaseai": {
