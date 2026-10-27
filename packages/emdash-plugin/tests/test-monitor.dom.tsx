@@ -160,3 +160,33 @@ describe('test one monitor (AC-015)', () => {
     expect(region).toHaveLength(1)
   })
 })
+
+describe('stale, unsupported and invalid tests', () => {
+  it('discards a response that arrives after the monitor was edited', async () => {
+    let release: (value: TestResponse) => void = () => {}
+    server.test = () => new Promise<TestResponse>((resolve) => {
+      release = resolve
+    })
+    await openPage()
+    fireEvent.click(testButton('API'))
+    await waitFor(() => expect(posts()).toHaveLength(1))
+    fireEvent.change(within(card('API')).getByLabelText(dict.admin.monitors.field.url), { target: { value: 'https://changed.example.com' } })
+    release(checkResult({ status: 'up' }))
+    await waitFor(() => expect(testButton('API').disabled).toBe(false))
+    expect(result('API').textContent).toBe('')
+  })
+
+  it('shows a body-limit result as unsupported, not down', async () => {
+    server.test = () => checkResult({ status: 'down', code: 0, limit: 'body' })
+    await openPage()
+    fireEvent.click(testButton('API'))
+    await waitFor(() => expect(result('API').textContent).toBe(t.unsupported))
+    expect(result('API').textContent).not.toContain(dict.day.down)
+  })
+
+  it('disables Test while the expected status codes are not numbers', async () => {
+    await openPage()
+    fireEvent.change(within(card('API')).getByLabelText(dict.admin.monitors.field.expectedStatusCodes), { target: { value: '503x' } })
+    expect(testButton('API').disabled).toBe(true)
+  })
+})

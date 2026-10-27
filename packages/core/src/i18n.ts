@@ -140,6 +140,8 @@ export interface AdminDict {
       error: string
       /** The test request itself failed (network or server). */
       failed: string
+      /** Status of a check whose response body exceeds the host limit; it says nothing about the target. */
+      unsupported: string
     }
   }
   secrets: {
@@ -269,6 +271,7 @@ const en: Dict = {
         noResponse: 'none',
         error: 'Error',
         failed: 'Could not run the test. Try again.',
+        unsupported: 'Unsupported (response body above the host limit)',
       },
     },
     secrets: {
@@ -393,6 +396,7 @@ const zh: Dict = {
         noResponse: '无',
         error: '错误',
         failed: '无法运行测试，请重试。',
+        unsupported: '不支持（响应正文超出主机限制）',
       },
     },
     secrets: {
@@ -517,6 +521,7 @@ const ja: Dict = {
         noResponse: 'なし',
         error: 'エラー',
         failed: 'テストを実行できませんでした。もう一度お試しください。',
+        unsupported: '非対応（レスポンス本文がホストの上限を超えています）',
       },
     },
     secrets: {
@@ -641,6 +646,7 @@ const ko: Dict = {
         noResponse: '없음',
         error: '오류',
         failed: '테스트를 실행할 수 없습니다. 다시 시도하세요.',
+        unsupported: '지원 안 함 (응답 본문이 호스트 한도를 초과함)',
       },
     },
     secrets: {

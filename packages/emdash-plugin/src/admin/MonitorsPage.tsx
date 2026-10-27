@@ -216,6 +216,7 @@ function MonitorCard({ t, index, row, findings, busy, onChange, onRemove }: Moni
   const set = (field: MonitorField, value: string) => onChange(current => ({ ...current, monitor: { ...current.monitor, [field]: value } }))
   const title = text('name') || t.monitors.monitorN(index + 1)
   const derived = effectiveSlug(row.monitor)
+  const built = buildMonitor(row)
   const headingId = `statusbeam-monitor-${row.key}`
 
   return (
@@ -275,7 +276,7 @@ function MonitorCard({ t, index, row, findings, busy, onChange, onRemove }: Moni
       {isRenamed(row) && <p className="text-sm text-kumo-warning" role="note">{t.monitors.slugRenamed(row.savedSlug ?? '')}</p>}
       {hasHiddenSettings(row.monitor) && <p className="text-xs text-kumo-subtle">{t.monitors.keepsOtherSettings}</p>}
 
-      <MonitorActions monitor={buildMonitor(row).monitor} busy={busy} />
+      <MonitorActions monitor={built.monitor} busy={busy || Object.keys(built.problems).length > 0} />
     </section>
   )
 }

@@ -36,11 +36,15 @@ export function TestMonitor({ monitor, busy }: TestMonitorProps) {
   }, [])
 
   const monitorKey = JSON.stringify(monitor)
+  const requestId = useRef(0)
   useEffect(() => {
+    requestId.current += 1
     setOutcome(null)
+    setRunning(false)
   }, [monitorKey])
 
   async function run() {
+    const id = ++requestId.current
     setRunning(true)
     setOutcome(null)
     let next: Outcome
@@ -50,7 +54,7 @@ export function TestMonitor({ monitor, busy }: TestMonitorProps) {
     catch {
       next = { kind: 'failed' }
     }
-    if (mounted.current) {
+    if (mounted.current && id === requestId.current) {
       setOutcome(next)
       setRunning(false)
     }
@@ -88,6 +92,9 @@ function Result({ outcome, dict }: { outcome: Outcome, dict: Dict }) {
     )
   }
   const { result } = response
+  if (result.limit === 'body') {
+    return <p>{t.unsupported}</p>
+  }
   return (
     <dl className="flex flex-wrap items-center gap-x-4 gap-y-1">
       <Figure label={t.status} value={dict.day[result.status]} strong />
