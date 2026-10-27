@@ -1,174 +1,146 @@
 ---
 title: Use StatusBeam with EmDash
-description: Install the sandboxed StatusBeam engine plugin and the Astro status components on an EmDash site, and choose a deployment shape that survives a CMS outage.
+description: Install the StatusBeam native plugin on an EmDash site, manage monitors in the EmDash admin, and choose a deployment shape that survives a CMS outage.
 ---
 
 [EmDash](https://github.com/emdash-cms) is an Astro-based CMS that extends
-through plugins. StatusBeam ships two packages for it. This guide covers what
-each package does, how to install and operate the engine, and which deployment
-shape keeps your status page up when the CMS is down. The design rationale is in
-[ADR-0004](https://github.com/pleaseai/statusbeam/blob/main/docs/adr/0004-emdash-plugin-distribution.md).
+through plugins. StatusBeam ships one **native** plugin for it,
+`@statusbeam/emdash-plugin`. It runs the checks, serves the public status JSON
+and badges, adds a React admin for monitors and status, and registers a Status
+block for Portable Text. This guide covers how to install it, how to operate it,
+and which deployment shape keeps your status page up when the CMS is down. The
+design rationale is in
+[ADR-0005](https://github.com/pleaseai/statusbeam/blob/main/docs/adr/0005-emdash-native-plugin.md).
 
-## The two packages
+<Aside type="caution">
+  A plugin-hosted status page goes down with the CMS. The plugin runs inside
+  your EmDash site, so if the CMS or its host is down, checks and the status
+  page stop together, and a status page that shares the fate of the system it
+  reports on cannot report that outage. When the page must stay reachable, run a
+  [standalone deployment](/guides/deployment/) and read from it. See
+  [Choose a deployment shape](#choose-a-deployment-shape).
+</Aside>
+
+## What you install
 
 | Package | What it is | Use it to |
 |---|---|---|
-| `@statusbeam/emdash-plugin` | The check engine as a **sandboxed** EmDash plugin | Run checks, store history, send notifications, and serve the public status JSON and badges from inside your EmDash site |
-| `@statusbeam/emdash-ui` | A plain Astro component library, not a plugin | Show status on your own pages: a banner, 90-day uptime bars and per-site detail |
+| `@statusbeam/emdash-plugin` | A native EmDash plugin with the id `statusbeam` | Run checks, store history, send notifications, serve the public JSON and badges, edit monitors and view status in the admin, and embed a Status block in content |
+| `@statusbeam/emdash-ui` | A plain Astro component library, not a plugin | Show status on your own pages: a banner, 90-day uptime bars and per-site detail. The plugin depends on it |
 
-The engine lives in exactly one package, so installing both never runs checks
-twice. The components read the same public JSON from either source:
+The components read the same public JSON from either source:
 
-- **The engine plugin** on the same EmDash site.
+- **The plugin** on the same EmDash site.
 - **A standalone StatusBeam deployment** (see [Deploy to Cloudflare](/guides/deployment/)).
 
-The components run as site code during server-side rendering, outside any
-sandbox. They have no hooks, cron, or storage, and they only read public JSON.
-
-`@statusbeam/emdash-ui` also has an opt-in Portable Text "status" block, so
-editors can embed status in a post. That block is a **native** EmDash plugin,
-because EmDash allows custom Portable Text renderers only in native plugins. It
-is the only StatusBeam code you register as a native plugin, and it declares
-only the block definition. A site that imports just the components registers no
-plugin.
-
-## Install the engine plugin
+## Install the plugin
 
 <Aside type="caution">
-  The engine plugin needs a **sandbox runner**. Installed as designed, in the
-  `sandboxed` list, it does not load on a site with no runner configured or
-  with a runner the platform cannot provide. EmDash only logs a startup warning
-  in that case, so no checks run and nothing else tells you.
+  A native plugin is a **trusted site dependency**. Installing it is a code and
+  config change, it runs with your site's full authority, and it cannot be
+  installed from the EmDash registry. Review it as you would any other
+  server-side package.
 </Aside>
 
-Install the package and list it in `sandboxed`. Pick the runner that matches
-where your site runs:
+Add the package:
 
-| Where the site runs | Runner | Notes |
-|---|---|---|
-| Cloudflare Workers | Worker Loader: `sandbox()` from `@emdash-cms/cloudflare` | Needs a `worker_loaders` binding in `wrangler.jsonc` and the Workers paid plan. |
-| Node | The workerd child-process runner: `@emdash-cms/sandbox-workerd/sandbox` | Needs `workerd` installed next to `@emdash-cms/sandbox-workerd`. |
+```sh
+bun add @statusbeam/emdash-plugin
+```
+
+Your site provides the peer dependencies: `emdash` (`~1.3.1`), `astro` (`^7`),
+`react` (`^19`), `@cloudflare/kumo` (`2.6.0`) and `@emdash-cms/admin`
+(`^1.3.1`). The `emdash` range is pinned to `~1.3.1` on purpose: the plugin
+relies on an EmDash export that the EmDash docs do not cover, so re-check the
+plugin after you upgrade EmDash.
+
+Register the plugin in `plugins`, not in `sandboxed`:
 
 ```ts title="astro.config.mjs"
-import { sandbox } from '@emdash-cms/cloudflare'
 import { defineConfig } from 'astro/config'
 import emdash from 'emdash/astro'
-import statusbeam from '@statusbeam/emdash-plugin'
+import { statusbeam } from '@statusbeam/emdash-plugin'
 
 export default defineConfig({
   integrations: [
     emdash({
-      sandboxed: [statusbeam],
-      // Worker Loader on Cloudflare. On Node use:
-      // sandboxRunner: '@emdash-cms/sandbox-workerd/sandbox',
-      sandboxRunner: sandbox(),
+      plugins: [statusbeam()],
     }),
   ],
 })
 ```
 
-The reference setup for each runner is `apps/emdash-demo` in the repository.
-Its README reproduces the three execution modes.
+No sandbox runner and no Worker Loader binding are needed. The plugin loads the
+same way on Node and on Cloudflare Workers. It ships TypeScript and `.astro`
+source, which your site's Vite and Astro build compiles.
 
-### In-process mode is a trust decision
+The reference setup is `apps/emdash-demo` in the repository.
 
-You can list the same plugin in `plugins: []` instead of `sandboxed: []`. It then
-loads without a runner, but it runs **in-process**. Capability gating still
-applies, but the plugin gives up isolation from the host and every per-plugin
-resource limit: the 30-second wall-time kill, and on Worker Loader the CPU and
-subrequest caps. The engine's own call budget and 10-second probe deadline still
-apply, because they are part of its code.
-
-Treat in-process mode as a decision to trust this package with your site's full
-authority, not as a workaround for a missing runner. If you cannot configure a
-runner, the standalone deployment is the safer way to run the engine. The spike
-measured in-process mode on Node only.
+The package has four entries: `.` (the `statusbeam()` descriptor), `./plugin`
+(`createPlugin`), `./admin` (the React pages) and `./astro` (the Status block
+renderer). The descriptor wires them up, so you only import `statusbeam`.
 
 ### The network capability
 
-The plugin declares one capability, `network:request:unrestricted`. EmDash shows
-it to an administrator for approval. The engine needs it because the monitored
-hosts are your own configuration and change at runtime. An `allowedHosts` list
-would force a re-approval on every change.
+The plugin declares one capability, `network:request:unrestricted`, because the
+monitored hosts are your own configuration and change at runtime.
 
-The host still refuses fetches to private and loopback addresses ("non-public
-IP"). A monitor that points at `localhost` or an internal address cannot be
-checked by the plugin. Use a standalone deployment for those.
+The host still protects every probe. It refuses private, loopback and
+cloud-metadata addresses, resolves names to check where they point, and caps
+redirects, also on every redirect hop. A monitor that points at `localhost` or an
+internal address cannot be checked by the plugin. Use a standalone deployment
+for those.
 
-### Register the Portable Text block (optional)
+### Options
 
-To let editors embed status in content, register the block descriptor as a
-native plugin and use the site-side renderer:
+`statusbeam()` takes one option:
 
 ```ts title="astro.config.mjs"
-import { statusBeamBlock } from '@statusbeam/emdash-ui/block'
-
-emdash({
-  plugins: [statusBeamBlock()],
-  // ...
+statusbeam({
+  allowedOrigins: ['https://status.example.com', 'https://cms.example.com'],
 })
 ```
 
-The editor then offers a "Status" block with a view (banner or site detail), a
-site slug, a status source URL and a source type (standalone or EmDash plugin).
-The package exposes the pieces EmDash needs as `@statusbeam/emdash-ui/block` (the
-descriptor), `@statusbeam/emdash-ui/plugin` (the entrypoint) and
-`@statusbeam/emdash-ui/astro` (the `blockComponents` renderer).
+`allowedOrigins` restricts the origins a Status block may fetch. See
+[Restrict block sources](#restrict-block-sources-recommended).
 
-#### Restrict block sources (recommended)
+## Admin pages
 
-The block renderer fetches the status source URL on the server. It always
-refuses credentials, a query string and a fragment, and it does not follow
-redirects: a source that answers with one renders as unavailable, so enter its
-final URL. Without configuration, a production build also refuses `localhost`
-and loopback, private, link-local and unique-local IP **literals**; the
-development server (`astro dev`) accepts them so a local fixture works. It cannot see
-where a hostname resolves, so an editor can still enter a name that resolves to
-an internal address. Only an allowlist stops that. Pass the origins editors may
-use:
+The plugin adds three things to the EmDash admin. All of them are for
+administrators: a non-administrator sees a refusal and no configuration.
 
-```ts title="astro.config.mjs"
-emdash({
-  plugins: [
-    statusBeamBlock({
-      allowedOrigins: ['https://status.example.com', 'https://cms.example.com'],
-    }),
-  ],
-  // ...
-})
-```
+- **Status** (`/_emdash/admin/plugins/statusbeam/`) lists every monitor with its
+  status, 90-day bars and latest latency. A monitor that has not been checked yet
+  reads "Not checked yet" and shows no uptime figure.
+- **Monitors** (`/_emdash/admin/plugins/statusbeam/monitors`) edits the monitor
+  configuration.
+- **A dashboard widget** shows the overall status and the counts of operational,
+  degraded and major-outage monitors. It reads "Waiting for the first check"
+  until the first run completes.
 
-- A block whose source URL origin (scheme, host and port) is not listed renders
-  as unavailable and makes no request. The path after the origin is free.
-- Origins are compared normalised: case and a default port (`:443`, `:80`) do
-  not matter.
-- Each entry must be an http(s) origin with no path, query, fragment or
-  credentials. A bad entry fails the site build with an error that names it.
-- A listed origin is trusted as configured, even if it is a private address.
-  The credentials, query string and fragment checks still apply.
-- An empty or missing list keeps the default behavior above: the
-  literal-address check in production, none on the development server.
-
-The list reaches the renderer through the plugin's `createPlugin(options)`,
-which EmDash runs from its middleware before any page renders.
+The page text follows the admin language in English, Chinese, Japanese and
+Korean, and falls back to English. The sidebar labels "Status" and "Monitors"
+are English only.
 
 ## Configure monitors
 
-Open **StatusBeam** in the EmDash admin. Only administrators can use the page.
-The page is one form:
+Open **Monitors**. You add, edit and remove monitors in a form. It saves the same
+[configuration](/guides/configuration/) as a standalone deployment, validated by
+the same schema.
 
-1. Paste or edit the monitor configuration as YAML. It is the same
-   [configuration](/guides/configuration/) format as a standalone deployment,
-   validated by the same schema.
-2. Choose an action: **Validate** (check without saving), **Save** (only when
-   valid) or **Test site** (run one check for the monitor slug you enter and
-   save nothing).
-3. Select **Run**. A separate **Reload** button loads the stored configuration.
+- An invalid field shows its error next to that field, and nothing is saved.
+  Duplicate slugs are one such error.
+- Renaming a slug saves it as a new monitor.
+- **Test** runs one check for a monitor, including an unsaved edit, and shows its
+  status, latency and response code. It writes no history, snapshot or
+  notification.
+- If another administrator saved after you loaded the page, your save is refused
+  and the newer configuration is shown.
+- The form does not edit the Sentry or AI
+  Gateway monitor blocks, but a save keeps them as they were.
 
-A failed validation lists every issue with its path, for example `sites[0].url`.
-It keeps the stored configuration. If another administrator saved after you
-loaded the page, your save is refused with a reload message. A YAML document
-over the 64 KiB Block Kit limit is refused with a message, never truncated.
+The configuration is stored as YAML. The first save from the admin rewrites it
+from the form, so comments in the YAML are dropped.
 
 The plugin applies a few rules on top of the shared schema:
 
@@ -177,14 +149,15 @@ The plugin applies a few rules on top of the shared schema:
   or TLS probe.
 - A monitor that polls Sentry warns when no Sentry token is set.
 - Duplicate slugs are an error.
-- A Slack or webhook URL in the YAML is an error. Put it in the encrypted
-  settings instead.
-- Too many monitors for one run warns (see [Capacity](#capacity)).
+- A Slack or webhook URL in the YAML is an error. Put it in the plugin settings
+  instead.
 
-### Encrypted settings
+### Secrets
 
 Credentials never go in the YAML, because a webhook URL embeds its credential.
-They live in four encrypted settings fields:
+They are encrypted plugin settings, edited on EmDash's plugin settings page
+(`/_emdash/admin/plugins-manager/statusbeam/settings`). The Monitors page shows
+only whether each one is set, with a link to that page.
 
 | Setting | Holds |
 |---|---|
@@ -195,71 +168,37 @@ They live in four encrypted settings fields:
 
 Delivery logs never contain a full URL.
 
-### Dashboard widget
-
-The engine adds a status widget to the EmDash dashboard. It shows the overall
-status and the counts of operational, degraded and major-outage monitors. It
-reads "Waiting for the first check" until the first run completes.
-
 ## How it runs
 
-The engine checks every monitor every **5 minutes**. EmDash gives each
-invocation of a sandboxed plugin a fixed budget, and on Worker Loader every
-bridge call (a probe, a storage or KV call, a settings read, a log line) counts
-against 10 subrequests. One invocation therefore cannot check all your monitors,
-so the engine shards each run:
+The plugin checks every monitor every **5 minutes**, from one scheduled task
+named `check`. It probes all monitors at once. A daily `maintenance` task prunes
+history older than 90 days. The plugin creates or repairs these tasks when it
+activates, on every run and on every save, and it touches only a task that is
+missing or changed.
 
-- Cron tasks named `check-0`, `check-1` and so on each check a share of the
-  monitors. There are at most 8.
-- A daily `maintenance` task prunes history older than 90 days.
-- Each task plans its calls before it starts, and never starts a probe it cannot
-  afford.
-- The engine re-validates the stored configuration on every run. A run whose
-  configuration is invalid checks nothing and changes no status. It records an
-  error that shows as a banner on the admin page until you save a valid
-  configuration.
+How often the host wakes the task depends on where the site runs:
 
-### Capacity
+| Host | What fires the task |
+|---|---|
+| Node | An in-process timer, on the minute. |
+| Cloudflare (a built Worker) | The Worker's `scheduled()` handler, so the site needs a Cron Trigger such as `* * * * *`. |
+| Cloudflare (`astro dev`) | A dev scheduler that polls every 60 seconds, so a task can run up to about a minute late. |
 
-Every task spends 5 calls on fixed work and 1 call for each notification
-destination it can deliver to. The rest of the budget is probes:
+The plugin re-validates the stored configuration on every run. A run whose
+configuration is invalid checks nothing and changes no status.
 
-| Notification destinations | Monitors per task | Monitors per 5-minute cadence |
-|---|---|---|
-| 0 | 5 | 40 |
-| 1 | 4 | 32 |
-| 2 | 3 | 24 |
+### Probe behavior
 
-A destination is one Slack URL or one line in `webhookUrls`. If you configure
-more monitors than the table allows, the admin page warns that some would go
-unchecked. If the destinations alone leave no call for a probe, the run records
-a capacity error and checks nothing. Remove destinations in that case. For more
-monitors than the table allows, use a standalone deployment.
-
-### Probe limits
-
-The plugin fetches through the host's `ctx.http.fetch`, which differs from the
-fetch a standalone Worker uses. Monitors outside this contract belong on a
-standalone deployment:
-
-- **Latency is time to the full body, not time to headers.** The host buffers
-  the whole response before it returns, so a slow body can grade a healthy
-  monitor `degraded`. Plugin latency is not directly comparable with a
-  standalone deployment's.
-- **Responses over 8 MiB are unsupported.** The host rejects them. The engine
-  matches that rejection by its message text and marks the probe *unsupported*.
-  The rejected probe counts toward neither status nor uptime: the monitor keeps
-  its last real result and history, and a monitor whose first probe is rejected
-  stays off the public status until it has one. No notification is sent, and a
-  persistent warning shows on the monitor. It never switches a `GET` monitor to
-  `HEAD`.
-- **A probe has a 10-second deadline.** A target that has not finished by then is
-  graded `down` with code 0, and the task goes on to its remaining monitors.
-  Without the deadline, one never-completing response would end the whole
-  invocation at 30 seconds.
-- **A run that a platform limit kills writes nothing.** CPU and wall-time kills
-  never reach the plugin, so the last stored snapshot and every monitor's status
-  stay as they were.
+- **Latency is time to the response headers**, as on a standalone deployment, so
+  a slow body does not make a healthy monitor `degraded`. Numbers from the two
+  are comparable.
+- **A response body is not read** for plain HTTP checks, so a body over 8 MiB is
+  graded by its status code. Monitors that must read the body (Sentry and AI
+  Gateway) are bound by the host's 8 MiB body limit.
+- **A probe has a 10-second deadline.** A target that has not answered by then is
+  graded `down` with code 0, and the other monitors finish normally.
+- **Private addresses are refused**, including behind a redirect. See
+  [The network capability](#the-network-capability).
 
 ### What differs from standalone
 
@@ -270,7 +209,7 @@ standalone deployment:
 
 ## Public endpoints
 
-The engine serves public, unauthenticated GET routes under
+The plugin serves public, unauthenticated GET routes under
 `/_emdash/api/plugins/statusbeam`. They return the same JSON as the standalone
 `/api/*` endpoints, with no wrapper.
 
@@ -320,38 +259,77 @@ can appear in server logs, so use a long random value that you can rotate.
 
 ## Choose a deployment shape
 
-<Aside type="caution">
-  The engine plugin lives inside the CMS. If the CMS or its host goes down,
-  checks and the status page go down with it. A status page that shares the fate
-  of the system it reports on cannot report that outage.
-</Aside>
-
 | Shape | Checks run in | The page reads from | Survives a CMS or host outage |
 |---|---|---|---|
-| **Everything in EmDash** | The engine plugin | The plugin's routes | No. Checks and page stop with the CMS. |
+| **Everything in EmDash** | The plugin | The plugin's routes | No. Checks and page stop with the CMS. |
 | **Standalone engine, EmDash page** | A standalone StatusBeam deployment | The standalone `/api/*`, through `@statusbeam/emdash-ui` | Partly. Checks and data stay up; the EmDash-rendered page goes down with its host. |
 | **Standalone engine and page** | A standalone StatusBeam deployment | The standalone deployment's own page | Yes. Nothing depends on the CMS. |
 
 The standalone deployment keeps checks and the status page independent of a CMS
-or host outage. Pointing `@statusbeam/emdash-ui` at it keeps the checks and their
-data independent, but the EmDash site only displays status: if that site is down,
-its pages are down too. Serve the page from the standalone deployment's own site
-when the page must stay reachable during a CMS outage.
+or host outage. Pointing the Status block or `@statusbeam/emdash-ui` at it keeps
+the checks and their data independent, but the EmDash site only displays status:
+if that site is down, its pages are down too. Serve the page from the standalone
+deployment's own site when the page must stay reachable during a CMS outage.
 
 Pick the shape like this:
 
 - **Use the standalone deployment** when the status page is how customers learn
-  about an outage, when you need TCP or SSL probes, internal hosts, more than
-  the capacity above, or response bodies over 8 MiB.
-- **Use the engine plugin** when a status view inside your own EmDash site is
-  enough and you accept that an outage of that site takes it down. It trades the
+  about an outage, or when you need TCP or SSL probes or internal hosts.
+- **Use the plugin** when a status view inside your own EmDash site is enough and
+  you accept that an outage of that site takes it down. It trades the
   independence guarantee for managing monitors in the EmDash admin.
+
+## Embed a Status block
+
+The plugin registers a "Status" block in the Portable Text editor. The editor
+chooses a view (banner or site detail), a site slug, a **status source** and a
+source type:
+
+- **This plugin**: the block reads the plugin's own routes on the same site.
+- **A standalone deployment**: the block reads that deployment's `/api/*`.
+
+A post that already holds a `statusbeam-status` block keeps rendering after you
+move to the native plugin, because the content stores only the block type and
+its fields.
+
+### Restrict block sources (recommended)
+
+The block renderer fetches the status source URL on the server. It always
+refuses credentials, a query string and a fragment, and it does not follow
+redirects: a source that answers with one renders as unavailable, so enter its
+final URL. Without configuration, a production build also refuses `localhost`
+and loopback, private, link-local and unique-local IP **literals**; the
+development server (`astro dev`) accepts them so a local fixture works. It cannot
+see where a hostname resolves, so an editor can still enter a name that resolves
+to an internal address. Only an allowlist stops that. Pass the origins editors
+may use:
+
+```ts title="astro.config.mjs"
+emdash({
+  plugins: [
+    statusbeam({
+      allowedOrigins: ['https://status.example.com', 'https://cms.example.com'],
+    }),
+  ],
+})
+```
+
+- A block whose source URL origin (scheme, host and port) is not listed renders
+  as unavailable and makes no request. The path after the origin is free.
+- Origins are compared normalised: case and a default port (`:443`, `:80`) do
+  not matter.
+- Each entry must be an http(s) origin with no path, query, fragment or
+  credentials. A bad entry fails the site build with an error that names it.
+- A listed origin is trusted as configured, even if it is a private address.
+  The credentials, query string and fragment checks still apply.
+- An empty or missing list keeps the default behavior above: the
+  literal-address check in production, none on the development server.
 
 ## Show status on a page
 
 Point the components at either source with `baseUrl` and `flavor`. Use
 `flavor="standalone"` for a standalone deployment (the default) and
-`flavor="emdash"` for the engine plugin on the same site:
+`flavor="emdash"` for the plugin on the same site:
 
 ```astro title="src/pages/status.astro"
 ---

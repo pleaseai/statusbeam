@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Superseded by [ADR-0005](0005-emdash-native-plugin.md)
 
 Accepted on 2026-10-22, after the probe-semantics spike revised it (see Spike results).
 

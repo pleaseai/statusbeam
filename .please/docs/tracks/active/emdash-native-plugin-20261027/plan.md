@@ -182,6 +182,10 @@ of the host's).
   Deferred: CI green on the PR - needs the pushed PR; zizmor not installed locally (mise shim has no version), so only actionlint ran.
   Files outside `Files:`: packages/emdash-plugin/tests/block.test.ts (descriptor specifier pin), apps/emdash-demo/README.md. The demo's `probe/` still uses `@emdash-cms/plugin-cli` for the ADR-0004 spike modes and is untouched; those modes do not use the removed entry.
 
+- [x] (2026-10-27 20:00 KST) T010 Record ADR-0005 and update the EmDash docs
+  Evidence: `bun run .../doc-lint.ts docs/adr/0005-emdash-native-plugin.md` -> "All documents match their schema (0 warning(s))"; `bun run --filter '@statusbeam/docs' build` -> 9 pages built, exit 0, `dist/guides/emdash` present; `bun run --cwd apps/docs lint:docs` -> 7 files lint clean. ADR-0004 diff is the status line only; index lists 0004 Superseded and 0005 Accepted. The guide shows `plugins: [statusbeam()]` as a trusted dependency and says a plugin-hosted page goes down with the CMS.
+  Files outside `Files:`: docs/adr/index.md, apps/docs/src/content/docs/guides/emdash.mdx (both listed in the task). Not changed: .please/docs/knowledge/tech-stack.md and the completed emdash-distribution track (history), apps/emdash-demo README and probe (ADR-0004 spike record), tech-debt-tracker.md.
+
 ## Decision Log
 
 - 2026-10-27: no separate architecture agents; the exploration reports settled the strategy questions. T010 merges last so it describes what shipped.
