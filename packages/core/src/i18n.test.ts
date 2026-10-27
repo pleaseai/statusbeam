@@ -69,6 +69,7 @@ describe('getDict', () => {
       expect(dict.admin.monitors.remove('API')).toContain('API')
       expect(dict.admin.monitors.slugRenamed('old-slug')).toContain('old-slug')
       expect(dict.admin.monitors.duplicateSlug('dup-slug')).toContain('dup-slug')
+      expect(Object.keys(dict.admin.monitors.test)).toHaveLength(8)
     }
   })
 

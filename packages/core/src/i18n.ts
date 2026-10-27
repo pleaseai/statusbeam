@@ -123,6 +123,20 @@ export interface AdminDict {
     wholeNumbers: string
     /** A monitor whose kind has settings this editor does not show. */
     keepsOtherSettings: string
+    /** The "Test this monitor" action at the foot of a monitor. */
+    test: {
+      action: string
+      running: string
+      /** Labels of the figures in a result. */
+      status: string
+      responseTime: string
+      responseCode: string
+      /** Response code shown when the request never completed. */
+      noResponse: string
+      error: string
+      /** The test request itself failed (network or server). */
+      failed: string
+    }
   }
   secrets: {
     heading: string
@@ -226,6 +240,16 @@ const en: Dict = {
       wholeNumber: 'Enter a whole number.',
       wholeNumbers: 'Enter whole numbers separated by commas.',
       keepsOtherSettings: 'Settings this editor does not show are kept as they are.',
+      test: {
+        action: 'Test this monitor',
+        running: 'Testing…',
+        status: 'Status',
+        responseTime: 'Response time',
+        responseCode: 'Response code',
+        noResponse: 'none',
+        error: 'Error',
+        failed: 'Could not run the test. Try again.',
+      },
     },
     secrets: {
       heading: 'Secrets',
@@ -330,6 +354,16 @@ const zh: Dict = {
       wholeNumber: '请输入整数。',
       wholeNumbers: '请输入以逗号分隔的整数。',
       keepsOtherSettings: '此编辑器未显示的设置将保持不变。',
+      test: {
+        action: '测试此监控',
+        running: '正在测试…',
+        status: '状态',
+        responseTime: '响应时间',
+        responseCode: '响应代码',
+        noResponse: '无',
+        error: '错误',
+        failed: '无法运行测试，请重试。',
+      },
     },
     secrets: {
       heading: '密钥',
@@ -434,6 +468,16 @@ const ja: Dict = {
       wholeNumber: '整数を入力してください。',
       wholeNumbers: 'カンマ区切りの整数を入力してください。',
       keepsOtherSettings: 'このエディターに表示されない設定はそのまま保持されます。',
+      test: {
+        action: 'このモニターをテスト',
+        running: 'テスト中…',
+        status: 'ステータス',
+        responseTime: '応答時間',
+        responseCode: '応答コード',
+        noResponse: 'なし',
+        error: 'エラー',
+        failed: 'テストを実行できませんでした。もう一度お試しください。',
+      },
     },
     secrets: {
       heading: 'シークレット',
@@ -538,6 +582,16 @@ const ko: Dict = {
       wholeNumber: '정수를 입력하세요.',
       wholeNumbers: '쉼표로 구분한 정수를 입력하세요.',
       keepsOtherSettings: '이 편집기에 표시되지 않는 설정은 그대로 유지됩니다.',
+      test: {
+        action: '이 모니터 테스트',
+        running: '테스트 중…',
+        status: '상태',
+        responseTime: '응답 시간',
+        responseCode: '응답 코드',
+        noResponse: '없음',
+        error: '오류',
+        failed: '테스트를 실행할 수 없습니다. 다시 시도하세요.',
+      },
     },
     secrets: {
       heading: '시크릿',

@@ -391,7 +391,7 @@ describe('text and direction (NFR-1)', () => {
     const css = readFileSync(require.resolve('@emdash-cms/admin/styles.css'), 'utf8')
     const escaped = (name: string) => `.${name.replace(/([^\w-])/g, '\\$1')}`
     const missing = new Set<string>()
-    for (const file of ['MonitorsPage.tsx', 'AdminGate.tsx', 'index.tsx']) {
+    for (const file of ['MonitorsPage.tsx', 'AdminGate.tsx', 'index.tsx', 'MonitorActions.tsx', 'TestMonitor.tsx']) {
       const source = readFileSync(new URL(`../src/admin/${file}`, import.meta.url), 'utf8')
       for (const match of source.matchAll(/className=(?:"([^"]+)"|\{([^}]*)\})/g)) {
         const names = match[1] ? [match[1]] : [...(match[2] ?? '').matchAll(/[?:]\s*'([^']+)'/g)].map(literal => literal[1]!)
