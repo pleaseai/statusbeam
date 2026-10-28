@@ -19,6 +19,7 @@ import {
   isRenamed,
   newRow,
   NO_FINDINGS,
+  withCheckKind,
 } from './editor'
 import { useAdminDict } from './i18n'
 import { MonitorActions } from './MonitorActions'
@@ -32,10 +33,14 @@ interface Loaded {
   draft: Draft
   revision: string | null
   secretsSet: SecretsSet
+  /** A configuration is stored but could not be loaded, so the draft is empty and saving would replace it. */
+  unreadable: boolean
 }
 
-function loadedFrom(response: Pick<ConfigResponse, 'config' | 'revision' | 'secretsSet'>): Loaded {
-  return { draft: draftFromConfig(response.config), revision: response.revision, secretsSet: response.secretsSet }
+function loadedFrom(response: Pick<ConfigResponse, 'config' | 'revision' | 'secretsSet'> & Partial<Pick<ConfigResponse, 'issues'>>): Loaded {
+  const config = 'config' in response ? response.config : null
+  const unreadable = config === null && response.revision !== null && (response.issues?.length ?? 0) > 0
+  return { draft: draftFromConfig(config), revision: response.revision, secretsSet: response.secretsSet, unreadable }
 }
 
 /** The monitors page: an administrator adds, edits and removes monitors and saves them (FR-7). */
@@ -95,6 +100,9 @@ function MonitorsEditor() {
   }
 
   const save = async () => {
+    if (loaded.unreadable) {
+      return
+    }
     setSaveError(null)
     setScheduleError(null)
     const local = clientFindings(draft, t)
@@ -150,9 +158,10 @@ function MonitorsEditor() {
       {notice === 'scheduleFailed' && <Banner variant="alert" description={t.monitors.savedScheduleFailed(scheduleError ?? '')} role="alert" />}
       {notice === 'invalid' && <Banner variant="error" description={t.monitors.notSavedInvalid} role="alert" />}
       {notice === 'stale' && <Banner variant="alert" description={t.monitors.notSavedStale} role="alert" />}
+      {loaded.unreadable && <Banner variant="alert" description={t.monitors.storedUnreadable} role="alert" />}
       {saveError !== null && <Banner variant="error" description={saveError} role="alert" />}
 
-      <fieldset disabled={saving} className="m-0 min-w-0 space-y-6 border-0 p-0">
+      <fieldset disabled={saving || loaded.unreadable} className="m-0 min-w-0 space-y-6 border-0 p-0">
         <Input
           label={t.monitors.pageName}
           value={draft.name}
@@ -178,7 +187,7 @@ function MonitorsEditor() {
               }}
             />
           ))}
-          <Button type="button" variant="secondary" disabled={saving} onClick={() => edit(current => ({ ...current, rows: [...current.rows, newRow()] }))}>
+          <Button type="button" variant="secondary" disabled={saving || loaded.unreadable} onClick={() => edit(current => ({ ...current, rows: [...current.rows, newRow()] }))}>
             {t.monitors.add}
           </Button>
         </section>
@@ -187,7 +196,7 @@ function MonitorsEditor() {
       <OtherFindings t={t} findings={findings} />
 
       <div className="flex items-center justify-end gap-3">
-        <Button type="submit" variant="primary" disabled={saving}>
+        <Button type="submit" variant="primary" disabled={saving || loaded.unreadable}>
           {saving ? t.monitors.saving : t.monitors.save}
         </Button>
       </div>
@@ -245,7 +254,7 @@ function MonitorCard({ t, index, row, findings, busy, onChange, onRemove }: Moni
           value={typeof row.monitor.check === 'string' ? row.monitor.check : 'http'}
           items={Object.fromEntries(checkKindSchema.options.map(kind => [kind, kind]))}
           error={errorOf('check')}
-          onValueChange={value => onChange(current => ({ ...current, monitor: { ...current.monitor, check: value } }))}
+          onValueChange={value => value !== null && onChange(current => ({ ...current, monitor: withCheckKind(current.monitor, value) }))}
         />
         <Input label={t.monitors.field.url} dir="ltr" type="url" value={text('url')} error={errorOf('url')} onChange={event => set('url', event.target.value)} />
         <Input label={t.monitors.field.method} dir="ltr" value={text('method')} placeholder="GET" error={errorOf('method')} onChange={event => set('method', event.target.value)} />

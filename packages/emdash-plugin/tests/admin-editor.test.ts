@@ -1,6 +1,6 @@
 import { getDict } from '@statusbeam/core'
 import { describe, expect, it } from 'bun:test'
-import { buildConfig, buildMonitor, clientFindings, draftFromConfig, effectiveSlug, fieldKeyOf, findingsFromIssues, findingsWithoutRow, isRenamed, newRow } from '../src/admin/editor'
+import { buildConfig, buildMonitor, clientFindings, draftFromConfig, effectiveSlug, fieldKeyOf, findingsFromIssues, findingsWithoutRow, isRenamed, newRow, withCheckKind } from '../src/admin/editor'
 
 const t = getDict('en').admin
 
@@ -95,5 +95,18 @@ describe('findingsWithoutRow', () => {
       { severity: 'error', path: 'sites[0].sentry.org', message: 'first' },
       { severity: 'error', path: 'notifications.delivery', message: 'kept' },
     ])
+  })
+})
+
+describe('withCheckKind', () => {
+  it('drops the settings block the new kind does not allow and keeps the rest', () => {
+    const monitor = { name: 'A', check: 'sentry', sentry: { org: 'acme' }, aigateway: { x: 1 }, extra: 1 }
+    expect(withCheckKind(monitor, 'http')).toEqual({ name: 'A', check: 'http', extra: 1 })
+    expect(withCheckKind(monitor, 'aigateway')).toEqual({ name: 'A', check: 'aigateway', aigateway: { x: 1 }, extra: 1 })
+  })
+
+  it('keeps every block when the kind is unchanged', () => {
+    const monitor = { name: 'A', check: 'sentry', sentry: { org: 'acme' } }
+    expect(withCheckKind(monitor, 'sentry')).toEqual(monitor)
   })
 })

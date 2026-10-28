@@ -290,6 +290,20 @@ describe('renaming a slug (AC-011)', () => {
   })
 })
 
+describe('an unreadable stored configuration', () => {
+  it('disables saving and sends no save request', async () => {
+    withConfig(null, { revision: 'r7', issues: [{ severity: 'error', path: '', message: 'The stored configuration is larger than the 65536 bytes the editor holds. It is left unchanged.' }] })
+    await openPage()
+
+    await screen.findByText(en.monitors.storedUnreadable)
+    expect((screen.getByRole('button', { name: en.monitors.save }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: en.monitors.add }) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.submit(screen.getByRole('button', { name: en.monitors.save }).closest('form')!)
+    expect(posts()).toHaveLength(0)
+    expect(server.requests.some(request => request.url.endsWith('admin/save'))).toBe(false)
+  })
+})
+
 describe('a stale save (AC-011)', () => {
   it('shows the newer configuration and says the edit was not saved', async () => {
     withConfig(TWO_MONITORS)

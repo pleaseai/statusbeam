@@ -241,6 +241,23 @@ export function hasHiddenSettings(monitor: Monitor): boolean {
   return Object.keys(monitor).some(key => !(MONITOR_FIELDS as readonly string[]).includes(key))
 }
 
+/** The settings block that is only valid with one check kind. */
+const KIND_BLOCKS = { sentry: 'sentry', aigateway: 'aigateway' } as const
+
+/** Changes a monitor's check kind, dropping hidden settings blocks the new kind does not allow (core rejects them). */
+export function withCheckKind(monitor: Monitor, check: string): Monitor {
+  const next: Monitor = { ...monitor, check }
+  if (monitor.check === check) {
+    return next
+  }
+  for (const [block, kind] of Object.entries(KIND_BLOCKS)) {
+    if (check !== kind) {
+      delete next[block]
+    }
+  }
+  return next
+}
+
 /** Whether saving this monitor would store it as a new one: it had a slug when loaded and has a different one now. */
 export function isRenamed(row: MonitorRow): boolean {
   return row.savedSlug !== null && effectiveSlug(row.monitor) !== row.savedSlug
