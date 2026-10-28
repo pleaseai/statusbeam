@@ -42,9 +42,8 @@ bun run dev:native-cf -- --host 127.0.0.1 --port 4431
 
 To sign in, open `/_emdash/api/setup/dev-bypass?redirect=/_emdash/admin`. The status
 overview is at `/_emdash/admin/plugins/statusbeam/`, the monitor editor at `.../monitors`, and the
-widget is on the dashboard. The
-public `spike-probe?target=<name>&body=1` and `spike-cron` routes live under
-`/_emdash/api/plugins/statusbeam/`. The 2026-10-27 results and the targets are in
+widget is on the dashboard. The T001 spike used `spike-probe` and `spike-cron`
+routes, which the native plugin no longer registers. The 2026-10-27 results and the targets are in
 [`results/2026-10-27/native-plugin.md`](results/2026-10-27/native-plugin.md).
 
 ## Status components page
