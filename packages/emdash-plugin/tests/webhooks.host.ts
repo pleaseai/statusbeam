@@ -131,6 +131,12 @@ describe('webhook authentication fails closed', () => {
     expect(await stored(blank)).toBe(JSON.stringify([[], {}]))
   })
 
+  it('trims a stored secret, so a stray space does not lock out the matching token', async () => {
+    const padded = await newWebhookHost({ secret: ' abc ' })
+    expect((await post(padded, { token: 'abc' })).status).toBe(200)
+    expect(await post(padded, { token: 'wrong' })).toMatchObject({ status: 401, text: 'Unauthorized' })
+  })
+
   it('rejects a mismatched, empty, absent, wrong-length or non-ASCII token before grading or storage, leaving the status unchanged', async () => {
     const host = await newWebhookHost()
     expect((await post(host)).status).toBe(200)

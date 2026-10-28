@@ -43,8 +43,9 @@ Three more facts from the EmDash 1.3.1 source and the T001 spike
 (`apps/emdash-demo/results/2026-10-27/native-plugin.md`) shaped the design:
 
 1. **A native plugin can run in `plugins: []` with no sandbox runner.** It has no
-   subrequest, CPU, or wall-time cap per invocation, so one scheduled task can probe every
-   monitor.
+   subrequest or CPU cap per invocation. Each hook runs under EmDash's hook timeout (5 s by
+   default), which the plugin raises to 25 s for the cron hook, so one scheduled task can probe
+   every monitor.
 2. **The host exports `createUnrestrictedHttpAccess`.** It wraps a caller-supplied `fetch`
    with the host's DNS-aware SSRF guard and its 5-hop redirect cap. A fetch that resolves at
    response headers and cancels the body therefore measures time to headers, as the

@@ -230,10 +230,11 @@ export async function readSettings(ctx: Pick<PluginContext, 'settings'>): Promis
   const { destinations, invalid } = destinationsFrom(values)
   const stored = storedConfigFrom(values)
   const secret = values.get(WEBHOOK_SECRET_KEY)
+  const trimmedSecret = typeof secret === 'string' ? secret.trim() : ''
   return {
     config: stored.status === 'valid' ? stored.config : null,
     destinations,
     invalidDestinations: invalid,
-    webhookSecret: typeof secret === 'string' && secret.trim() !== '' ? secret : null,
+    webhookSecret: trimmedSecret !== '' ? trimmedSecret : null,
   }
 }
