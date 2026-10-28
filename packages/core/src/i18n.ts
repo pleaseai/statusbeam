@@ -100,6 +100,12 @@ export interface AdminDict {
     /** Nothing was written because someone else saved first; the newer configuration is shown. */
     notSavedStale: string
     storedUnreadable: string
+    /** Button that starts replacing an unreadable stored configuration. */
+    replaceStored: string
+    /** Button that confirms the replacement. */
+    replaceConfirm: string
+    /** Button that backs out of the replacement. */
+    replaceCancel: string
     /** The request failed; the edits are still in the form. */
     saveFailed: string
     /** Saved, but the check schedule could not be updated. */
@@ -240,7 +246,10 @@ const en: Dict = {
       saved: 'Saved.',
       notSavedInvalid: 'Not saved. Fix the marked fields and save again.',
       notSavedStale: 'Not saved. Someone else changed the configuration first, so your edit was discarded. The newer configuration is shown.',
-      storedUnreadable: 'Saving is disabled. The stored configuration could not be loaded into this editor, and saving would replace it with an empty one. Fix or clear it on the plugin settings page first.',
+      storedUnreadable: 'Saving is disabled. The stored configuration could not be loaded into this editor, and saving would replace it with an empty one. To start over, replace the stored configuration; nothing is changed until you save.',
+      replaceStored: 'Replace the stored configuration',
+      replaceConfirm: 'Replace it',
+      replaceCancel: 'Cancel',
       saveFailed: 'Could not save. Your edits are still here; try again.',
       savedScheduleFailed: error => `Saved, but the check schedule could not be updated: ${error}. Save again to retry.`,
       otherFindings: 'Other findings',
@@ -366,7 +375,10 @@ const zh: Dict = {
       saved: '已保存。',
       notSavedInvalid: '未保存。请修正标记的字段后重新保存。',
       notSavedStale: '未保存。其他人已先修改了配置，因此您的修改已被丢弃。下方显示的是较新的配置。',
-      storedUnreadable: '已禁用保存。存储的配置无法载入此编辑器，保存会用空配置覆盖它。请先在插件设置页面中修复或清除该配置。',
+      storedUnreadable: '已禁用保存。存储的配置无法载入此编辑器，保存会用空配置覆盖它。如需重新开始，请替换已存储的配置；在您保存之前不会有任何更改。',
+      replaceStored: '替换已存储的配置',
+      replaceConfirm: '确认替换',
+      replaceCancel: '取消',
       saveFailed: '无法保存。您的修改仍保留在此，请重试。',
       savedScheduleFailed: error => `已保存，但无法更新检查计划：${error}。请再次保存以重试。`,
       otherFindings: '其他问题',
@@ -492,7 +504,10 @@ const ja: Dict = {
       saved: '保存しました。',
       notSavedInvalid: '保存されていません。マークされた項目を修正して、もう一度保存してください。',
       notSavedStale: '保存されていません。先に他のユーザーが設定を変更したため、あなたの編集は破棄されました。新しい設定を表示しています。',
-      storedUnreadable: '保存は無効です。保存済みの設定をこのエディターに読み込めず、保存すると空の設定で上書きされます。先にプラグイン設定ページで修正またはクリアしてください。',
+      storedUnreadable: '保存は無効です。保存済みの設定をこのエディターに読み込めず、保存すると空の設定で上書きされます。やり直す場合は保存済みの設定を置き換えてください。保存するまで何も変更されません。',
+      replaceStored: '保存済みの設定を置き換える',
+      replaceConfirm: '置き換える',
+      replaceCancel: 'キャンセル',
       saveFailed: '保存できませんでした。編集内容はそのまま残っています。もう一度お試しください。',
       savedScheduleFailed: error => `保存しましたが、チェックのスケジュールを更新できませんでした: ${error}。もう一度保存して再試行してください。`,
       otherFindings: 'その他の指摘',
@@ -618,7 +633,10 @@ const ko: Dict = {
       saved: '저장했습니다.',
       notSavedInvalid: '저장하지 않았습니다. 표시된 필드를 고친 뒤 다시 저장하세요.',
       notSavedStale: '저장하지 않았습니다. 다른 사람이 먼저 설정을 바꿨으므로 내 수정은 버려졌습니다. 더 새로운 설정을 보여 줍니다.',
-      storedUnreadable: '저장할 수 없습니다. 저장된 설정을 이 편집기로 불러오지 못했으며, 저장하면 빈 설정으로 덮어쓰게 됩니다. 먼저 플러그인 설정 페이지에서 설정을 고치거나 지우세요.',
+      storedUnreadable: '저장할 수 없습니다. 저장된 설정을 이 편집기로 불러오지 못했으며, 저장하면 빈 설정으로 덮어쓰게 됩니다. 처음부터 다시 시작하려면 저장된 설정을 교체하세요. 저장하기 전에는 아무것도 바뀌지 않습니다.',
+      replaceStored: '저장된 설정 교체',
+      replaceConfirm: '교체',
+      replaceCancel: '취소',
       saveFailed: '저장하지 못했습니다. 수정 내용은 그대로 남아 있으니 다시 시도하세요.',
       savedScheduleFailed: error => `저장했지만 점검 일정을 갱신하지 못했습니다: ${error}. 다시 저장해 재시도하세요.`,
       otherFindings: '기타 항목',

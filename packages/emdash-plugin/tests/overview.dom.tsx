@@ -194,6 +194,13 @@ describe('dashboard widget (AC-016)', () => {
     expect(screen.getByRole('link', { name: dict.admin.overview.view })).toBeTruthy()
   })
 
+  it('reports a rejected stored configuration instead of the empty state', async () => {
+    server.overview = { configured: false, configIssues: [{ severity: 'error', path: 'sites[0].url', message: 'Invalid URL' }], updatedAt: null, status: 'operational', monitors: [] }
+    render(<StatusWidget />)
+    expect((await screen.findByRole('alert')).textContent).toContain(dict.admin.overview.configIssues)
+    expect(screen.queryByText(dict.admin.overview.empty)).toBeNull()
+  })
+
   it('reports a failed request', async () => {
     server.failing = true
     render(<StatusWidget />)

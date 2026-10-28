@@ -61,6 +61,7 @@ function MonitorsEditor() {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [scheduleError, setScheduleError] = useState<string | null>(null)
+  const [confirmingReplace, setConfirmingReplace] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -159,6 +160,28 @@ function MonitorsEditor() {
       {notice === 'invalid' && <Banner variant="error" description={t.monitors.notSavedInvalid} role="alert" />}
       {notice === 'stale' && <Banner variant="alert" description={t.monitors.notSavedStale} role="alert" />}
       {loaded.unreadable && <Banner variant="alert" description={t.monitors.storedUnreadable} role="alert" />}
+      {loaded.unreadable && (
+        <div className="flex items-center gap-3">
+          {confirmingReplace
+            ? (
+                <>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    onClick={() => {
+                      setLoaded(prev => prev && { ...prev, unreadable: false })
+                      setFindings(NO_FINDINGS)
+                      setConfirmingReplace(false)
+                    }}
+                  >
+                    {t.monitors.replaceConfirm}
+                  </Button>
+                  <Button type="button" variant="secondary" onClick={() => setConfirmingReplace(false)}>{t.monitors.replaceCancel}</Button>
+                </>
+              )
+            : <Button type="button" variant="secondary" onClick={() => setConfirmingReplace(true)}>{t.monitors.replaceStored}</Button>}
+        </div>
+      )}
       {saveError !== null && <Banner variant="error" description={saveError} role="alert" />}
 
       <fieldset disabled={saving || loaded.unreadable} className="m-0 min-w-0 space-y-6 border-0 p-0">

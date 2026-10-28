@@ -302,6 +302,30 @@ describe('an unreadable stored configuration', () => {
     expect(posts()).toHaveLength(0)
     expect(server.requests.some(request => request.url.endsWith('admin/save'))).toBe(false)
   })
+
+  it('unlocks an empty editor after a confirmed replace and saves with the loaded revision', async () => {
+    withConfig(null, { revision: 'r7', issues: [{ severity: 'error', path: '', message: 'Not a mapping.' }] })
+    server.save = body => ({ saved: true, revision: 'r8', config: body.config, issues: [], schedule: null })
+    await openPage()
+    await screen.findByText(en.monitors.storedUnreadable)
+
+    click(en.monitors.replaceStored)
+    expect((screen.getByRole('button', { name: en.monitors.save }) as HTMLButtonElement).disabled).toBe(true)
+    click(en.monitors.replaceCancel)
+    expect(screen.queryByRole('button', { name: en.monitors.replaceConfirm })).toBeNull()
+    click(en.monitors.replaceStored)
+    click(en.monitors.replaceConfirm)
+
+    expect(screen.queryByText(en.monitors.storedUnreadable)).toBeNull()
+    click(en.monitors.add)
+    type(screen.getByLabelText(en.monitors.field.name, { selector: 'input' }), 'API')
+    type(screen.getByLabelText(en.monitors.field.url), 'https://api.example.com')
+    click(en.monitors.save)
+    await screen.findByText(en.monitors.saved)
+    expect(posts()).toHaveLength(1)
+    expect(posts()[0]!.url).toEndWith('admin/save')
+    expect(posts()[0]!.body).toMatchObject({ revision: 'r7' })
+  })
 })
 
 describe('a stale save (AC-011)', () => {

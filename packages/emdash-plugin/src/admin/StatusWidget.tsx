@@ -44,14 +44,16 @@ function Summary() {
   }
   return (
     <div className="space-y-2 p-4">
-      {overview.monitors.length === 0
-        ? <p className="text-sm text-kumo-subtle">{t.overview.empty}</p>
-        : (
-            <>
-              <p className="text-lg font-medium" role="status">{dict.banner[overview.status]}</p>
-              <p className="text-sm text-kumo-subtle">{parts.join(' · ')}</p>
-            </>
-          )}
+      {!overview.configured && overview.configIssues.length > 0
+        ? <Banner variant="error" description={t.overview.configIssues} role="alert" />
+        : overview.monitors.length === 0
+          ? <p className="text-sm text-kumo-subtle">{t.overview.empty}</p>
+          : (
+              <>
+                <p className="text-lg font-medium" role="status">{dict.banner[overview.status]}</p>
+                <p className="text-sm text-kumo-subtle">{parts.join(' · ')}</p>
+              </>
+            )}
       <a className="text-sm text-kumo-link underline" href={OVERVIEW_PAGE_HREF}>{t.overview.view}</a>
     </div>
   )
