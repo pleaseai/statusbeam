@@ -9,7 +9,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, mock } from 'bu
  * return the role under test. The real `apiFetch` runs on top of a stubbed
  * `globalThis.fetch`, which answers from an in-test server that records every
  * request, so the recorded headers are the ones `apiFetch` really adds. The module is spread from the
- * real one because `mock.module` replaces it for every later test file too.
+ * real one that `dom-preload.ts` captured, because `mock.module` in any earlier test file replaces it.
  */
 
 interface Recorded { method: string, url: string, headers: Headers, body: unknown }
@@ -40,7 +40,7 @@ async function fakeFetch(input: string | URL | Request, init?: RequestInit): Pro
 let MonitorsPage: typeof import('../src/admin/MonitorsPage').MonitorsPage
 
 beforeAll(async () => {
-  const real = await import('@emdash-cms/admin')
+  const real = (globalThis as unknown as { __realEmdashAdmin: typeof import('@emdash-cms/admin') }).__realEmdashAdmin
   mock.module('@emdash-cms/admin', () => ({
     ...real,
     useCurrentUser: () => ({ isPending: false, isError: false, data: { id: 'u1', email: 'a@example.com', role: user.role } }),

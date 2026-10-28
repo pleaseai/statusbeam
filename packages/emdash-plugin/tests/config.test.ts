@@ -1,8 +1,10 @@
 import type { SecretsView } from '../src/config'
+import type { MonitorState } from '../src/snapshot'
 import { describe, expect, it } from 'bun:test'
 import { clearConfigError, CONFIG_ERROR_KEY, MAX_MONITORS, readConfigError, secretsFrom, validatePluginConfig } from '../src/config'
 import { runMaintenance } from '../src/run'
 import { reconcileSchedule } from '../src/schedule'
+import { advanceMonitor } from '../src/snapshot'
 import { createFakeContext, monitorNames, monitorsYaml, runFake } from './fake-context'
 
 const NONE: SecretsView = { destinations: 0, sentryToken: false, invalidEntries: [], extraSlackUrls: 0 }
@@ -31,14 +33,34 @@ describe('validatePluginConfig', () => {
   })
 
   it('accepts MAX_MONITORS monitors and rejects one more as an error on sites', () => {
-    expect(MAX_MONITORS).toBe(400)
+    expect(MAX_MONITORS).toBe(200)
     expect(validatePluginConfig(monitorsYaml(monitorNames(MAX_MONITORS)), NONE)).toMatchObject({ ok: true, issues: [] })
 
     const over = validatePluginConfig(monitorsYaml(monitorNames(MAX_MONITORS + 1)), NONE)
     expect(over.ok).toBe(false)
     expect(over.config).toBeUndefined()
-    expect(over.issues).toEqual([expect.objectContaining({ severity: 'error', path: 'sites', message: expect.stringContaining('401 monitors') })])
-    expect(over.issues[0]!.message).toContain('at most 400')
+    expect(over.issues).toEqual([expect.objectContaining({ severity: 'error', path: 'sites', message: expect.stringContaining('201 monitors') })])
+    expect(over.issues[0]!.message).toContain('at most 200')
+  })
+
+  it('keeps the poll snapshot of MAX_MONITORS fully aged monitors under the 2,000,000 byte D1 row limit', () => {
+    const DAY_MS = 86_400_000
+    const end = Date.UTC(2026, 5, 30, 12)
+    const error = 'x'.repeat(300)
+    const monitors: MonitorState[] = monitorNames(MAX_MONITORS).map((name, index) => {
+      const slug = `${name}-service-${index}`.padEnd(60, 'a').slice(0, 60)
+      let state: MonitorState | undefined
+      for (let offset = 95; offset >= 0; offset--) {
+        const at = new Date(end - offset * DAY_MS)
+        const date = at.toISOString().slice(0, 10)
+        const result = { slug, status: 'up' as const, code: 200, responseTime: 123, checkedAt: at.toISOString(), error }
+        state = advanceMonitor(state, result, [{ slug, date, up: 287, degraded: 0, down: 1, total: 288 }], at)
+      }
+      return state!
+    })
+    expect(monitors[0]!.days.filter(day => day.status !== null).length).toBeGreaterThanOrEqual(90)
+    const snapshot = { version: 2, updatedAt: new Date(end).toISOString(), monitors, deliveries: [] }
+    expect(JSON.stringify(snapshot).length).toBeLessThan(2_000_000)
   })
 
   it('rejects delivery: queue as an error on notifications.delivery (AC-018)', () => {

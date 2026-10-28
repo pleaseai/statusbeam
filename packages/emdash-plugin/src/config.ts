@@ -63,10 +63,11 @@ export function secretsFrom(values: Map<string, unknown>): { secrets: SecretsVie
 
 /**
  * Most monitors the plugin accepts. All monitor state is one `snapshot:poll` KV value,
- * stored as one `options` row, and D1 limits a row to 2,000,000 bytes. At about 4.4 KB
- * per monitor that row fails to write from about 455 monitors. Standalone has no such limit.
+ * stored as one `options` row, and D1 limits a row to 2,000,000 bytes. Once 90 days of
+ * history fill in, a monitor takes about 6 to 8 KB (5.9 KB at best, 7.9 KB with long slugs
+ * and errors), so 200 monitors stay under the limit with headroom. Standalone has no such limit.
  */
-export const MAX_MONITORS = 400
+export const MAX_MONITORS = 200
 
 const NOT_YAML = 'Notification URLs belong in the encrypted plugin settings, not in the YAML'
 
