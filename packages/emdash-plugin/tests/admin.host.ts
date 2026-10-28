@@ -170,6 +170,17 @@ describe('read the configuration', () => {
     expect(data.issues).toEqual([expect.objectContaining({ severity: 'error', path: '' })])
   })
 
+  it('returns no object, but an error, for a stored configuration with a recursive alias', async () => {
+    const host = await newHost(ok)
+    await host.setConfig(`${yamlOf({ name: 'Test', sites: [{ name: 'One', url: 'https://example.com' }] })}extra: &a\n  ref: *a\n`)
+    const { status, data } = await getConfig(host)
+    expect(status).toBe(200)
+    expect(data.config).toBeNull()
+    expect(typeof data.revision).toBe('string')
+    expect(data.issues).toEqual([expect.objectContaining({ severity: 'error', path: '' })])
+    expect(() => JSON.stringify(data)).not.toThrow()
+  })
+
   it('leaves a stored configuration above the size limit unreadable here and unchanged', async () => {
     const host = await newHost(ok)
     const big = `${yamlOf(doc(['alpha']))}# ${'x'.repeat(MAX_YAML_BYTES)}\n`

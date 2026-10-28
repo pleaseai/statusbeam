@@ -186,9 +186,14 @@ async function readConfig(ctx: Pick<PluginContext, 'settings'>): Promise<ConfigR
   let parsed: unknown
   try {
     parsed = parseYaml(yaml)
+    // A recursive alias parses to a cyclic object that cannot be sent as JSON.
+    JSON.stringify(parsed)
   }
   catch {
     parsed = null
+  }
+  if (parsed === null && !issues.some(issue => issue.severity === 'error')) {
+    issues.push(error('', 'The stored configuration cannot be shown in the editor (for example a recursive YAML alias). It is left unchanged.'))
   }
   return { config: isDocument(parsed) ? parsed : null, revision, secretsSet, issues }
 }
