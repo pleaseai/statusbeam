@@ -175,6 +175,8 @@ export interface AdminDict {
     manage: string
     /** Link from the widget to the overview page. */
     view: string
+    /** Headline while every monitor is still waiting for its first check. */
+    waiting: string
   }
 }
 
@@ -303,6 +305,7 @@ const en: Dict = {
       uptime: 'Uptime (90 days)',
       manage: 'Edit monitors',
       view: 'View the status overview',
+      waiting: 'Waiting for the first check',
     },
   },
 }
@@ -432,6 +435,7 @@ const zh: Dict = {
       uptime: '可用率（90 天）',
       manage: '编辑监控项',
       view: '查看状态总览',
+      waiting: '等待首次检查',
     },
   },
 }
@@ -561,6 +565,7 @@ const ja: Dict = {
       uptime: '稼働率（90日）',
       manage: 'モニターを編集',
       view: 'ステータス概要を表示',
+      waiting: '最初のチェックを待機中',
     },
   },
 }
@@ -690,6 +695,7 @@ const ko: Dict = {
       uptime: '가동률(90일)',
       manage: '모니터 편집',
       view: '상태 개요 보기',
+      waiting: '첫 번째 확인을 기다리는 중',
     },
   },
 }

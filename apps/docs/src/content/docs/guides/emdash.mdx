@@ -50,7 +50,7 @@ bun add @statusbeam/emdash-plugin
 
 Your site provides the peer dependencies: `emdash` (`~1.3.1`), `astro` (`^7`),
 `react` (`^19`), `@cloudflare/kumo` (`2.6.0`) and `@emdash-cms/admin`
-(`^1.3.1`). The `emdash` range is pinned to `~1.3.1` on purpose: the plugin
+(`~1.3.1`). The `emdash` range is pinned to `~1.3.1` on purpose: the plugin
 relies on an EmDash export that the EmDash docs do not cover, so re-check the
 plugin after you upgrade EmDash.
 
@@ -115,8 +115,8 @@ administrators: a non-administrator sees a refusal and no configuration.
 - **Monitors** (`/_emdash/admin/plugins/statusbeam/monitors`) edits the monitor
   configuration.
 - **A dashboard widget** shows the overall status and the counts of operational,
-  degraded and major-outage monitors. It reads "Waiting for the first check"
-  until the first run completes.
+  degraded and major-outage monitors. The widget and the Status page both read
+  "Waiting for the first check" until the first run completes.
 
 The page text follows the admin language in English, Chinese, Japanese and
 Korean, and falls back to English. The sidebar labels "Status" and "Monitors"

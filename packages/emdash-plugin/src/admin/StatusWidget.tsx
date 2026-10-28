@@ -33,6 +33,7 @@ function Summary() {
   const { overview } = state
   const parts: string[] = []
   const pending = overview.monitors.filter(monitor => monitor.pending).length
+  const allPending = pending === overview.monitors.length
   for (const key of ['up', 'degraded', 'down'] as const) {
     const n = count(overview.monitors, key)
     if (n > 0) {
@@ -50,7 +51,7 @@ function Summary() {
           ? <p className="text-sm text-kumo-subtle">{t.overview.empty}</p>
           : (
               <>
-                <p className="text-lg font-medium" role="status">{dict.banner[overview.status]}</p>
+                <p className="text-lg font-medium" role="status">{allPending ? t.overview.waiting : dict.banner[overview.status]}</p>
                 <p className="text-sm text-kumo-subtle">{parts.join(' · ')}</p>
               </>
             )}

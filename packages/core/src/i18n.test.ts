@@ -70,7 +70,7 @@ describe('getDict', () => {
       expect(dict.admin.monitors.slugRenamed('old-slug')).toContain('old-slug')
       expect(dict.admin.monitors.duplicateSlug('dup-slug')).toContain('dup-slug')
       expect(Object.keys(dict.admin.monitors.test)).toHaveLength(9)
-      expect(Object.keys(dict.admin.overview)).toHaveLength(6)
+      expect(Object.keys(dict.admin.overview)).toHaveLength(7)
     }
   })
 

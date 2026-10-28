@@ -145,6 +145,22 @@ describe('status overview page (AC-014)', () => {
     expect(screen.queryByText(dict.banner.operational)).toBeNull()
   })
 
+  it('reads "Waiting for the first check" instead of a banner while every monitor is pending', async () => {
+    server.overview = ready([pendingMonitor('a', 'A'), pendingMonitor('b', 'B')])
+    render(<StatusPage />)
+    await screen.findByRole('region', { name: 'A' })
+    expect(screen.getByRole('status').textContent).toBe(dict.admin.overview.waiting)
+    expect(screen.queryByText(dict.banner.operational)).toBeNull()
+  })
+
+  it('keeps the banner when checked and pending monitors are mixed', async () => {
+    server.overview = ready([monitor({ slug: 'a', name: 'A' }), pendingMonitor('b', 'B')])
+    render(<StatusPage />)
+    await screen.findByRole('region', { name: 'B' })
+    expect(screen.getByRole('status').textContent).toBe(dict.banner.operational)
+    expect(screen.queryByText(dict.admin.overview.waiting)).toBeNull()
+  })
+
   it('links to the monitor editor', async () => {
     render(<StatusPage />)
     const link = await screen.findByRole('link', { name: dict.admin.overview.manage })
@@ -186,6 +202,21 @@ describe('dashboard widget (AC-016)', () => {
     await screen.findByText(`1 ${dict.status.notChecked}`)
     expect(screen.queryByText(new RegExp(dict.banner.major_outage))).toBeNull()
     expect(screen.queryByText(`1 ${dict.day.down}`)).toBeNull()
+  })
+
+  it('reads "Waiting for the first check" instead of a banner while every monitor is pending', async () => {
+    server.overview = ready([pendingMonitor('d', 'D'), pendingMonitor('e', 'E')])
+    render(<StatusWidget />)
+    await screen.findByText(`2 ${dict.status.notChecked}`)
+    expect(screen.getByRole('status').textContent).toBe(dict.admin.overview.waiting)
+    expect(screen.queryByText(dict.banner.operational)).toBeNull()
+  })
+
+  it('keeps the banner when checked and pending monitors are mixed', async () => {
+    server.overview = ready([monitor({ slug: 'a', name: 'A' }), pendingMonitor('d', 'D')])
+    render(<StatusWidget />)
+    await screen.findByText(dict.banner.operational)
+    expect(screen.queryByText(dict.admin.overview.waiting)).toBeNull()
   })
 
   it('shows the empty state with a link when no monitor is configured', async () => {

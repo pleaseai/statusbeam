@@ -64,7 +64,7 @@ function StatusOverview() {
         ? <p className="text-sm text-kumo-subtle">{t.overview.empty}</p>
         : (
             <>
-              <p className="text-lg font-medium" role="status">{dict.banner[overview.status]}</p>
+              <p className="text-lg font-medium" role="status">{overview.monitors.every(monitor => monitor.pending) ? t.overview.waiting : dict.banner[overview.status]}</p>
               <ul className="space-y-4" role="list">
                 {overview.monitors.map(monitor => (
                   <li key={monitor.slug}><MonitorCard monitor={monitor} /></li>
