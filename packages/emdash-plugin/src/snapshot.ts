@@ -7,6 +7,25 @@ import { toDayCounts } from './buckets'
 
 const SNAPSHOT_PREFIX = 'snapshot:'
 
+/**
+ * Longest `error` kept in a stored result, in UTF-16 units. A provider can put its
+ * whole validation message there (tens of KB), and the poll snapshot is one D1 row.
+ */
+export const MAX_STORED_ERROR_LENGTH = 300
+
+/** The error cut to {@link MAX_STORED_ERROR_LENGTH} with a trailing `…`, never splitting a surrogate pair. */
+function boundedError(error: string): string {
+  if (error.length <= MAX_STORED_ERROR_LENGTH) {
+    return error
+  }
+  let end = MAX_STORED_ERROR_LENGTH - 1
+  const last = error.charCodeAt(end - 1)
+  if (last >= 0xD800 && last <= 0xDBFF) {
+    end--
+  }
+  return `${error.slice(0, end)}…`
+}
+
 /** Everything the status page needs to know about one monitor. */
 export interface MonitorState {
   slug: string
@@ -196,7 +215,8 @@ export async function readSnapshot(ctx: Pick<PluginContext, 'kv'>): Promise<Merg
  * buckets as they stand after this probe's counts were added. Today's day stat
  * (and any other day a bucket covers) is recomputed from them, so the buckets
  * stay the durable source; older days carry over from `previous`, and the
- * window shifts when the day rolls over.
+ * window shifts when the day rolls over. The stored result's `error` is capped at
+ * {@link MAX_STORED_ERROR_LENGTH}.
  */
 export function advanceMonitor(
   previous: MonitorState | undefined,
@@ -223,7 +243,7 @@ export function advanceMonitor(
   const dense = denseHistory(days, now)
   return {
     slug: result.slug,
-    result,
+    result: result.error === undefined ? result : { ...result, error: boundedError(result.error) },
     days: dense,
     totals: Object.fromEntries(dense.flatMap(stat => (stat.date in totals ? [[stat.date, totals[stat.date] as number]] : []))),
   }

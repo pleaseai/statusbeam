@@ -4,7 +4,7 @@ import { describe, expect, it } from 'bun:test'
 import { clearConfigError, CONFIG_ERROR_KEY, MAX_MONITORS, readConfigError, secretsFrom, validatePluginConfig } from '../src/config'
 import { runMaintenance } from '../src/run'
 import { reconcileSchedule } from '../src/schedule'
-import { advanceMonitor } from '../src/snapshot'
+import { advanceMonitor, MAX_STORED_ERROR_LENGTH } from '../src/snapshot'
 import { createFakeContext, monitorNames, monitorsYaml, runFake } from './fake-context'
 
 const NONE: SecretsView = { destinations: 0, sentryToken: false, invalidEntries: [], extraSlackUrls: 0 }
@@ -46,7 +46,7 @@ describe('validatePluginConfig', () => {
   it('keeps the poll snapshot of MAX_MONITORS fully aged monitors under the 2,000,000 byte D1 row limit', () => {
     const DAY_MS = 86_400_000
     const end = Date.UTC(2026, 5, 30, 12)
-    const error = 'x'.repeat(300)
+    const error = '한'.repeat(20_000)
     const monitors: MonitorState[] = monitorNames(MAX_MONITORS).map((name, index) => {
       const slug = `${name}-service-${index}`.padEnd(60, 'a').slice(0, 60)
       let state: MonitorState | undefined
@@ -60,8 +60,9 @@ describe('validatePluginConfig', () => {
     })
     expect(monitors[0]!.days.filter(day => day.status !== null).length).toBeGreaterThanOrEqual(90)
     const snapshot = { version: 2, updatedAt: new Date(end).toISOString(), monitors, deliveries: [] }
-    expect(JSON.stringify(snapshot).length).toBeLessThan(2_000_000)
-  })
+    expect(monitors[0]!.result!.error!.length).toBe(MAX_STORED_ERROR_LENGTH)
+    expect(new TextEncoder().encode(JSON.stringify(snapshot)).byteLength).toBeLessThan(2_000_000)
+  }, 30_000)
 
   it('rejects delivery: queue as an error on notifications.delivery (AC-018)', () => {
     const result = validatePluginConfig(`${VALID}\nnotifications:\n  delivery: queue`, NONE)

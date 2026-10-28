@@ -64,8 +64,9 @@ export function secretsFrom(values: Map<string, unknown>): { secrets: SecretsVie
 /**
  * Most monitors the plugin accepts. All monitor state is one `snapshot:poll` KV value,
  * stored as one `options` row, and D1 limits a row to 2,000,000 bytes. Once 90 days of
- * history fill in, a monitor takes about 6 to 8 KB (5.9 KB at best, 7.9 KB with long slugs
- * and errors), so 200 monitors stay under the limit with headroom. Standalone has no such limit.
+ * history fill in, a monitor takes about 6 to 9 KB: 5.9 KB at best, 8.6 KB with a long slug
+ * and a non-ASCII error at the 300-character cap (`MAX_STORED_ERROR_LENGTH`). 200 monitors
+ * therefore stay under the limit with headroom. Standalone has no such limit.
  */
 export const MAX_MONITORS = 200
 

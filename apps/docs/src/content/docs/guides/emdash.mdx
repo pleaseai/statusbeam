@@ -150,7 +150,7 @@ The plugin applies a few rules on top of the shared schema:
 - A monitor that polls Sentry warns when no Sentry token is set.
 - Duplicate slugs are an error.
 - More than 200 monitors is an error. The plugin stores every monitor's state in
-  one database row (about 6 to 8 KB per monitor), and Cloudflare D1 limits a row to 2 MB.
+  one database row (about 6 to 9 KB per monitor), and Cloudflare D1 limits a row to 2 MB.
 - A Slack or webhook URL in the YAML is an error. Put it in the plugin settings
   instead.
 
