@@ -95,8 +95,8 @@ that `@statusbeam/emdash-ui` used to register.
    `createUnrestrictedHttpAccess('statusbeam', headerOnlyFetch)`. `headerOnlyFetch` resolves
    at headers and cancels the body. This keeps the host's SSRF protection instead of copying
    it, and it restores the header-time latency that ADR-0004's probe contract had given up.
-   Checks that must read the body (Sentry, AI Gateway) and notification deliveries use the
-   normal `ctx.http.fetch`.
+   Checks that must read the body (Statuspage, incident.io, Sentry, AI Gateway) and notification
+   deliveries use the normal `ctx.http.fetch`.
 
    `createUnrestrictedHttpAccess` is **undocumented**. The `emdash ~1.3.1` peer pins the
    line on which it and `emdash/internal/plugin-test-runtime` were verified.
@@ -107,8 +107,9 @@ that `@statusbeam/emdash-ui` used to register.
    without delaying the rest. A daily `maintenance` task prunes history older than 90 days.
    Both tasks, and every config save, reconcile the schedule. Reconcile creates only a task
    that is missing or whose schedule changed, because `schedule()` resets the next run.
-   State is one KV snapshot. Poll and webhook bucket rows stay separate, because a run and a
-   webhook can write at once.
+   The check writes one poll snapshot (`snapshot:poll`). Each webhook writes its own
+   `snapshot:webhook:{slug}` key, and readers merge them. Poll and webhook bucket rows and
+   snapshot keys stay separate, because a run and a webhook can write at once.
 
 4. **Config stays YAML.** The monitor configuration is the YAML text under the `config`
    setting, written with a revision-checked `compareAndSet`. The editor works on the parsed
