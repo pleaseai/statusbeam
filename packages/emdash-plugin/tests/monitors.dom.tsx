@@ -453,6 +453,7 @@ describe('text and direction (NFR-1)', () => {
     const css = readFileSync(require.resolve('@emdash-cms/admin/styles.css'), 'utf8')
     const escaped = (name: string) => `.${name.replace(/([^\w-])/g, '\\$1')}`
     const missing = new Set<string>()
+    const checked = new Set<string>()
     for (const file of ['MonitorsPage.tsx', 'AdminGate.tsx', 'index.tsx', 'MonitorActions.tsx', 'TestMonitor.tsx', 'StatusPage.tsx', 'StatusWidget.tsx']) {
       const source = readFileSync(new URL(`../src/admin/${file}`, import.meta.url), 'utf8')
       for (const match of source.matchAll(/className=(?:"([^"]+)"|\{([^}]*)\})/g)) {
@@ -463,7 +464,27 @@ describe('text and direction (NFR-1)', () => {
           }
         }
       }
+      // Template literals: the static text, plus every quoted literal inside a `${...}` part.
+      for (const match of source.matchAll(/className=\{`([^`]*)`\}/g)) {
+        const template = match[1] ?? ''
+        checked.add(template.replace(/\$\{[^}]*\}/g, ' '))
+        for (const literal of template.matchAll(/'([^']+)'/g)) {
+          checked.add(literal[1]!)
+        }
+      }
+      // Class maps: every quoted value of a `*_CLASS` object.
+      for (const match of source.matchAll(/\b\w+_CLASS\b[^=]*=\s*\{([^}]*)\}/g)) {
+        for (const literal of (match[1] ?? '').matchAll(/:\s*'([^']+)'/g)) {
+          checked.add(literal[1]!)
+        }
+      }
     }
+    for (const name of [...checked].flatMap(group => group.split(/\s+/))) {
+      if (name !== '' && !css.includes(escaped(name))) {
+        missing.add(name)
+      }
+    }
+    expect([...checked].flatMap(group => group.split(/\s+/)).filter(Boolean)).toEqual(expect.arrayContaining(['min-w-0', 'font-medium', 'h-9', 'text-kumo-danger']))
     expect([...missing]).toEqual([])
   })
 })

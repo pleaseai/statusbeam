@@ -234,6 +234,6 @@ export async function readSettings(ctx: Pick<PluginContext, 'settings'>): Promis
     config: stored.status === 'valid' ? stored.config : null,
     destinations,
     invalidDestinations: invalid,
-    webhookSecret: typeof secret === 'string' && secret !== '' ? secret : null,
+    webhookSecret: typeof secret === 'string' && secret.trim() !== '' ? secret : null,
   }
 }

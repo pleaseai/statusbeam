@@ -3,7 +3,7 @@ import type { Host, Internet } from './host-harness'
 import { describe, expect, it, spyOn } from 'bun:test'
 import { CHECK_TASK } from '../src/schedule'
 import { mergeSnapshots, POLL_SNAPSHOT_KEY, summariesFromSnapshot } from '../src/snapshot'
-import { HOST, newHost } from './host-harness'
+import { HOST, newHost, url } from './host-harness'
 
 /**
  * The webhook routes through EmDash's production route boundary
@@ -21,9 +21,9 @@ const CONFIG = [
   `    url: https://${HOST}/status/web`,
   '  - name: errors',
   '    check: sentry',
-  '    url: https://sentry.example.com/',
+  `    url: ${url('errors')}`,
   '  - name: plain',
-  '    url: https://plain.example.com/',
+  `    url: ${url('plain')}`,
 ].join('\n')
 
 const DOWN = { page: { status_indicator: 'major' } }
@@ -121,6 +121,14 @@ describe('webhook authentication fails closed', () => {
       expect(await post(cleared, { token })).toMatchObject({ status: 401, text: 'Unauthorized' })
     }
     expect(await stored(cleared)).toBe(JSON.stringify([[], {}]))
+  })
+
+  it('treats a whitespace-only secret as unset, rejecting even a matching whitespace token', async () => {
+    const blank = await newWebhookHost({ secret: '   ' })
+    for (const token of ['   ', '%20', SECRET, '', null]) {
+      expect(await post(blank, { token })).toMatchObject({ status: 401, text: 'Unauthorized' })
+    }
+    expect(await stored(blank)).toBe(JSON.stringify([[], {}]))
   })
 
   it('rejects a mismatched, empty, absent, wrong-length or non-ASCII token before grading or storage, leaving the status unchanged', async () => {
