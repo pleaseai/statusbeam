@@ -257,7 +257,12 @@ async function resolveSite(ctx: Pick<PluginContext, 'settings'>, input: TestInpu
     return { site, values }
   }
   const stored = values.get(CONFIG_SETTINGS_KEY)
-  const config = typeof stored === 'string' ? validatePluginConfig(stored, secrets).config : undefined
+  const validation = typeof stored === 'string' && stored.trim() !== '' ? validatePluginConfig(stored, secrets) : undefined
+  if (validation && !validation.config) {
+    const issues = validation.issues.filter(issue => issue.severity === 'error')
+    return { tested: false, reason: 'invalid', message: 'The saved configuration is not valid. Fix the errors and save, then test again.', issues }
+  }
+  const config = validation?.config
   const site = config?.sites.find(candidate => candidate.slug === input.slug)
   if (!site) {
     return { tested: false, reason: 'not-found', message: `No monitor in the saved configuration has the slug "${input.slug}".` }

@@ -424,6 +424,18 @@ describe('test one monitor', () => {
     expect(requested).toEqual([])
   })
 
+  it('answers invalid with the findings, not not-found, when the saved configuration does not validate', async () => {
+    const requested: string[] = []
+    const host = await newHost((target) => {
+      requested.push(target)
+      return new Response('ok', { status: 200 })
+    })
+    await host.setConfig(yamlOf({ name: 'Test', sites: [{ name: 'One', slug: 'one', url: 'not a url' }] }))
+    const { data } = await testMonitor(host, { slug: 'one' })
+    expect(data).toMatchObject({ tested: false, reason: 'invalid', issues: [expect.objectContaining({ severity: 'error', path: 'sites[0].url' })] })
+    expect(requested).toEqual([])
+  })
+
   it('refuses a loopback, private or cloud-metadata address, also behind a redirect, and never requests it', async () => {
     const reached: string[] = []
     const host = await configuredHost(doc(['alpha']), (target) => {

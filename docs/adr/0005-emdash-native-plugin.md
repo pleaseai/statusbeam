@@ -85,7 +85,7 @@ that `@statusbeam/emdash-ui` used to register.
      descriptor), `./plugin` (`createPlugin`), `./admin` (React pages), and `./astro` (the
      block renderer).
    - The site provides the peers `emdash ~1.3.1`, `astro ^7`, `react ^19`,
-     `@cloudflare/kumo 2.6.0`, and `@emdash-cms/admin ^1.3.1`.
+     `@cloudflare/kumo 2.6.0`, and `@emdash-cms/admin ~1.3.1`.
    - `allowedOrigins` restricts the origins a Status block may fetch. The descriptor throws
      on an entry that is not an http(s) origin, so a typo fails the site build.
    - Routes keep the base `/_emdash/api/plugins/statusbeam`, so the public paths do not change.

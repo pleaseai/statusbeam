@@ -68,11 +68,19 @@ export function effectiveSlug(monitor: Monitor): string {
   return slug !== '' ? slug : slugify(typeof monitor.name === 'string' ? monitor.name : '')
 }
 
+/** A stored value as the text field shows it, so a wrongly typed one stays visible and is reported instead of dropped. */
+function storedText(value: unknown): string {
+  if (value === undefined || value === null) {
+    return ''
+  }
+  return typeof value === 'object' ? JSON.stringify(value) : String(value)
+}
+
 function rowFrom(stored: unknown): MonitorRow {
   const { expectedStatusCodes, maxResponseTime, ...rest } = isRecord(stored) ? stored : {}
   const monitor: Monitor = rest
-  const codesText = Array.isArray(expectedStatusCodes) ? expectedStatusCodes.join(', ') : ''
-  const maxText = typeof maxResponseTime === 'number' ? String(maxResponseTime) : ''
+  const codesText = Array.isArray(expectedStatusCodes) ? expectedStatusCodes.join(', ') : storedText(expectedStatusCodes)
+  const maxText = storedText(maxResponseTime)
   const emptyCodes = Array.isArray(expectedStatusCodes) && expectedStatusCodes.length === 0
   return { key: newRowKey(), monitor, codesText, maxText, savedSlug: effectiveSlug(monitor) || null, ...(emptyCodes ? { emptyCodes } : {}) }
 }

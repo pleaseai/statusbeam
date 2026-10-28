@@ -87,7 +87,7 @@ beforeEach(async () => {
   SNAPSHOT = snapshotAt()
   summary = summariesFromSnapshot(mergeSnapshots([{ key: POLL_SNAPSHOT_KEY, value: SNAPSHOT }]), config.sites, today)
   web.summary = summary
-})
+}, MIDNIGHT_MARGIN_MS + 5_000)
 
 const normalize = (body: string) => body.replace(/"generatedAt":"[^"]*"/, '"generatedAt":"<now>"')
 

@@ -38,6 +38,14 @@ describe('the monitor editor model', () => {
     expect(buildMonitor(draft.rows[0]!).monitor).not.toHaveProperty('expectedStatusCodes')
   })
 
+  it('shows a wrongly typed stored expectedStatusCodes or maxResponseTime as text and reports it', () => {
+    const scalar = draftFromConfig({ name: 'X', sites: [{ name: 'API', url: 'https://a.example', expectedStatusCodes: 200, maxResponseTime: '5000' }] })
+    expect(scalar.rows[0]).toMatchObject({ codesText: '200', maxText: '5000' })
+    const wrong = draftFromConfig({ name: 'X', sites: [{ name: 'API', url: 'https://a.example', expectedStatusCodes: 'ok', maxResponseTime: '5s' }] })
+    expect(wrong.rows[0]).toMatchObject({ codesText: 'ok', maxText: '5s' })
+    expect(clientFindings(wrong, t).fields).toEqual({ '0.expectedStatusCodes': t.monitors.wholeNumbers, '0.maxResponseTime': t.monitors.wholeNumber })
+  })
+
   it('flags both monitors that share an effective slug, whether typed or derived from the name', () => {
     const draft = draftFromConfig({ name: 'X', sites: [{ name: 'API', url: 'https://a.example' }, { name: 'Other', slug: 'api', url: 'https://b.example' }, { name: 'Web', url: 'https://c.example' }] })
     expect(Object.keys(clientFindings(draft, t).fields).sort()).toEqual(['0.slug', '1.slug'])
