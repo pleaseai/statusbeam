@@ -109,7 +109,10 @@ that `@statusbeam/emdash-ui` used to register.
    that is missing or whose schedule changed, because `schedule()` resets the next run.
    The check writes one poll snapshot (`snapshot:poll`). Each webhook writes its own
    `snapshot:webhook:{slug}` key, and readers merge them. Poll and webhook bucket rows and
-   snapshot keys stay separate, because a run and a webhook can write at once.
+   snapshot keys stay separate, because a run and a webhook can write at once. The poll
+   snapshot is one KV value in one `options` row, and D1 limits a row to 2 MB (about 4.4 KB
+   per monitor), so the plugin
+   accepts at most 400 monitors. Standalone has no such limit.
 
 4. **Config stays YAML.** The monitor configuration is the YAML text under the `config`
    setting, written with a revision-checked `compareAndSet`. The editor works on the parsed

@@ -5,9 +5,10 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeAll, beforeEach, describe, expect, it, mock } from 'bun:test'
 
 /**
- * Component tests for the monitors page. The two host hooks are mocked:
- * `apiFetch` answers from an in-test server that records every request, and
- * `useCurrentUser` returns the role under test. The module is spread from the
+ * Component tests for the monitors page. The host's `useCurrentUser` is mocked to
+ * return the role under test. The real `apiFetch` runs on top of a stubbed
+ * `globalThis.fetch`, which answers from an in-test server that records every
+ * request, so the recorded headers are the ones `apiFetch` really adds. The module is spread from the
  * real one because `mock.module` replaces it for every later test file too.
  */
 
@@ -23,10 +24,9 @@ const server = {
 
 const user: { role: number } = { role: 50 }
 
-async function fakeApiFetch(input: string | URL | Request, init?: RequestInit): Promise<Response> {
+async function fakeFetch(input: string | URL | Request, init?: RequestInit): Promise<Response> {
   const url = String(input)
   const headers = new Headers(init?.headers)
-  headers.set('X-EmDash-Request', '1')
   const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined
   server.requests.push({ method: init?.method ?? 'GET', url, headers, body })
   const route = url.replace('/_emdash/api/plugins/statusbeam/', '')
@@ -43,13 +43,15 @@ beforeAll(async () => {
   const real = await import('@emdash-cms/admin')
   mock.module('@emdash-cms/admin', () => ({
     ...real,
-    apiFetch: fakeApiFetch,
     useCurrentUser: () => ({ isPending: false, isError: false, data: { id: 'u1', email: 'a@example.com', role: user.role } }),
   }))
   ;({ MonitorsPage } = await import('../src/admin/MonitorsPage'))
 })
 
+const realFetch = globalThis.fetch
+
 beforeEach(() => {
+  globalThis.fetch = fakeFetch as typeof fetch
   server.requests = []
   server.config = { revision: 'r1', config: null, secretsSet: NO_SECRETS, issues: [] }
   server.save = () => ({ saved: false, reason: 'invalid', issues: [] })
@@ -60,6 +62,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
+  globalThis.fetch = realFetch
 })
 
 const en = getDict('en').admin

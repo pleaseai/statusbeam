@@ -1,9 +1,9 @@
 import type { SecretsView } from '../src/config'
 import { describe, expect, it } from 'bun:test'
-import { clearConfigError, CONFIG_ERROR_KEY, readConfigError, secretsFrom, validatePluginConfig } from '../src/config'
+import { clearConfigError, CONFIG_ERROR_KEY, MAX_MONITORS, readConfigError, secretsFrom, validatePluginConfig } from '../src/config'
 import { runMaintenance } from '../src/run'
 import { reconcileSchedule } from '../src/schedule'
-import { createFakeContext, monitorsYaml, runFake } from './fake-context'
+import { createFakeContext, monitorNames, monitorsYaml, runFake } from './fake-context'
 
 const NONE: SecretsView = { destinations: 0, sentryToken: false, invalidEntries: [], extraSlackUrls: 0 }
 const VALID = monitorsYaml(['alpha', 'beta'])
@@ -28,6 +28,17 @@ describe('validatePluginConfig', () => {
 
     const syntax = validatePluginConfig('sites: [broken', NONE)
     expect(syntax).toMatchObject({ ok: false, issues: [{ severity: 'error', path: '' }] })
+  })
+
+  it('accepts MAX_MONITORS monitors and rejects one more as an error on sites', () => {
+    expect(MAX_MONITORS).toBe(400)
+    expect(validatePluginConfig(monitorsYaml(monitorNames(MAX_MONITORS)), NONE)).toMatchObject({ ok: true, issues: [] })
+
+    const over = validatePluginConfig(monitorsYaml(monitorNames(MAX_MONITORS + 1)), NONE)
+    expect(over.ok).toBe(false)
+    expect(over.config).toBeUndefined()
+    expect(over.issues).toEqual([expect.objectContaining({ severity: 'error', path: 'sites', message: expect.stringContaining('401 monitors') })])
+    expect(over.issues[0]!.message).toContain('at most 400')
   })
 
   it('rejects delivery: queue as an error on notifications.delivery (AC-018)', () => {

@@ -26,7 +26,7 @@ import { SENTRY_TOKEN_SECRET_KEY, SLACK_SECRET_KEY, WEBHOOK_SECRET_KEY, WEBHOOKS
 /**
  * Timeout for the `cron` hook. EmDash's default hook timeout is 5 s, which ends
  * a run whose slowest probe takes longer and drops all of its writes. A run
- * needs the probe deadline plus its reads and writes.
+ * needs the probe deadline plus the delivery deadline plus its reads and writes.
  */
 export const CRON_HOOK_TIMEOUT_MS = 25_000
 

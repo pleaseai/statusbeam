@@ -61,6 +61,13 @@ export function secretsFrom(values: Map<string, unknown>): { secrets: SecretsVie
   }
 }
 
+/**
+ * Most monitors the plugin accepts. All monitor state is one `snapshot:poll` KV value,
+ * stored as one `options` row, and D1 limits a row to 2,000,000 bytes. At about 4.4 KB
+ * per monitor that row fails to write from about 455 monitors. Standalone has no such limit.
+ */
+export const MAX_MONITORS = 400
+
 const NOT_YAML = 'Notification URLs belong in the encrypted plugin settings, not in the YAML'
 
 function secretIssues(secrets: SecretsView): PluginIssue[] {
@@ -113,6 +120,10 @@ function analyze(yaml: string, secrets: SecretsView): Analysis {
   config.notifications?.webhooks?.forEach((_, index) => {
     error(`notifications.webhooks[${index}]`, `${NOT_YAML}. Remove this entry and add the URL to the "${WEBHOOKS_SECRET_KEY}" setting, one per line.`)
   })
+
+  if (config.sites.length > MAX_MONITORS) {
+    error('sites', `The configuration has ${config.sites.length} monitors, but the plugin supports at most ${MAX_MONITORS}: their state must fit in one D1 row. Remove ${config.sites.length - MAX_MONITORS} monitors.`)
+  }
 
   const firstSeen = new Map<string, number>()
   config.sites.forEach((site, index) => {
