@@ -189,12 +189,14 @@ configuration is invalid checks nothing and changes no status.
 
 ### Probe behavior
 
-- **Latency is time to the response headers**, as on a standalone deployment, so
-  a slow body does not make a healthy monitor `degraded`. Numbers from the two
-  are comparable.
+- **Latency is time to the response headers** for the header-only checks (plain
+  HTTP checks), as on a standalone deployment, so a slow body does not make a
+  healthy monitor `degraded`. Numbers from the two are comparable. The
+  body-reading checks (Statuspage, incident.io, Sentry and AI Gateway) include
+  the body read in their latency.
 - **A response body is not read** for plain HTTP checks, so a body over 8 MiB is
-  graded by its status code. Monitors that must read the body (Sentry and AI
-  Gateway) are bound by the host's 8 MiB body limit.
+  graded by its status code. Monitors that must read the body (Statuspage,
+  incident.io, Sentry and AI Gateway) are bound by the host's 8 MiB body limit.
 - **A probe has a 10-second deadline.** A target that has not answered by then is
   graded `down` with code 0, and the other monitors finish normally.
 - **Private addresses are refused**, including behind a redirect. See
@@ -283,10 +285,10 @@ Pick the shape like this:
 
 The plugin registers a "Status" block in the Portable Text editor. The editor
 chooses a view (banner or site detail), a site slug, a **status source** and a
-source type:
+**Source type**:
 
-- **This plugin**: the block reads the plugin's own routes on the same site.
-- **A standalone deployment**: the block reads that deployment's `/api/*`.
+- **EmDash plugin**: the block reads the plugin's own routes on the same site.
+- **Standalone**: the block reads that deployment's `/api/*`.
 
 A post that already holds a `statusbeam-status` block keeps rendering after you
 move to the native plugin, because the content stores only the block type and

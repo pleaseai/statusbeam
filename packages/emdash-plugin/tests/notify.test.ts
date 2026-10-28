@@ -251,4 +251,25 @@ describe('host body limit', () => {
     expect([...fake.rows.values()].map(b => [b.up, b.down, b.total])).toEqual(countsBefore)
     expect((fake.kv.get(POLL_SNAPSHOT_KEY) as PollSnapshot).monitors).toEqual(before.monitors)
   })
+
+  it('records nothing and reads as not checked yet for a body-reading check that hits the cap on its first probe', async () => {
+    const yaml = monitorsYaml([], ['  - name: board', '    check: statuspage', '    url: https://board.example.com/api/v2/summary.json'])
+    const posts: string[] = []
+    const fetch = async (url: string, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        posts.push(url)
+        return new Response('ok', { status: 200 })
+      }
+      throw new Error(BODY_LIMIT)
+    }
+    const fake = createFakeContext({ config: yaml, settings: SECRETS.slack, fetch })
+    const c = clock()
+    await runFake(fake, { now: c.now })
+
+    expect(posts).toEqual([])
+    expect([...fake.rows.values()]).toEqual([])
+    expect((fake.kv.get(POLL_SNAPSHOT_KEY) as PollSnapshot).monitors).toEqual([])
+    const sites = [siteSchema.parse({ name: 'board', url: 'https://board.example.com/', check: 'statuspage' })]
+    expect(summariesFromSnapshot(await readSnapshot(fake.ctx), sites, c.now())[0]).toMatchObject({ pending: true })
+  })
 })
