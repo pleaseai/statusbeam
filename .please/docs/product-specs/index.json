@@ -6,9 +6,10 @@
       "domain": "distribution",
       "feature": "emdash",
       "created_at": "2026-10-22T11:16:17.725Z",
-      "updated_at": "2026-10-22T11:33:21.358Z",
+      "updated_at": "2026-10-29T02:17:29.230Z",
       "source_tracks": [
-        "emdash-distribution-20261022"
+        "emdash-distribution-20261022",
+        "emdash-native-plugin-20261027"
       ],
       "traces": [],
       "requirements": [
@@ -45,12 +46,12 @@
         {
           "id": "REQ-007",
           "kind": "functional",
-          "statement": "serve the engine plugin's public status, per-site, and badge endpoints with unwrapped response bodies in the same shape as the standalone endpoints, at a documented path mapping from the standalone paths"
+          "statement": "serve the engine plugin's public status, per-site, and badge endpoints with unwrapped response bodies in the same shape as the standalone endpoints, at a documented path mapping from the standalone paths, in the core-owned public status contract (contract version 1, including the optional \"not checked yet\" flag)"
         },
         {
           "id": "REQ-008",
           "kind": "functional",
-          "statement": "run scheduled checks inside the plugin for every configured poll monitor within the plugin's scheduled capacity (webhook-only Sentry monitors take their status from inbound webhooks, and monitors beyond capacity are named by the AC-021 warning), sharding each run's monitors across separate scheduled tasks so every task stays within one invocation's limits, and keep check history and the current status snapshot in plugin-owned storage"
+          "statement": "run every configured poll monitor on its schedule from one native plugin in a single scheduled task, on a site that has no sandbox runner configured (webhook-only Sentry monitors take their status from inbound webhooks), and keep check history and the current status snapshot in plugin-owned storage"
         },
         {
           "id": "REQ-009",
@@ -60,22 +61,22 @@
         {
           "id": "REQ-010",
           "kind": "functional",
-          "statement": "send Slack and generic-webhook notifications when a monitor's status changes"
+          "statement": "send Slack and generic-webhook notifications when a monitor's status changes, with every notification secret stored encrypted"
         },
         {
           "id": "REQ-011",
           "kind": "functional",
-          "statement": "accept Statuspage and Sentry inbound webhooks on public endpoints authenticated by a shared secret token"
+          "statement": "accept Statuspage and Sentry inbound webhooks on public endpoints authenticated by a shared secret token, rejecting every request while no webhook secret is configured and comparing the supplied token in constant time"
         },
         {
           "id": "REQ-012",
           "kind": "functional",
-          "statement": "show a current-status summary widget on the EmDash admin dashboard"
+          "statement": "show administrators a status overview of every monitor (current status, 90-day history, latest response time) and a dashboard widget summarizing overall status"
         },
         {
           "id": "REQ-013",
           "kind": "functional",
-          "statement": "record a probe whose response exceeds the body-size limit as unsupported, exclude it from status and uptime rollups and from notifications, and show a persistent warning on that monitor naming the limit; plan each scheduled task's calls before it starts so it never begins a probe it cannot afford, and leave every monitor unchanged when the runtime still ends a task early"
+          "statement": "classify each check as up, degraded, or down with the same rules and latency measure (time to response headers) a standalone deployment uses"
         },
         {
           "id": "REQ-014",
@@ -85,7 +86,7 @@
         {
           "id": "REQ-015",
           "kind": "functional",
-          "statement": "provide an administrator-only plugin admin page to edit, validate, save, and test the configuration, saving only when it is valid"
+          "statement": "provide an administrator-only plugin admin page where an administrator lists, adds, edits, and removes monitors through a form for each monitor, validated by the core configuration schema and saved only when it is valid"
         },
         {
           "id": "REQ-016",
@@ -95,7 +96,7 @@
         {
           "id": "REQ-017",
           "kind": "functional",
-          "statement": "provide a Test site action that runs one check for a single monitor and shows its graded result and latency without saving anything"
+          "statement": "let an administrator run one monitor's check on demand from the admin page and see its graded status, latency, and response code without recording history or sending a notification"
         },
         {
           "id": "REQ-018",
@@ -120,22 +121,17 @@
         {
           "id": "REQ-022",
           "kind": "functional",
-          "statement": "provide an opt-in \"status\" content block that editors can insert into posts, rendered with the same components"
+          "statement": "register the opt-in \"statusbeam-status\" content block from the same plugin, rendered with the same components, keeping the block's choice of status source (this plugin or a standalone deployment) and the site's allowlist of origins a block may read"
         },
         {
           "id": "REQ-023",
           "kind": "functional",
-          "statement": "document installation and operation of both packages, including the execution-mode requirements, the unrestricted outbound network access the engine requests, and the probe contract's limits"
+          "statement": "document installation and operation of both packages, installing the plugin as a trusted site dependency (a code and configuration change), including the unrestricted outbound network access the engine requests and the probe contract's limits, and state that a plugin-hosted status page goes down with the CMS it reports on"
         },
         {
           "id": "REQ-024",
           "kind": "non-functional",
           "statement": "keep the render library and the content block limited to the public status data — no scheduled work, no storage, and no access to engine state"
-        },
-        {
-          "id": "REQ-025",
-          "kind": "non-functional",
-          "statement": "keep every scheduled task within the Cloudflare runner's per-invocation limits, with no more monitors per task than FR-3 measured"
         },
         {
           "id": "REQ-026",
@@ -151,6 +147,36 @@
           "id": "REQ-028",
           "kind": "non-functional",
           "statement": "reuse the core check engine and configuration schema without forking them"
+        },
+        {
+          "id": "REQ-029",
+          "kind": "functional",
+          "statement": "restrict the admin page, the dashboard widget, and every admin-only route to site administrators"
+        },
+        {
+          "id": "REQ-030",
+          "kind": "functional",
+          "statement": "ship one engine implementation for EmDash, with no sandboxed engine entry, no Block Kit admin page, and no bridge-call sharding"
+        },
+        {
+          "id": "REQ-031",
+          "kind": "functional",
+          "statement": "record the native-plugin decision in ADR-0005 and mark ADR-0004 as superseded by it, without rewriting ADR-0004"
+        },
+        {
+          "id": "REQ-032",
+          "kind": "non-functional",
+          "statement": "follow EmDash's admin rules for native React code (its component kit, localization, accessibility, and right-to-left layout), with StatusBeam's own strings available in every locale `@statusbeam/core` supports (en, zh, ja, ko) and English shown for any other admin locale"
+        },
+        {
+          "id": "REQ-033",
+          "kind": "non-functional",
+          "statement": "cover the scheduled run, the public and webhook routes, and the admin routes with tests that execute the plugin the way an EmDash host loads a native plugin"
+        },
+        {
+          "id": "REQ-034",
+          "kind": "non-functional",
+          "statement": "refuse every probe the plugin sends, scheduled or on demand, to a loopback, private, link-local, or cloud-metadata address, as the host's HTTP API does, whichever fetch path the check uses"
         }
       ]
     }

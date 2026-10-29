@@ -185,6 +185,7 @@ of the host's).
 - [x] (2026-10-27 20:00 KST) T010 Record ADR-0005 and update the EmDash docs
   Evidence: `bun run .../doc-lint.ts docs/adr/0005-emdash-native-plugin.md` -> "All documents match their schema (0 warning(s))"; `bun run --filter '@statusbeam/docs' build` -> 9 pages built, exit 0, `dist/guides/emdash` present; `bun run --cwd apps/docs lint:docs` -> 7 files lint clean. ADR-0004 diff is the status line only; index lists 0004 Superseded and 0005 Accepted. The guide shows `plugins: [statusbeam()]` as a trusted dependency and says a plugin-hosted page goes down with the CMS.
   Files outside `Files:`: docs/adr/index.md, apps/docs/src/content/docs/guides/emdash.mdx (both listed in the task). Not changed: .please/docs/knowledge/tech-stack.md and the completed emdash-distribution track (history), apps/emdash-demo README and probe (ADR-0004 spike record), tech-debt-tracker.md.
+- [x] (2026-10-29 11:11 KST) Review-stage commits (SHA: `4e46e3e`, `4c856d6`, `6ad1b0b`, `ec69f79`, `2d9b7fa`, `ea45d3d`, `dff7e3a`, `dc8f826`, `34584a5`, `f86e49d`, `3d1eaf4`, `1cdeea3`, `4043f61`, `275a75c`, `5a05b36`, `b0e8b11`, `e405a3c`, `0c185fd`, `39c538f`, `9c39143`)
 
 ## Decision Log
 
@@ -228,3 +229,33 @@ of the host's).
   Evidence: `emdash/src/emdash-runtime.ts` `getDatabase` (`cacheKey = dbConfig.entrypoint`) and `installUnrecordedConfigPlugins`. tests/engine.host.ts gives each host its own temp file and entrypoint.
 - Observation: the host's unrestricted access hands the underlying `fetch` the request body as bytes, not the string the plugin passed.
   Evidence: `JSON.parse(String(init.body))` in the fake internet failed with `Unexpected identifier "object"`; reading it with `new Response(body).text()` works.
+
+## Outcomes & Retrospective
+
+### What Was Shipped
+
+- `@statusbeam/emdash-plugin` is now one native EmDash plugin. A 5-minute `check` task probes every monitor concurrently, each under its own 10 s deadline. HTTP checks go through the host's `createUnrestrictedHttpAccess` with a header-only fetch, so latency is time to headers and the host's SSRF guard still applies.
+- A React admin: a monitor editor with field-level errors and an on-demand test, a status overview page, and a dashboard widget. The admin routes are administrator-only and CSRF-checked.
+- The Status Portable Text block moved from `@statusbeam/emdash-ui` into the plugin, restricted to `allowedOrigins`.
+- Limits the review added: at most 200 monitors, so the 90-day poll snapshot fits one D1 row, and stored check errors are capped at 300 characters.
+- ADR-0005 supersedes ADR-0004's sandboxed engine; the EmDash guide is updated.
+
+### What Went Well
+
+- The T001 spike settled the risky questions (header-time latency, SSRF on redirects and DNS, cron per host) on both Node and Cloudflare before any rewrite, and its numbers went straight into ADR-0005.
+- `emdash/internal/plugin-test-runtime` let the engine, routes and admin run against a real host in tests, so the CSRF header and route auth are asserted rather than mocked.
+- The browser pass on the demo site confirmed the overview, the editor (including the duplicate-slug refusal), the widget and the published block.
+
+### What Could Improve
+
+- The review loop needed 20 review-stage commits. Several came from a single root cause found late: the poll snapshot is one D1 row, so its size bound (monitor cap, error cap) was found by review instead of by the plan. Size limits of host storage belong in the plan's STOP conditions.
+- The simplify pass changed behavior on the public routes (a snapshot read error took the unconfigured path) and needed a fix commit. Run the affected tests before committing a simplify pass.
+- The Cloudflare host was verified only in the T001 spike, not on the final HEAD.
+
+### Tech Debt Created
+
+- TD-006: the final HEAD was not re-run on the Cloudflare host (`native-cf`); only Node was verified.
+- TD-007: an end-to-end install of the packed tarball into a fresh Astro site is unverified.
+- TD-008: the monitor form does not edit Sentry or AI Gateway blocks (FR-7 partly met), and the sidebar labels are English only (NFR-1 partly met).
+- TD-009: the config-error record is written by a run but never shown in the admin.
+- TD-010: no regression test pins that the public routes read the snapshot only for a valid configuration (9c39143).
