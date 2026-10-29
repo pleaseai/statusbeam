@@ -78,6 +78,8 @@ bun run --filter '@statusbeam/worker' dev
 ```bash
 bun test             # run tests
 bun run typecheck    # turbo run typecheck
+bun run --cwd packages/emdash-plugin test:host    # EmDash plugin native host tests
+bun run --cwd packages/emdash-plugin test:admin   # EmDash plugin admin component tests
 ```
 
 ### Before Committing

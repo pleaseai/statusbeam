@@ -3,7 +3,7 @@
   "type": "module",
   "version": "0.0.0",
   "private": false,
-  "description": "StatusBeam engine for EmDash — a sandboxed plugin that runs scheduled checks with the core engine.",
+  "description": "StatusBeam engine for EmDash — a native plugin that runs scheduled checks with the core engine.",
   "license": "MIT",
   "homepage": "https://github.com/pleaseai/statusbeam/tree/main/packages/emdash-plugin#readme",
   "repository": {
@@ -18,34 +18,51 @@
     "status-page"
   ],
   "exports": {
-    ".": {
-      "types": "./dist/index.d.mts",
-      "import": "./dist/index.mjs"
-    },
-    "./sandbox": "./dist/plugin.mjs"
+    ".": "./src/descriptor.ts",
+    "./plugin": "./src/native.ts",
+    "./admin": "./src/admin/index.tsx",
+    "./astro": "./src/astro/index.ts"
   },
-  "main": "dist/index.mjs",
   "files": [
-    "dist",
-    "emdash-plugin.jsonc"
+    "src",
+    "!src/**/*.test.ts"
   ],
   "publishConfig": {
     "access": "public",
     "provenance": true
   },
   "scripts": {
-    "build": "emdash-plugin build",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
-    "test:host": "emdash-plugin validate && vitest run"
+    "test:admin": "bun test --preload ./tests/dom-preload.ts ./tests/monitors.dom.tsx ./tests/test-monitor.dom.tsx ./tests/overview.dom.tsx",
+    "test:host": "bun test --preload ./tests/host-preload.ts ./tests/engine.host.ts ./tests/public.host.ts ./tests/webhooks.host.ts ./tests/admin.host.ts"
+  },
+  "peerDependencies": {
+    "@cloudflare/kumo": "2.6.0",
+    "@emdash-cms/admin": "~1.3.1",
+    "astro": "^7",
+    "emdash": "~1.3.1",
+    "react": "^19"
+  },
+  "dependencies": {
+    "@statusbeam/core": "workspace:*",
+    "@statusbeam/emdash-ui": "workspace:*",
+    "yaml": "^2.5.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@emdash-cms/blocks": "1.3.1",
-    "@emdash-cms/plugin-cli": "0.13.4",
-    "@emdash-cms/plugin-test": "0.2.10",
-    "@statusbeam/core": "workspace:*",
-    "emdash": "^1.3.1",
-    "vite": "^8",
-    "vitest": "^4.1.0"
+    "@cloudflare/kumo": "2.6.0",
+    "@emdash-cms/admin": "1.3.1",
+    "@happy-dom/global-registrator": "^21.0.4",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
+    "@types/react": "^19",
+    "@types/react-dom": "^19.3.0",
+    "astro": "^7",
+    "emdash": "~1.3.1",
+    "happy-dom": "^21.0.4",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "vite": "^8"
   }
 }

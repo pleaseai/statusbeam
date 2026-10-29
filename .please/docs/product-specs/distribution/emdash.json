@@ -7,9 +7,10 @@
   "conflicts": [],
   "traces": [],
   "created_at": "2026-10-22T11:16:17.725Z",
-  "updated_at": "2026-10-22T11:33:21.358Z",
+  "updated_at": "2026-10-29T03:12:06.454Z",
   "source_tracks": [
-    "emdash-distribution-20261022"
+    "emdash-distribution-20261022",
+    "emdash-native-plugin-20261027"
   ],
   "requirements": [
     {
@@ -109,9 +110,10 @@
     {
       "id": "REQ-007",
       "kind": "functional",
-      "statement": "serve the engine plugin's public status, per-site, and badge endpoints with unwrapped response bodies in the same shape as the standalone endpoints, at a documented path mapping from the standalone paths",
+      "statement": "serve the engine plugin's public status, per-site, and badge endpoints with unwrapped response bodies in the same shape as the standalone endpoints, at a documented path mapping from the standalone paths, in the core-owned public status contract (contract version 1, including the optional \"not checked yet\" flag)",
       "source_tracks": [
-        "emdash-distribution-20261022"
+        "emdash-distribution-20261022",
+        "emdash-native-plugin-20261027"
       ],
       "scenarios": [
         {
@@ -143,17 +145,64 @@
           "then": [
             "return the monthly uptime badge, as the standalone endpoint does"
           ]
+        },
+        {
+          "name": "When a client requests the public status route, the system shall return an unwrapped JSON body that parses with the core public status schema.",
+          "given": [],
+          "when": [
+            "a client requests the public status route"
+          ],
+          "then": [
+            "return an unwrapped JSON body that parses with the core public status schema"
+          ]
+        },
+        {
+          "name": "When a monitor has never been checked, the system shall mark it \"not checked yet\" in the public status response instead of reporting an outage.",
+          "given": [
+            "a monitor has never been checked"
+          ],
+          "when": [
+            "the public status response is built"
+          ],
+          "then": [
+            "mark the monitor \"not checked yet\" instead of reporting an outage"
+          ]
         }
       ]
     },
     {
       "id": "REQ-008",
       "kind": "functional",
-      "statement": "run scheduled checks inside the plugin for every configured poll monitor within the plugin's scheduled capacity (webhook-only Sentry monitors take their status from inbound webhooks, and monitors beyond capacity are named by the AC-021 warning), sharding each run's monitors across separate scheduled tasks so every task stays within one invocation's limits, and keep check history and the current status snapshot in plugin-owned storage",
+      "statement": "run every configured poll monitor on its schedule from one native plugin in a single scheduled task, on a site that has no sandbox runner configured, accepting at most 200 monitors so the poll snapshot fits one D1 row (webhook-only Sentry monitors take their status from inbound webhooks), and keep check history and the current status snapshot in plugin-owned storage",
       "source_tracks": [
-        "emdash-distribution-20261022"
+        "emdash-distribution-20261022",
+        "emdash-native-plugin-20261027"
       ],
       "scenarios": [
+        {
+          "name": "When the plugin is installed on a site with no sandbox runner configured, the system shall load the plugin and run the scheduled checks.",
+          "given": [
+            "no sandbox runner is configured"
+          ],
+          "when": [
+            "the plugin is installed on a site"
+          ],
+          "then": [
+            "load the plugin and run the scheduled checks"
+          ]
+        },
+        {
+          "name": "When 12 monitors are configured (more than one invocation of the current sandboxed engine can probe), the system shall check all 12 in each scheduled run.",
+          "given": [
+            "12 monitors are configured"
+          ],
+          "when": [
+            "a scheduled run starts"
+          ],
+          "then": [
+            "check all 12 monitors in that run"
+          ]
+        },
         {
           "name": "When a monitored endpoint has not finished its response within 10 seconds, the system shall grade that probe down and go on to the task's remaining monitors.",
           "given": [],
@@ -171,23 +220,48 @@
       "kind": "functional",
       "statement": "compute 90-day per-day uptime from plugin storage with the same results as the standalone rollup for the same check history",
       "source_tracks": [
-        "emdash-distribution-20261022"
+        "emdash-distribution-20261022",
+        "emdash-native-plugin-20261027"
+      ],
+      "scenarios": [
+        {
+          "name": "When the same sequence of check results is recorded by the plugin and by a standalone deployment, the system shall report identical per-day uptime figures for the 90-day window.",
+          "given": [],
+          "when": [
+            "the same sequence of check results is recorded by the plugin and by a standalone deployment"
+          ],
+          "then": [
+            "report identical per-day uptime figures for the 90-day window"
+          ]
+        }
       ]
     },
     {
       "id": "REQ-010",
       "kind": "functional",
-      "statement": "send Slack and generic-webhook notifications when a monitor's status changes",
+      "statement": "send Slack and generic-webhook notifications when a monitor's status changes, with every notification secret stored encrypted",
       "source_tracks": [
-        "emdash-distribution-20261022"
+        "emdash-distribution-20261022",
+        "emdash-native-plugin-20261027"
+      ],
+      "scenarios": [
+        {
+          "name": "The system shall not send a stored secret's value (a notification secret or the inbound webhook secret) to the browser, in the admin page or any route response.",
+          "given": [],
+          "when": [],
+          "then": [
+            "do not send a stored secret's value to the browser, in the admin page or any route response"
+          ]
+        }
       ]
     },
     {
       "id": "REQ-011",
       "kind": "functional",
-      "statement": "accept Statuspage and Sentry inbound webhooks on public endpoints authenticated by a shared secret token",
+      "statement": "accept Statuspage and Sentry inbound webhooks on public endpoints authenticated by a shared secret token, rejecting every request while no webhook secret is configured and comparing the supplied token in constant time",
       "source_tracks": [
-        "emdash-distribution-20261022"
+        "emdash-distribution-20261022",
+        "emdash-native-plugin-20261027"
       ],
       "scenarios": [
         {
@@ -209,69 +283,91 @@
           "then": [
             "reject it without changing any monitor's status"
           ]
+        },
+        {
+          "name": "If an inbound webhook arrives while no webhook secret is configured, then the system shall reject it without changing any monitor's status.",
+          "given": [
+            "no webhook secret is configured"
+          ],
+          "when": [
+            "an inbound webhook arrives"
+          ],
+          "then": [
+            "reject it without changing any monitor's status"
+          ]
+        },
+        {
+          "name": "The system shall not send a stored secret's value (a notification secret or the inbound webhook secret) to the browser, in the admin page or any route response.",
+          "given": [],
+          "when": [],
+          "then": [
+            "do not send a stored secret's value to the browser, in the admin page or any route response"
+          ]
         }
       ]
     },
     {
       "id": "REQ-012",
       "kind": "functional",
-      "statement": "show a current-status summary widget on the EmDash admin dashboard",
+      "statement": "show administrators a status overview of every monitor (current status, 90-day history, latest response time) and a dashboard widget summarizing overall status",
       "source_tracks": [
-        "emdash-distribution-20261022"
+        "emdash-distribution-20261022",
+        "emdash-native-plugin-20261027"
+      ],
+      "scenarios": [
+        {
+          "name": "When a monitor has not been checked yet, the status overview shall show \"Not checked yet\" for it, with no uptime figure, instead of \"down\" or \"100%\".",
+          "given": [
+            "a monitor has not been checked yet"
+          ],
+          "when": [
+            "the status overview is shown"
+          ],
+          "then": [
+            "show \"Not checked yet\" for the monitor, with no uptime figure, instead of \"down\" or \"100%\""
+          ]
+        }
       ]
     },
     {
       "id": "REQ-013",
       "kind": "functional",
-      "statement": "record a probe whose response exceeds the body-size limit as unsupported, exclude it from status and uptime rollups and from notifications, and show a persistent warning on that monitor naming the limit; plan each scheduled task's calls before it starts so it never begins a probe it cannot afford, and leave every monitor unchanged when the runtime still ends a task early",
+      "statement": "classify each check as up, degraded, or down with the same rules a standalone deployment uses, and time plain HTTP checks to the response headers as it does; body-reading checks (Statuspage, incident.io, Sentry, AI Gateway) go through the host's buffered fetch, so their latency runs to the last body byte",
       "source_tracks": [
-        "emdash-distribution-20261022"
+        "emdash-distribution-20261022",
+        "emdash-native-plugin-20261027"
       ],
       "scenarios": [
         {
-          "name": "When a probe fails because the response exceeds the body-size limit, the system shall mark that probe unsupported.",
+          "name": "When a plain HTTP check's URL sends its response headers quickly and then streams its body slowly, the system shall record latency up to the headers and shall not mark the monitor degraded because of the slow body.",
           "given": [],
           "when": [
-            "a probe fails because the response exceeds the body-size limit"
+            "a plain HTTP check's URL sends its response headers quickly and then streams its body slowly"
           ],
           "then": [
-            "mark that probe unsupported"
+            "record latency up to the headers",
+            "do not mark the monitor degraded because of the slow body"
           ]
         },
         {
-          "name": "The system shall assign each scheduled task no more monitors than its call budget covers, counting probes, notification deliveries, and storage calls.",
-          "given": [],
-          "when": [],
-          "then": [
-            "assign each scheduled task no more monitors than its call budget covers, counting probes, notification deliveries, and storage calls"
-          ]
-        },
-        {
-          "name": "If a probe is marked unsupported, then the system shall not send a status-change notification for that monitor.",
+          "name": "When a plain HTTP check (which reads response headers only) serves a body larger than 8 MiB, the system shall classify the check by its status code and header latency instead of the host's body limit. Body-reading checks (Statuspage, incident.io, Sentry, AI Gateway) remain bound by the host's 8 MiB limit.",
           "given": [],
           "when": [
-            "a probe is marked unsupported"
+            "a plain HTTP check (which reads response headers only) serves a body larger than 8 MiB"
           ],
           "then": [
-            "the system shall not send a status-change notification for that monitor"
+            "classify the check by its status code and header latency instead of the host's body limit"
           ]
         },
         {
-          "name": "If a probe is marked unsupported, or the runtime ends its scheduled task early, then the system shall leave that monitor's status and uptime unchanged.",
+          "name": "If a monitored response never completes, then the system shall record that check as down when the plugin's per-check deadline expires and shall still check the remaining monitors in that run.",
           "given": [],
           "when": [
-            "a probe is marked unsupported, or the runtime ends its scheduled task early"
+            "a monitored response never completes"
           ],
           "then": [
-            "leave that monitor's status and uptime unchanged"
-          ]
-        },
-        {
-          "name": "The system shall not switch a monitor configured for GET to HEAD to stay under the body-size limit.",
-          "given": [],
-          "when": [],
-          "then": [
-            "the system shall not switch a monitor configured for GET to HEAD to stay under the body-size limit"
+            "record that check as down when the per-check deadline expires",
+            "still check the remaining monitors in that run"
           ]
         }
       ]
@@ -287,9 +383,10 @@
     {
       "id": "REQ-015",
       "kind": "functional",
-      "statement": "provide an administrator-only plugin admin page to edit, validate, save, and test the configuration, saving only when it is valid",
+      "statement": "provide an administrator-only plugin admin page where an administrator lists, adds, edits, and removes monitors through a form for each monitor, validated by the core configuration schema and saved only when it is valid",
       "source_tracks": [
-        "emdash-distribution-20261022"
+        "emdash-distribution-20261022",
+        "emdash-native-plugin-20261027"
       ],
       "scenarios": [
         {
@@ -313,13 +410,36 @@
           ]
         },
         {
-          "name": "If the stored configuration changed after the administrator loaded the admin page, then the system shall refuse the save and tell the administrator to reload.",
+          "name": "When an administrator saves a monitor with an invalid field (for example a URL that is not http or https), the system shall show the error next to that field and shall not save the change.",
           "given": [],
           "when": [
-            "the stored configuration changed after the administrator loaded the admin page"
+            "an administrator saves a monitor with an invalid field"
           ],
           "then": [
-            "refuse the save and tell the administrator to reload"
+            "show the error next to that field",
+            "do not save the change"
+          ]
+        },
+        {
+          "name": "If another administrator saved the configuration after this page loaded, then the system shall refuse the save and show the newer configuration.",
+          "given": [
+            "another administrator saved the configuration after this page loaded"
+          ],
+          "when": [
+            "the administrator saves"
+          ],
+          "then": [
+            "refuse the save and show the newer configuration"
+          ]
+        },
+        {
+          "name": "When an administrator removes a monitor and saves, the system shall stop checking it from the next scheduled run.",
+          "given": [],
+          "when": [
+            "an administrator removes a monitor and saves"
+          ],
+          "then": [
+            "stop checking it from the next scheduled run"
           ]
         },
         {
@@ -345,27 +465,30 @@
     {
       "id": "REQ-017",
       "kind": "functional",
-      "statement": "provide a Test site action that runs one check for a single monitor and shows its graded result and latency without saving anything",
+      "statement": "let an administrator run one monitor's check on demand from the admin page and see its graded status, latency, and response code without recording history or sending a notification",
       "source_tracks": [
-        "emdash-distribution-20261022"
+        "emdash-distribution-20261022",
+        "emdash-native-plugin-20261027"
       ],
       "scenarios": [
         {
-          "name": "When an administrator runs Test site for one monitor, the system shall show its graded status and latency.",
+          "name": "When an administrator tests a monitor, the system shall show its status, latency, and response code.",
           "given": [],
           "when": [
-            "an administrator runs Test site for one monitor"
+            "an administrator tests a monitor"
           ],
           "then": [
-            "show its graded status and latency"
+            "show its status, latency, and response code"
           ]
         },
         {
-          "name": "The system shall not write check history or change any monitor's status when an administrator runs Test site.",
+          "name": "When an administrator tests a monitor, the system shall not record the result in history or send a notification.",
           "given": [],
-          "when": [],
+          "when": [
+            "an administrator tests a monitor"
+          ],
           "then": [
-            "the system shall not write check history or change any monitor's status when an administrator runs Test site"
+            "do not record the result in history or send a notification"
           ]
         }
       ]
@@ -493,35 +616,33 @@
     {
       "id": "REQ-022",
       "kind": "functional",
-      "statement": "provide an opt-in \"status\" content block that editors can insert into posts, rendered with the same components",
+      "statement": "register the opt-in \"statusbeam-status\" content block from the same plugin, rendered with the same components, keeping the block's choice of status source (this plugin or a standalone deployment) and the site's allowlist of origins a block may read",
       "source_tracks": [
-        "emdash-distribution-20261022"
+        "emdash-distribution-20261022",
+        "emdash-native-plugin-20261027"
+      ],
+      "scenarios": [
+        {
+          "name": "When an editor inserts the status block for a monitor and publishes the content, the published page shall show that monitor's current status.",
+          "given": [],
+          "when": [
+            "an editor inserts the status block for a monitor and publishes the content"
+          ],
+          "then": [
+            "the published page shows that monitor's current status"
+          ]
+        }
       ]
     },
     {
       "id": "REQ-023",
       "kind": "functional",
-      "statement": "document installation and operation of both packages, including the execution-mode requirements, the unrestricted outbound network access the engine requests, and the probe contract's limits",
+      "statement": "document installation and operation of both packages, installing the plugin as a trusted site dependency (a code and configuration change), including the unrestricted outbound network access the engine requests and the probe contract's limits, and state that a plugin-hosted status page goes down with the CMS it reports on",
       "source_tracks": [
-        "emdash-distribution-20261022"
+        "emdash-distribution-20261022",
+        "emdash-native-plugin-20261027"
       ],
       "scenarios": [
-        {
-          "name": "The installation guide shall state that the engine plugin needs a sandbox runner.",
-          "given": [],
-          "when": [],
-          "then": [
-            "state that the engine plugin needs a sandbox runner"
-          ]
-        },
-        {
-          "name": "The installation guide shall state that running the engine plugin in-process is a trust decision that gives up isolation and resource limits.",
-          "given": [],
-          "when": [],
-          "then": [
-            "state that running the engine plugin in-process is a trust decision that gives up isolation and resource limits"
-          ]
-        },
         {
           "name": "The installation guide shall state which deployment shape keeps checks and the status page independent of a CMS or host outage.",
           "given": [],
@@ -536,14 +657,6 @@
       "id": "REQ-024",
       "kind": "non-functional",
       "statement": "keep the render library and the content block limited to the public status data — no scheduled work, no storage, and no access to engine state",
-      "source_tracks": [
-        "emdash-distribution-20261022"
-      ]
-    },
-    {
-      "id": "REQ-025",
-      "kind": "non-functional",
-      "statement": "keep every scheduled task within the Cloudflare runner's per-invocation limits, with no more monitors per task than FR-3 measured",
       "source_tracks": [
         "emdash-distribution-20261022"
       ]
@@ -571,6 +684,85 @@
       "source_tracks": [
         "emdash-distribution-20261022"
       ]
+    },
+    {
+      "id": "REQ-029",
+      "kind": "functional",
+      "statement": "restrict the admin page, the dashboard widget, and every admin-only route to site administrators",
+      "source_tracks": [
+        "emdash-native-plugin-20261027"
+      ],
+      "scenarios": [
+        {
+          "name": "If a user who is not an administrator opens the admin page or calls an admin-only route, then the system shall refuse the request and reveal nothing about the configuration.",
+          "given": [],
+          "when": [
+            "a user who is not an administrator opens the admin page or calls an admin-only route"
+          ],
+          "then": [
+            "refuse the request and reveal nothing about the configuration"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "REQ-030",
+      "kind": "functional",
+      "statement": "ship one engine implementation for EmDash, with no sandboxed engine entry, no Block Kit admin page, and no bridge-call sharding",
+      "source_tracks": [
+        "emdash-native-plugin-20261027"
+      ],
+      "scenarios": [
+        {
+          "name": "When the plugin package is installed, the system shall expose no sandboxed plugin entry for that package.",
+          "given": [],
+          "when": [
+            "the plugin package is installed"
+          ],
+          "then": [
+            "expose no sandboxed plugin entry for that package"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "REQ-031",
+      "kind": "functional",
+      "statement": "record the native-plugin decision in ADR-0005 and mark ADR-0004 as superseded by it, without rewriting ADR-0004",
+      "source_tracks": [
+        "emdash-native-plugin-20261027"
+      ]
+    },
+    {
+      "id": "REQ-032",
+      "kind": "non-functional",
+      "statement": "follow EmDash's admin rules for native React code (its component kit, localization, accessibility, and right-to-left layout), with StatusBeam's own strings available in every locale `@statusbeam/core` supports (en, zh, ja, ko) and English shown for any other admin locale",
+      "source_tracks": [
+        "emdash-native-plugin-20261027"
+      ]
+    },
+    {
+      "id": "REQ-033",
+      "kind": "non-functional",
+      "statement": "cover the scheduled run, the public and webhook routes, and the admin routes with tests that execute the plugin the way an EmDash host loads a native plugin",
+      "source_tracks": [
+        "emdash-native-plugin-20261027"
+      ]
+    },
+    {
+      "id": "REQ-034",
+      "kind": "non-functional",
+      "statement": "refuse every probe the plugin sends, scheduled or on demand, to a loopback, private, link-local, or cloud-metadata address, as the host's HTTP API does, whichever fetch path the check uses",
+      "source_tracks": [
+        "emdash-native-plugin-20261027"
+      ]
+    }
+  ],
+  "removed_by": [
+    {
+      "requirement": "REQ-025",
+      "track": "emdash-native-plugin-20261027",
+      "date": "2026-10-29"
     }
   ]
 }

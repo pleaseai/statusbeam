@@ -24,6 +24,27 @@ not change the versions that `apps/web` and `apps/docs` resolve.
 | `worker-loader` | Cloudflare Worker `statusbeam-emdash-spike` | `sandboxed: [probe]` | `sandbox()` from `@emdash-cms/cloudflare` |
 | `workerd` | Node (`@astrojs/node`) | `sandboxed: [probe]` | `@emdash-cms/sandbox-workerd/sandbox` |
 | `in-process` | Node (`@astrojs/node`) | `plugins: [probe]` | none |
+| `native` | Node (`@astrojs/node`) | `plugins: [statusbeam()]` | none |
+| `native-cf` | Cloudflare (`@astrojs/cloudflare`, workerd) | `plugins: [statusbeam()]` | none |
+
+## Native plugin modes
+
+`native` and `native-cf` register the StatusBeam engine as one native plugin, with the id
+`statusbeam`. The plugin comes from the `packages/emdash-plugin/src` sources: the
+`statusbeam()` descriptor, the `createPlugin` entrypoint (`@statusbeam/emdash-plugin/plugin`)
+and the React admin entry (`/admin`), aliased in `astro.config.mjs`. The probe plugin is not registered in these modes. Run them from this
+checkout with the local dev servers, and deploy nothing:
+
+```sh
+bun run probe:build && bun run dev:native -- --host 127.0.0.1 --port 4430
+bun run probe:build && bun run dev:native-cf -- --host 127.0.0.1 --port 4431
+```
+
+To sign in, open `/_emdash/api/setup/dev-bypass?redirect=/_emdash/admin`. The status
+overview is at `/_emdash/admin/plugins/statusbeam/`, the monitor editor at `.../monitors`, and the
+widget is on the dashboard. The T001 spike used `spike-probe` and `spike-cron`
+routes, which the native plugin no longer registers. The 2026-10-27 results and the targets are in
+[`results/2026-10-27/native-plugin.md`](results/2026-10-27/native-plugin.md).
 
 ## Status components page
 
@@ -42,21 +63,18 @@ PORT=4410 HOST=127.0.0.1 bun run start    # then open http://127.0.0.1:4410/stat
 
 ## Status Portable Text block
 
-`STATUSBEAM_BLOCK=1` registers the opt-in `statusBeamBlock()` descriptor from
-`@statusbeam/emdash-ui/block` (FR-22). The editor then offers a "Status" block, and
-`src/pages/posts/[slug].astro` renders a post that embeds it with the library components.
-Without the variable the site registers no StatusBeam plugin beyond the probe. The package
-entry points and `emdash` are aliased to the sources in `astro.config.mjs`, because this app
-is not part of the root workspace.
+The native modes (`native`, `native-cf`) register the Status Portable Text block with the
+plugin: `statusbeam()` carries `componentsEntry`, and `createPlugin` lists the
+`statusbeam-status` block in `admin.portableTextBlocks`. The editor then offers a "Status"
+block, and `src/pages/posts/[slug].astro` renders a post that embeds it with the
+`@statusbeam/emdash-ui` components. `@statusbeam/emdash-plugin/astro` is aliased to the
+sources in `astro.config.mjs`, because this app is not part of the root workspace.
+Pass `statusbeam({ allowedOrigins: [...] })` to restrict the origins a block may fetch.
 
-Use a copy of the whole repository outside any checkout (see step 3 below), then run the
-fixture server and the Node in-process dev server. The dev server is needed because the
-`/_emdash/api/auth/dev-bypass` sign-in only exists in development. A copy made by
-`scripts/stage.sh` does not work here: it holds only this app, without the package sources.
+Run the dev server (the `/_emdash/api/auth/dev-bypass` sign-in only exists in development):
 
 ```sh
-bun scripts/status-fixture.ts 4420 &
-STATUSBEAM_BLOCK=1 SPIKE_MODE=in-process npx astro dev --host 127.0.0.1 --port 4410
+SPIKE_MODE=native npx astro dev --host 127.0.0.1 --port 4410
 ```
 
 The posts page needs a post to render. The seed creates the `posts` collection but no post,
@@ -64,12 +82,14 @@ so create one:
 
 1. Sign in through the development bypass:
    `http://127.0.0.1:4410/_emdash/api/auth/dev-bypass?redirect=/_emdash/admin`.
-2. In the admin, add a post with the slug `status-demo` and insert a "Status" block. Set
-   "Status source URL" to `http://127.0.0.1:4420` and "Source type" to "Standalone" (the
-   fixture serves the standalone routes), then publish the post. The block accepts a
-   localhost or private source only on a development server such as this one; a
-   production build refuses it.
-3. Open `http://127.0.0.1:4410/posts/status-demo`.
+2. Open the StatusBeam monitors page (`/_emdash/admin/plugins/statusbeam/monitors`) and
+   save a monitor, for example `https://example.com`. The plugin's check task fills in its status.
+3. In the admin, add a post with the slug `status-demo` and insert a "Status" block. Set
+   "Status source URL" to `http://127.0.0.1:4410` and "Source type" to "EmDash plugin"
+   (this site's own routes), or point it at a standalone deployment with "Standalone",
+   then publish the post. The block accepts a localhost or private source only on a
+   development server such as this one; a production build refuses it.
+4. Open `http://127.0.0.1:4410/posts/status-demo`.
 
 ## Probe routes
 
@@ -111,7 +131,7 @@ in to a Cloudflare account on the Workers paid plan (Worker Loader is paid-only)
 3. Stage one copy of the site per mode, because each mode needs its own build in
    `dist/`. The script copies the site and the built probe, then runs `bun install`.
    A staged copy serves the probe spike only: it leaves out `src/pages/status.astro`,
-   which imports the monorepo packages by relative path, and `STATUSBEAM_BLOCK=1` does
+   which imports the monorepo packages by relative path, and the Status block does
    not build there. The target must be new, empty, or a directory the script staged
    before (it writes a `.statusbeam-stage` marker), because the copy deletes whatever
    else is in it; the script refuses the source tree and its ancestors.

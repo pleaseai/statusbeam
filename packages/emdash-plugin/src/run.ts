@@ -1,170 +1,156 @@
-import type { CheckResult } from '@statusbeam/core'
+import type { Site } from '@statusbeam/core'
+import type { HttpAccess } from 'emdash'
 import type { PluginContext } from 'emdash/plugin'
 import type { DeliveryOutcome } from './notify'
-import type { ShardSnapshot } from './snapshot'
-import { detectStatusChanges } from '@statusbeam/core'
-import { applyResults, bucketId, bucketsOf, dayOf, pruneExpiredBuckets, touchedBucketIds } from './buckets'
-import { CALL_BUDGET, monitorsPerTask, plannedCalls, PROBE_DEADLINE_MS, reservedCallsFor } from './budget'
+import type { PollSnapshot } from './snapshot'
+import { detectStatusChanges, selectPollSites } from '@statusbeam/core'
+import { applyResults, bucketId, bucketsOf, dayOf, pruneExpiredBuckets, touchedBucketIds, utcDay } from './buckets'
 import { clearConfigError, CONFIG_ERROR_KEY, loadStoredConfig, recordConfigError } from './config'
+import { PLUGIN_ID } from './descriptor'
+import { createProbeHttp } from './http'
 import { buildMessages, deliver } from './notify'
-import { probeSite } from './probe'
-import { pollableSites, reconcileShards, shardSites } from './shards'
-import { advanceMonitor, handoffFor, listSnapshots, mergeSnapshots, writeShardSnapshot } from './snapshot'
+import { PROBE_DEADLINE_MS, probeSite } from './probe'
+import { advanceMonitor, listSnapshots, mergeSnapshots, writePollSnapshot } from './snapshot'
 
 type RunContext = Pick<PluginContext, 'settings' | 'kv' | 'storage' | 'http'>
 
-export interface ShardRunOptions {
+export interface CheckRunOptions {
   now?: () => Date
   /** Per-probe and per-delivery deadline in ms. */
   deadlineMs?: number
+  /**
+   * The client for plain HTTP checks: headers only, behind the host's SSRF
+   * guard. Defaults to {@link createProbeHttp}; tests pass a stand-in.
+   */
+  probeHttp?: Pick<HttpAccess, 'fetch'>
+  /** The client for checks that read a body and for notification deliveries. Defaults to `ctx.http`. */
+  bodyHttp?: Pick<HttpAccess, 'fetch'>
 }
 
-export interface ShardRunResult {
+export interface CheckRunResult {
   /** Monitors probed. */
   probed: number
-  /** Bridge calls the run made. */
-  calls: number
-  /** Bridge calls the plan set aside before the first probe: the fixed calls, one per probe, one per destination, and one more when the run clears a stale configuration-error record. `calls` never exceeds it. */
-  planned: number
-  /** Probes the host's limit rejected; those monitors are marked unsupported, not graded. */
-  unsupported: number
-  /** Deliveries attempted (each reserves one call; zero when nothing changed). */
+  /** Deliveries attempted (zero when nothing changed). */
   deliveries: number
 }
 
-/** UTC day of a date as `YYYY-MM-DD`. */
-function dayOfDate(date: Date): string {
-  return date.toISOString().slice(0, 10)
+/** Check types that read the response body, so they cannot use the header-only client. */
+export const BODY_CHECKS = new Set<string>(['statuspage', 'incidentio', 'sentry', 'aigateway'])
+
+/**
+ * The monitors a scheduled run must actively check, ordered by slug so the
+ * snapshot is deterministic. Webhook-only Sentry monitors are left out, and so
+ * are Sentry poll monitors while no token is available.
+ */
+export function pollableSites(sites: Site[], options: { sentryToken?: string } = {}): Site[] {
+  return selectPollSites(sites, { sentryToken: options.sentryToken, warn: () => {} })
+    .sort((a, b) => (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0))
 }
 
 /**
- * One shard task: probe the shard's monitors through `ctx.http.fetch`, notify
- * the destinations of status changes, add the outcomes to the per-day buckets,
- * and write the shard snapshot.
+ * The scheduled check: probe every monitor, notify the destinations of status
+ * changes, add the outcomes to the per-day buckets, and write the snapshot.
  *
- * Its calls are planned before the first probe, from the settings it reads
- * first: five fixed calls, one fetch per monitor, and one
- * call reserved per destination, which the sharding sized the monitor count for.
- * It never calls `ctx.log`; the delivery outcomes live in the snapshot.
- * The order is settings, probes (concurrent, each under its own deadline),
- * reads, deliveries, then the two writes. A run the runtime ends before the
- * writes leaves the buckets and the snapshot as they were: the next run sees the
- * same previous status and tells the destinations again, which is a duplicate
- * message, never a lost one.
+ * All monitors are probed at once, each under its own deadline, so one hung
+ * response is `down` at the deadline and delays no other. Plain HTTP checks
+ * time the response headers (`probeHttp`); checks that read a body use
+ * `ctx.http.fetch`. The order is settings, probes, reads, deliveries, then the
+ * two writes. A run the runtime ends before the writes leaves the buckets and
+ * the snapshot as they were: the next run sees the same previous status and
+ * tells the destinations again, which is a duplicate message, never a lost one.
  *
- * A probe that hit the host's body limit says nothing about the target. It is
- * not counted in the buckets, not compared for change detection, and does not
- * replace the monitor's last result; the monitor keeps a warning until a later
- * probe completes normally. An absent or invalid configuration, or an empty
- * shard, checks nothing and writes nothing.
+ * The monitors probed are the ones in the stored configuration at the start of
+ * the run, so a monitor removed from it is neither probed nor kept in the new
+ * snapshot. A probe that hit the host's body limit says nothing about the
+ * target: it is not counted in the buckets, not compared for change detection,
+ * and does not replace the monitor's last result. An absent or invalid configuration checks nothing and writes
+ * nothing (an invalid one leaves a configuration-error record).
  */
-export async function runShard(ctx: RunContext, shard: number, options: ShardRunOptions = {}): Promise<ShardRunResult> {
+export async function runCheck(ctx: RunContext, options: CheckRunOptions = {}): Promise<CheckRunResult> {
   const now = options.now ?? (() => new Date())
   const deadlineMs = options.deadlineMs ?? PROBE_DEADLINE_MS
-  const idle = (calls: number, planned = calls): ShardRunResult => ({ probed: 0, calls, planned, unsupported: 0, deliveries: 0 })
+  const idle: CheckRunResult = { probed: 0, deliveries: 0 }
 
   const stored = await loadStoredConfig(ctx)
   if (stored.status === 'absent') {
-    return idle(1)
+    return idle
   }
   if (stored.status === 'invalid') {
     await recordConfigError(ctx, stored.issues, now())
-    return idle(2)
+    return idle
   }
   const { config, destinations, sentryToken } = stored
-
-  const pollable = pollableSites(config, { sentryToken })
-  const reserved = reservedCallsFor(destinations.length)
-  if (monitorsPerTask(reserved) < 1) {
-    if (pollable.length === 0) {
-      return idle(1)
-    }
-    const capacityError = `${destinations.length} notification destinations leave no call for a probe: at most ${CALL_BUDGET} bridge calls per task`
-    await writeShardSnapshot(ctx, { version: 2, shard, updatedAt: now().toISOString(), monitors: [], deliveries: [], capacityError })
-    return idle(2)
-  }
-  const sites = shardSites(pollable, shard, destinations.length)
-  if (sites.length === 0) {
-    return idle(1)
-  }
-  const planned = plannedCalls(sites.length, reserved)
-  const http = ctx.http
+  const sites = pollableSites(config.sites, { sentryToken })
+  const http = options.bodyHttp ?? ctx.http
   if (!http) {
     throw new Error('ctx.http is unavailable: the plugin needs the network:request:unrestricted capability')
   }
-  const hostFetch: NonNullable<PluginContext['http']>['fetch'] = (url, init) => http.fetch(url, init)
-  let calls = 1
+  const probeHttp = options.probeHttp ?? createProbeHttp(PLUGIN_ID)
+  const bodyFetch: typeof http.fetch = (url, init) => http.fetch(url, init)
+  const headerFetch: typeof http.fetch = (url, init) => probeHttp.fetch(url, init)
 
   const startedAt = now()
-  const results = await Promise.all(sites.map(site => probeSite(hostFetch, site, deadlineMs, () => now().getTime(), sentryToken)))
-  calls += sites.length
-  const real = results.filter(r => !r.limit)
+  const results = await Promise.all(sites.map(site =>
+    probeSite(BODY_CHECKS.has(site.check) ? bodyFetch : headerFetch, site, deadlineMs, () => now().getTime(), sentryToken)))
 
-  const today = dayOfDate(startedAt)
+  const real = results.filter(result => !result.limit)
+
+  const today = utcDay(startedAt.toISOString())
   const buckets = bucketsOf(ctx)
-  const [existing, snapshots] = await Promise.all([
+  const [existing, entries] = await Promise.all([
     buckets.getMany([...new Set([...touchedBucketIds(results), ...sites.map(site => bucketId(site.slug, today))])]),
     listSnapshots(ctx),
   ])
-  calls += 2
-  const previous = mergeSnapshots(snapshots)
-  const staleConfigError = snapshots.some(entry => entry.key === CONFIG_ERROR_KEY)
+  const previous = mergeSnapshots(entries)
 
   const changes = detectStatusChanges(real, previous.results)
   let deliveries: DeliveryOutcome[] = []
   if (changes.length > 0 && destinations.length > 0) {
-    const messages = buildMessages(destinations, changes, now().toISOString())
-    deliveries = await deliver(hostFetch, destinations, messages, deadlineMs)
-    calls += messages.length
+    deliveries = await deliver(bodyFetch, destinations, buildMessages(destinations, changes, now().toISOString()), deadlineMs)
   }
 
   const changed = applyResults(existing, real)
   if (changed.length > 0) {
     await buckets.putMany(changed)
-    calls += 1
   }
   const finishedAt = now()
   const effective = new Map([...existing, ...changed.map(({ id, data }) => [id, data] as const)])
-  const monitors = results.map((result: CheckResult) => advanceMonitor(
-    // Poll-only state: webhook counts live in the webhook's own key and are added when readers merge.
-    // A monitor just moved here from a shard that ran first is found through that shard's handoff.
-    previous.polled.get(result.slug),
-    result,
-    [...new Set([bucketId(result.slug, today), bucketId(result.slug, dayOf(result))])].flatMap(id => effective.get(id) ?? []),
-    finishedAt,
-  ))
-  // Monitors a configuration change moved to a shard that has not run yet ride along until it has (no extra call).
-  const handoff = handoffFor(snapshots, shard, new Set(sites.map(site => site.slug)), new Set(pollable.map(site => site.slug)))
-  const snapshot: ShardSnapshot = { version: 2, shard, updatedAt: finishedAt.toISOString(), monitors, ...(handoff.length > 0 ? { handoff } : {}), deliveries }
-  await writeShardSnapshot(ctx, snapshot)
-  calls += 1
+  const monitors = results.flatMap((result) => {
+    if (result.limit) {
+      const kept = previous.polled.get(result.slug)
+      return kept ? [kept] : []
+    }
+    return [advanceMonitor(
+      // Poll-only state: webhook counts live in the webhook's own key and are added when readers merge.
+      previous.polled.get(result.slug),
+      result,
+      [...new Set([bucketId(result.slug, today), bucketId(result.slug, dayOf(result))])].flatMap(id => effective.get(id) ?? []),
+      finishedAt,
+    )]
+  })
+  // A Sentry poll monitor skipped for want of a token keeps its last poll state, so restoring the token
+  // resumes from it. Webhook-only Sentry monitors have no poll state to keep: their webhook snapshot is
+  // merged by readers. A monitor removed from the configuration is not carried.
+  const probedSlugs = new Set(sites.map(site => site.slug))
+  const carried = config.sites.flatMap((site) => {
+    const kept = !probedSlugs.has(site.slug) && site.check === 'sentry' && site.sentry !== undefined ? previous.polled.get(site.slug) : undefined
+    return kept ? [kept] : []
+  })
+  const snapshot: PollSnapshot = { version: 2, updatedAt: finishedAt.toISOString(), monitors: [...monitors, ...carried], deliveries }
+  await writePollSnapshot(ctx, snapshot)
 
-  // The configuration validated, so an earlier error record is stale. Clear it when the budget has a call to spare;
-  // a full shard leaves it to the maintenance task or the save, which also clear it.
-  let plannedTotal = planned
-  if (staleConfigError && calls < CALL_BUDGET) {
+  // The configuration validated, so an earlier error record is stale.
+  if (entries.some(entry => entry.key === CONFIG_ERROR_KEY)) {
     await clearConfigError(ctx)
-    calls += 1
-    plannedTotal += 1
   }
-
-  return { probed: sites.length, calls, planned: plannedTotal, unsupported: results.length - real.length, deliveries: deliveries.length }
+  return { probed: sites.length, deliveries: deliveries.length }
 }
 
-/** Calls the daily prune may spend (one `query` and one `deleteMany`, twice), leaving the rest to the reconcile. */
-const PRUNE_CALL_ALLOWANCE = 4
-
-/**
- * The daily maintenance task: delete buckets that fell out of the 90-day
- * window, then converge the cron tasks on the configuration (finishing anything
- * an earlier reconcile left undone). Its own invocation gets its own budget.
- */
+/** The daily maintenance task: delete buckets that fell out of the 90-day window. */
 export async function runMaintenance(
-  ctx: Pick<PluginContext, 'settings' | 'storage' | 'cron' | 'kv'>,
+  ctx: Pick<PluginContext, 'storage'>,
   options: { now?: () => Date } = {},
-): Promise<{ deleted: number, calls: number }> {
+): Promise<{ deleted: number }> {
   const now = options.now ?? (() => new Date())
-  const pruned = await pruneExpiredBuckets(ctx, now(), PRUNE_CALL_ALLOWANCE)
-  await reconcileShards(ctx, { budget: CALL_BUDGET - pruned.calls, clearConfigError: true })
-  return { deleted: pruned.deleted, calls: pruned.calls }
+  return { deleted: await pruneExpiredBuckets(ctx, now()) }
 }

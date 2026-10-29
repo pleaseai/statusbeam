@@ -46,15 +46,25 @@ jobs:
       - name: Build
         run: bun run build
 
-      - name: Plugin host tests
-        # Runs the EmDash plugin in workerd through vitest, which bun test cannot do.
-        # Kept apart from the coverage/junit run above: it takes neither flag.
-        run: bun run --cwd packages/emdash-plugin test:host
+      - name: Plugin native host tests
+        # Runs the native plugin on EmDash's real runtime (in-memory host, no network).
+        # Kept apart from the root coverage/junit run above: it needs its own module stubs, so it writes its own lcov.
+        # bun reports paths relative to the package (and ../ for workspace siblings); Sonar and Codecov resolve them from the repo root.
+        run: |
+          bun run --cwd packages/emdash-plugin test:host --coverage --coverage-reporter=lcov --coverage-dir=../../coverage/host
+          sed -i -E -e 's#^SF:\.\./\.\./#SF:#' -e 's#^SF:\.\./#SF:packages/#' -e 's#^SF:(src|tests)/#SF:packages/emdash-plugin/\1/#' coverage/host/lcov.info
+
+      - name: Plugin admin tests
+        # React component tests on a happy-dom document; the preload registers it process-wide, so they run alone.
+        # Own lcov for the same reason as the host tests, with the same path rewrite.
+        run: |
+          bun run --cwd packages/emdash-plugin test:admin --coverage --coverage-reporter=lcov --coverage-dir=../../coverage/admin
+          sed -i -E -e 's#^SF:\.\./\.\./#SF:#' -e 's#^SF:\.\./#SF:packages/#' -e 's#^SF:(src|tests)/#SF:packages/emdash-plugin/\1/#' coverage/admin/lcov.info
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
-          files: ./coverage/lcov.info
+          files: ./coverage/lcov.info,./coverage/host/lcov.info,./coverage/admin/lcov.info
           use_oidc: true
 
       - name: Upload test results to Codecov

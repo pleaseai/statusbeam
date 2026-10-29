@@ -7,8 +7,12 @@ depends: []
 conflicts: []
 traces: []
 created_at: 2026-10-22T11:16:17.725Z
-updated_at: 2026-10-22T11:33:21.358Z
-source_tracks: ["emdash-distribution-20261022"]
+updated_at: 2026-10-29T03:12:06.454Z
+source_tracks: ["emdash-distribution-20261022", "emdash-native-plugin-20261027"]
+removed_by:
+  - requirement: REQ-025
+    track: "emdash-native-plugin-20261027"
+    date: "2026-10-29"
 ---
 
 # Emdash Specification
@@ -69,10 +73,10 @@ The system MUST record the spike findings in ADR-0004, and either mark it Accept
 
 The system MUST define the public status response (overall and per-site) as one shared, versioned contract that both standalone StatusBeam and the engine plugin produce and the render library consumes.
 
-### Requirement: serve the engine plugin's public status, per-site, and badge endpoints with unwrapped response bodies in the same shape as the standalone endpoints, at a documented path mapping from the standalone paths
-<!-- req: REQ-007 tracks=emdash-distribution-20261022 -->
+### Requirement: serve the engine plugin's public status, per-site, and badge endpoints with unwrapped response bodies in the same shape as the standalone endpoints, at a documented path mapping from the standalone paths, in the core-owned public status contract (contract version 1, including the optional "not checked yet" flag)
+<!-- req: REQ-007 tracks=emdash-distribution-20261022,emdash-native-plugin-20261027 -->
 
-The system MUST serve the engine plugin's public status, per-site, and badge endpoints with unwrapped response bodies in the same shape as the standalone endpoints, at a documented path mapping from the standalone paths.
+The system MUST serve the engine plugin's public status, per-site, and badge endpoints with unwrapped response bodies in the same shape as the standalone endpoints, at a documented path mapping from the standalone paths, in the core-owned public status contract (contract version 1, including the optional "not checked yet" flag).
 
 #### Scenario: When a client requests the plugin's public status endpoint, the system shall return a body that the shared contract accepts with no wrapping envelope.
 
@@ -89,10 +93,33 @@ The system MUST serve the engine plugin's public status, per-site, and badge end
 - WHEN a client requests the plugin's uptime badge with an invalid or absent `period`
 - THEN return the monthly uptime badge, as the standalone endpoint does
 
-### Requirement: run scheduled checks inside the plugin for every configured poll monitor within the plugin's scheduled capacity (webhook-only Sentry monitors take their status from inbound webhooks, and monitors beyond capacity are named by the AC-021 warning), sharding each run's monitors across separate scheduled tasks so every task stays within one invocation's limits, and keep check history and the current status snapshot in plugin-owned storage
-<!-- req: REQ-008 tracks=emdash-distribution-20261022 -->
+#### Scenario: When a client requests the public status route, the system shall return an unwrapped JSON body that parses with the core public status schema.
 
-The system MUST run scheduled checks inside the plugin for every configured poll monitor within the plugin's scheduled capacity (webhook-only Sentry monitors take their status from inbound webhooks, and monitors beyond capacity are named by the AC-021 warning), sharding each run's monitors across separate scheduled tasks so every task stays within one invocation's limits, and keep check history and the current status snapshot in plugin-owned storage.
+- WHEN a client requests the public status route
+- THEN return an unwrapped JSON body that parses with the core public status schema
+
+#### Scenario: When a monitor has never been checked, the system shall mark it "not checked yet" in the public status response instead of reporting an outage.
+
+- GIVEN a monitor has never been checked
+- WHEN the public status response is built
+- THEN mark the monitor "not checked yet" instead of reporting an outage
+
+### Requirement: run every configured poll monitor on its schedule from one native plugin in a single scheduled task, on a site that has no sandbox runner configured, accepting at most 200 monitors so the poll snapshot fits one D1 row (webhook-only Sentry monitors take their status from inbound webhooks), and keep check history and the current status snapshot in plugin-owned storage
+<!-- req: REQ-008 tracks=emdash-distribution-20261022,emdash-native-plugin-20261027 -->
+
+The system MUST run every configured poll monitor on its schedule from one native plugin in a single scheduled task, on a site that has no sandbox runner configured, accepting at most 200 monitors so the poll snapshot fits one D1 row (webhook-only Sentry monitors take their status from inbound webhooks), and keep check history and the current status snapshot in plugin-owned storage.
+
+#### Scenario: When the plugin is installed on a site with no sandbox runner configured, the system shall load the plugin and run the scheduled checks.
+
+- GIVEN no sandbox runner is configured
+- WHEN the plugin is installed on a site
+- THEN load the plugin and run the scheduled checks
+
+#### Scenario: When 12 monitors are configured (more than one invocation of the current sandboxed engine can probe), the system shall check all 12 in each scheduled run.
+
+- GIVEN 12 monitors are configured
+- WHEN a scheduled run starts
+- THEN check all 12 monitors in that run
 
 #### Scenario: When a monitored endpoint has not finished its response within 10 seconds, the system shall grade that probe down and go on to the task's remaining monitors.
 
@@ -100,19 +127,28 @@ The system MUST run scheduled checks inside the plugin for every configured poll
 - THEN grade that probe down and go on to the task's remaining monitors
 
 ### Requirement: compute 90-day per-day uptime from plugin storage with the same results as the standalone rollup for the same check history
-<!-- req: REQ-009 tracks=emdash-distribution-20261022 -->
+<!-- req: REQ-009 tracks=emdash-distribution-20261022,emdash-native-plugin-20261027 -->
 
 The system MUST compute 90-day per-day uptime from plugin storage with the same results as the standalone rollup for the same check history.
 
-### Requirement: send Slack and generic-webhook notifications when a monitor's status changes
-<!-- req: REQ-010 tracks=emdash-distribution-20261022 -->
+#### Scenario: When the same sequence of check results is recorded by the plugin and by a standalone deployment, the system shall report identical per-day uptime figures for the 90-day window.
 
-The system MUST send Slack and generic-webhook notifications when a monitor's status changes.
+- WHEN the same sequence of check results is recorded by the plugin and by a standalone deployment
+- THEN report identical per-day uptime figures for the 90-day window
 
-### Requirement: accept Statuspage and Sentry inbound webhooks on public endpoints authenticated by a shared secret token
-<!-- req: REQ-011 tracks=emdash-distribution-20261022 -->
+### Requirement: send Slack and generic-webhook notifications when a monitor's status changes, with every notification secret stored encrypted
+<!-- req: REQ-010 tracks=emdash-distribution-20261022,emdash-native-plugin-20261027 -->
 
-The system MUST accept Statuspage and Sentry inbound webhooks on public endpoints authenticated by a shared secret token.
+The system MUST send Slack and generic-webhook notifications when a monitor's status changes, with every notification secret stored encrypted.
+
+#### Scenario: The system shall not send a stored secret's value (a notification secret or the inbound webhook secret) to the browser, in the admin page or any route response.
+
+- THEN do not send a stored secret's value to the browser, in the admin page or any route response
+
+### Requirement: accept Statuspage and Sentry inbound webhooks on public endpoints authenticated by a shared secret token, rejecting every request while no webhook secret is configured and comparing the supplied token in constant time
+<!-- req: REQ-011 tracks=emdash-distribution-20261022,emdash-native-plugin-20261027 -->
+
+The system MUST accept Statuspage and Sentry inbound webhooks on public endpoints authenticated by a shared secret token, rejecting every request while no webhook secret is configured and comparing the supplied token in constant time.
 
 #### Scenario: If no webhook secret is configured, then the system shall reject every inbound webhook request.
 
@@ -124,48 +160,58 @@ The system MUST accept Statuspage and Sentry inbound webhooks on public endpoint
 - WHEN an inbound webhook request carries a token that does not match the configured secret
 - THEN reject it without changing any monitor's status
 
-### Requirement: show a current-status summary widget on the EmDash admin dashboard
-<!-- req: REQ-012 tracks=emdash-distribution-20261022 -->
+#### Scenario: If an inbound webhook arrives while no webhook secret is configured, then the system shall reject it without changing any monitor's status.
 
-The system MUST show a current-status summary widget on the EmDash admin dashboard.
+- GIVEN no webhook secret is configured
+- WHEN an inbound webhook arrives
+- THEN reject it without changing any monitor's status
 
-### Requirement: record a probe whose response exceeds the body-size limit as unsupported, exclude it from status and uptime rollups and from notifications, and show a persistent warning on that monitor naming the limit; plan each scheduled task's calls before it starts so it never begins a probe it cannot afford, and leave every monitor unchanged when the runtime still ends a task early
-<!-- req: REQ-013 tracks=emdash-distribution-20261022 -->
+#### Scenario: The system shall not send a stored secret's value (a notification secret or the inbound webhook secret) to the browser, in the admin page or any route response.
 
-The system MUST record a probe whose response exceeds the body-size limit as unsupported, exclude it from status and uptime rollups and from notifications, and show a persistent warning on that monitor naming the limit; plan each scheduled task's calls before it starts so it never begins a probe it cannot afford, and leave every monitor unchanged when the runtime still ends a task early.
+- THEN do not send a stored secret's value to the browser, in the admin page or any route response
 
-#### Scenario: When a probe fails because the response exceeds the body-size limit, the system shall mark that probe unsupported.
+### Requirement: show administrators a status overview of every monitor (current status, 90-day history, latest response time) and a dashboard widget summarizing overall status
+<!-- req: REQ-012 tracks=emdash-distribution-20261022,emdash-native-plugin-20261027 -->
 
-- WHEN a probe fails because the response exceeds the body-size limit
-- THEN mark that probe unsupported
+The system MUST show administrators a status overview of every monitor (current status, 90-day history, latest response time) and a dashboard widget summarizing overall status.
 
-#### Scenario: The system shall assign each scheduled task no more monitors than its call budget covers, counting probes, notification deliveries, and storage calls.
+#### Scenario: When a monitor has not been checked yet, the status overview shall show "Not checked yet" for it, with no uptime figure, instead of "down" or "100%".
 
-- THEN assign each scheduled task no more monitors than its call budget covers, counting probes, notification deliveries, and storage calls
+- GIVEN a monitor has not been checked yet
+- WHEN the status overview is shown
+- THEN show "Not checked yet" for the monitor, with no uptime figure, instead of "down" or "100%"
 
-#### Scenario: If a probe is marked unsupported, then the system shall not send a status-change notification for that monitor.
+### Requirement: classify each check as up, degraded, or down with the same rules a standalone deployment uses, and time plain HTTP checks to the response headers as it does; body-reading checks (Statuspage, incident.io, Sentry, AI Gateway) go through the host's buffered fetch, so their latency runs to the last body byte
+<!-- req: REQ-013 tracks=emdash-distribution-20261022,emdash-native-plugin-20261027 -->
 
-- WHEN a probe is marked unsupported
-- THEN the system shall not send a status-change notification for that monitor
+The system MUST classify each check as up, degraded, or down with the same rules a standalone deployment uses, and time plain HTTP checks to the response headers as it does; body-reading checks (Statuspage, incident.io, Sentry, AI Gateway) go through the host's buffered fetch, so their latency runs to the last body byte.
 
-#### Scenario: If a probe is marked unsupported, or the runtime ends its scheduled task early, then the system shall leave that monitor's status and uptime unchanged.
+#### Scenario: When a plain HTTP check's URL sends its response headers quickly and then streams its body slowly, the system shall record latency up to the headers and shall not mark the monitor degraded because of the slow body.
 
-- WHEN a probe is marked unsupported, or the runtime ends its scheduled task early
-- THEN leave that monitor's status and uptime unchanged
+- WHEN a plain HTTP check's URL sends its response headers quickly and then streams its body slowly
+- THEN record latency up to the headers
+- THEN do not mark the monitor degraded because of the slow body
 
-#### Scenario: The system shall not switch a monitor configured for GET to HEAD to stay under the body-size limit.
+#### Scenario: When a plain HTTP check (which reads response headers only) serves a body larger than 8 MiB, the system shall classify the check by its status code and header latency instead of the host's body limit. Body-reading checks (Statuspage, incident.io, Sentry, AI Gateway) remain bound by the host's 8 MiB limit.
 
-- THEN the system shall not switch a monitor configured for GET to HEAD to stay under the body-size limit
+- WHEN a plain HTTP check (which reads response headers only) serves a body larger than 8 MiB
+- THEN classify the check by its status code and header latency instead of the host's body limit
+
+#### Scenario: If a monitored response never completes, then the system shall record that check as down when the plugin's per-check deadline expires and shall still check the remaining monitors in that run.
+
+- WHEN a monitored response never completes
+- THEN record that check as down when the per-check deadline expires
+- THEN still check the remaining monitors in that run
 
 ### Requirement: store the monitor configuration as one YAML document validated by the same core schema as a standalone `status.config.yml`
 <!-- req: REQ-014 tracks=emdash-distribution-20261022 -->
 
 The system MUST store the monitor configuration as one YAML document validated by the same core schema as a standalone `status.config.yml`.
 
-### Requirement: provide an administrator-only plugin admin page to edit, validate, save, and test the configuration, saving only when it is valid
-<!-- req: REQ-015 tracks=emdash-distribution-20261022 -->
+### Requirement: provide an administrator-only plugin admin page where an administrator lists, adds, edits, and removes monitors through a form for each monitor, validated by the core configuration schema and saved only when it is valid
+<!-- req: REQ-015 tracks=emdash-distribution-20261022,emdash-native-plugin-20261027 -->
 
-The system MUST provide an administrator-only plugin admin page to edit, validate, save, and test the configuration, saving only when it is valid.
+The system MUST provide an administrator-only plugin admin page where an administrator lists, adds, edits, and removes monitors through a form for each monitor, validated by the core configuration schema and saved only when it is valid.
 
 #### Scenario: When an administrator saves a configuration that fails the core schema, the system shall show every validation issue with the path of the offending field.
 
@@ -177,10 +223,22 @@ The system MUST provide an administrator-only plugin admin page to edit, validat
 - WHEN an administrator saves a configuration that fails the core schema
 - THEN keep the previously saved configuration
 
-#### Scenario: If the stored configuration changed after the administrator loaded the admin page, then the system shall refuse the save and tell the administrator to reload.
+#### Scenario: When an administrator saves a monitor with an invalid field (for example a URL that is not http or https), the system shall show the error next to that field and shall not save the change.
 
-- WHEN the stored configuration changed after the administrator loaded the admin page
-- THEN refuse the save and tell the administrator to reload
+- WHEN an administrator saves a monitor with an invalid field
+- THEN show the error next to that field
+- THEN do not save the change
+
+#### Scenario: If another administrator saved the configuration after this page loaded, then the system shall refuse the save and show the newer configuration.
+
+- GIVEN another administrator saved the configuration after this page loaded
+- WHEN the administrator saves
+- THEN refuse the save and show the newer configuration
+
+#### Scenario: When an administrator removes a monitor and saves, the system shall stop checking it from the next scheduled run.
+
+- WHEN an administrator removes a monitor and saves
+- THEN stop checking it from the next scheduled run
 
 #### Scenario: If a user who is not an administrator requests the admin page or any of its actions, then the system shall refuse the request.
 
@@ -192,19 +250,20 @@ The system MUST provide an administrator-only plugin admin page to edit, validat
 
 The system MUST provide a Validate action that checks the configuration without saving it.
 
-### Requirement: provide a Test site action that runs one check for a single monitor and shows its graded result and latency without saving anything
-<!-- req: REQ-017 tracks=emdash-distribution-20261022 -->
+### Requirement: let an administrator run one monitor's check on demand from the admin page and see its graded status, latency, and response code without recording history or sending a notification
+<!-- req: REQ-017 tracks=emdash-distribution-20261022,emdash-native-plugin-20261027 -->
 
-The system MUST provide a Test site action that runs one check for a single monitor and shows its graded result and latency without saving anything.
+The system MUST let an administrator run one monitor's check on demand from the admin page and see its graded status, latency, and response code without recording history or sending a notification.
 
-#### Scenario: When an administrator runs Test site for one monitor, the system shall show its graded status and latency.
+#### Scenario: When an administrator tests a monitor, the system shall show its status, latency, and response code.
 
-- WHEN an administrator runs Test site for one monitor
-- THEN show its graded status and latency
+- WHEN an administrator tests a monitor
+- THEN show its status, latency, and response code
 
-#### Scenario: The system shall not write check history or change any monitor's status when an administrator runs Test site.
+#### Scenario: When an administrator tests a monitor, the system shall not record the result in history or send a notification.
 
-- THEN the system shall not write check history or change any monitor's status when an administrator runs Test site
+- WHEN an administrator tests a monitor
+- THEN do not record the result in history or send a notification
 
 ### Requirement: apply plugin-only validation rules on top of the core schema — rejecting configurations the plugin cannot run and warning about ones it can run only partially
 <!-- req: REQ-018 tracks=emdash-distribution-20261022 -->
@@ -266,27 +325,49 @@ The system MUST provide status banner, 90-day uptime bar, and per-site detail co
 - WHEN the render library's base URL points at a standalone StatusBeam deployment
 - THEN render the same per-site status as the standalone page
 
-### Requirement: provide an opt-in "status" content block that editors can insert into posts, rendered with the same components
-<!-- req: REQ-022 tracks=emdash-distribution-20261022 -->
+### Requirement: register the opt-in "statusbeam-status" content block from the same plugin, rendered with the same components, keeping the block's choice of status source (this plugin or a standalone deployment) and the site's allowlist of origins a block may read
+<!-- req: REQ-022 tracks=emdash-distribution-20261022,emdash-native-plugin-20261027 -->
 
-The system MUST provide an opt-in "status" content block that editors can insert into posts, rendered with the same components.
+The system MUST register the opt-in "statusbeam-status" content block from the same plugin, rendered with the same components, keeping the block's choice of status source (this plugin or a standalone deployment) and the site's allowlist of origins a block may read.
 
-### Requirement: document installation and operation of both packages, including the execution-mode requirements, the unrestricted outbound network access the engine requests, and the probe contract's limits
-<!-- req: REQ-023 tracks=emdash-distribution-20261022 -->
+#### Scenario: When an editor inserts the status block for a monitor and publishes the content, the published page shall show that monitor's current status.
 
-The system MUST document installation and operation of both packages, including the execution-mode requirements, the unrestricted outbound network access the engine requests, and the probe contract's limits.
+- WHEN an editor inserts the status block for a monitor and publishes the content
+- THEN the published page shows that monitor's current status
 
-#### Scenario: The installation guide shall state that the engine plugin needs a sandbox runner.
+### Requirement: document installation and operation of both packages, installing the plugin as a trusted site dependency (a code and configuration change), including the unrestricted outbound network access the engine requests and the probe contract's limits, and state that a plugin-hosted status page goes down with the CMS it reports on
+<!-- req: REQ-023 tracks=emdash-distribution-20261022,emdash-native-plugin-20261027 -->
 
-- THEN state that the engine plugin needs a sandbox runner
-
-#### Scenario: The installation guide shall state that running the engine plugin in-process is a trust decision that gives up isolation and resource limits.
-
-- THEN state that running the engine plugin in-process is a trust decision that gives up isolation and resource limits
+The system MUST document installation and operation of both packages, installing the plugin as a trusted site dependency (a code and configuration change), including the unrestricted outbound network access the engine requests and the probe contract's limits, and state that a plugin-hosted status page goes down with the CMS it reports on.
 
 #### Scenario: The installation guide shall state which deployment shape keeps checks and the status page independent of a CMS or host outage.
 
 - THEN state which deployment shape keeps checks and the status page independent of a CMS or host outage
+
+### Requirement: restrict the admin page, the dashboard widget, and every admin-only route to site administrators
+<!-- req: REQ-029 tracks=emdash-native-plugin-20261027 -->
+
+The system MUST restrict the admin page, the dashboard widget, and every admin-only route to site administrators.
+
+#### Scenario: If a user who is not an administrator opens the admin page or calls an admin-only route, then the system shall refuse the request and reveal nothing about the configuration.
+
+- WHEN a user who is not an administrator opens the admin page or calls an admin-only route
+- THEN refuse the request and reveal nothing about the configuration
+
+### Requirement: ship one engine implementation for EmDash, with no sandboxed engine entry, no Block Kit admin page, and no bridge-call sharding
+<!-- req: REQ-030 tracks=emdash-native-plugin-20261027 -->
+
+The system MUST ship one engine implementation for EmDash, with no sandboxed engine entry, no Block Kit admin page, and no bridge-call sharding.
+
+#### Scenario: When the plugin package is installed, the system shall expose no sandboxed plugin entry for that package.
+
+- WHEN the plugin package is installed
+- THEN expose no sandboxed plugin entry for that package
+
+### Requirement: record the native-plugin decision in ADR-0005 and mark ADR-0004 as superseded by it, without rewriting ADR-0004
+<!-- req: REQ-031 tracks=emdash-native-plugin-20261027 -->
+
+The system MUST record the native-plugin decision in ADR-0005 and mark ADR-0004 as superseded by it, without rewriting ADR-0004.
 
 ## Non-functional Requirements
 
@@ -294,11 +375,6 @@ The system MUST document installation and operation of both packages, including 
 <!-- req: REQ-024 tracks=emdash-distribution-20261022 -->
 
 The system SHOULD keep the render library and the content block limited to the public status data — no scheduled work, no storage, and no access to engine state.
-
-### Requirement: keep every scheduled task within the Cloudflare runner's per-invocation limits, with no more monitors per task than FR-3 measured
-<!-- req: REQ-025 tracks=emdash-distribution-20261022 -->
-
-The system SHOULD keep every scheduled task within the Cloudflare runner's per-invocation limits, with no more monitors per task than FR-3 measured.
 
 ### Requirement: verify contract parity at the HTTP level, comparing the plugin's endpoint responses with the standalone endpoints rather than only the data before it is serialized
 <!-- req: REQ-026 tracks=emdash-distribution-20261022 -->
@@ -314,3 +390,18 @@ The system SHOULD convey status in the render library with a label or icon along
 <!-- req: REQ-028 tracks=emdash-distribution-20261022 -->
 
 The system SHOULD reuse the core check engine and configuration schema without forking them.
+
+### Requirement: follow EmDash's admin rules for native React code (its component kit, localization, accessibility, and right-to-left layout), with StatusBeam's own strings available in every locale `@statusbeam/core` supports (en, zh, ja, ko) and English shown for any other admin locale
+<!-- req: REQ-032 tracks=emdash-native-plugin-20261027 -->
+
+The system SHOULD follow EmDash's admin rules for native React code (its component kit, localization, accessibility, and right-to-left layout), with StatusBeam's own strings available in every locale `@statusbeam/core` supports (en, zh, ja, ko) and English shown for any other admin locale.
+
+### Requirement: cover the scheduled run, the public and webhook routes, and the admin routes with tests that execute the plugin the way an EmDash host loads a native plugin
+<!-- req: REQ-033 tracks=emdash-native-plugin-20261027 -->
+
+The system SHOULD cover the scheduled run, the public and webhook routes, and the admin routes with tests that execute the plugin the way an EmDash host loads a native plugin.
+
+### Requirement: refuse every probe the plugin sends, scheduled or on demand, to a loopback, private, link-local, or cloud-metadata address, as the host's HTTP API does, whichever fetch path the check uses
+<!-- req: REQ-034 tracks=emdash-native-plugin-20261027 -->
+
+The system SHOULD refuse every probe the plugin sends, scheduled or on demand, to a loopback, private, link-local, or cloud-metadata address, as the host's HTTP API does, whichever fetch path the check uses.

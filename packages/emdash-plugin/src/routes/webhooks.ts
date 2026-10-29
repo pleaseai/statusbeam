@@ -1,16 +1,16 @@
 import type { CheckResult, WebhookProvider } from '@statusbeam/core'
-import type { PluginContext, PluginResponse, RouteEntry, SandboxedRouteContext } from 'emdash/plugin'
+import type { HttpAccess, PluginContext, PluginRoute, RouteContext } from 'emdash'
 import type { DeliveryOutcome } from '../notify'
 import { detectStatusChanges, gradeWebhookPayload, timingSafeEqual, webhookProviderMatchesSite } from '@statusbeam/core'
-import { pluginResponse } from 'emdash/plugin'
-import { applyResults, bucketId, bucketsOf } from '../buckets'
-import { CALL_BUDGET, PROBE_DEADLINE_MS } from '../budget'
+import { definePluginRoute, pluginResponse } from 'emdash'
+import { applyResults, bucketId, bucketsOf, utcDay } from '../buckets'
 import { readSettings } from '../config'
 import { buildMessages, deliver } from '../notify'
+import { PROBE_DEADLINE_MS } from '../probe'
 import { advanceMonitor, listSnapshots, mergeSnapshots, writeWebhookSnapshot } from '../snapshot'
 
 /**
- * Inbound Statuspage and Sentry webhooks as public plugin routes (FR-11).
+ * Inbound Statuspage and Sentry webhooks as public plugin routes (FR-5).
  *
  * EmDash matches a route by its exact name, so the standalone worker's
  * `/webhooks/:provider/:slug` becomes one route per provider with the slug in
@@ -26,63 +26,49 @@ export const WEBHOOK_ROUTE_PREFIX = 'webhooks/'
 /** Largest webhook body the host reads (provider payloads are a few KiB). */
 const MAX_BODY_BYTES = 262_144
 
-/**
- * Bridge calls a webhook makes besides notifications: settings.list,
- * storage.getMany, kv.list, storage.putMany, kv.set.
- */
-export const WEBHOOK_FIXED_CALLS = 5
-
-/** Destinations one webhook can notify within the invocation's call budget. */
-export const WEBHOOK_MAX_DESTINATIONS = CALL_BUDGET - WEBHOOK_FIXED_CALLS
-
 export interface WebhookOptions {
   now?: () => Date
   deadlineMs?: number
+  /** The client for deliveries. Defaults to `ctx.http`; tests pass one over a stand-in `fetch`. */
+  http?: Pick<HttpAccess, 'fetch'>
 }
 
 type WebhookContext = Pick<PluginContext, 'settings' | 'kv' | 'storage' | 'http'>
 
-function reply(status: number, text: string | null, headers: Record<string, string> = {}): PluginResponse {
+function reply(status: number, text: string | null, headers: Record<string, string> = {}) {
   return pluginResponse({ status, headers, body: text === null ? null : { kind: 'text', value: text } })
-}
-
-/** The query of the request URL; the sandboxed request carries an absolute URL. */
-function queryOf(request: SandboxedRouteContext['request']): URLSearchParams {
-  return new URL(request.url, 'https://plugin.invalid').searchParams
 }
 
 /**
  * Handle one inbound webhook. Rejections come in a fixed order, and none of them
  * touches storage or grades a body: method (405), then no secret configured
  * (401), then token mismatch (401). Only a request that passed all three reads
- * the body or any storage.
+ * the body or any storage beyond the settings. A token of another length, or one
+ * with non-ASCII characters, is a mismatch like any other and never throws.
  *
  * A graded event is stored like a polled result, but in webhook-owned records:
  * it increments only the `webhook` bucket row of today, and writes only the
  * webhook's own `snapshot:webhook:{slug}` key (latest result plus day stats of
- * webhook events). A shard never writes either, and this never writes a shard
- * key or a poll row, so an event arriving during a cron run cannot overwrite or
- * lose that run's counts or result. Readers add the two sources when they
+ * webhook events). The check never writes either, and this never writes the
+ * poll key or a poll row, so an event arriving during a check cannot overwrite
+ * or lose that run's counts or result. Readers add the two sources when they
  * merge (see `mergeSnapshots`). Two webhooks for the same slug in the same
  * instant can still race on their own row and key, and one of the two counts can
  * be lost; webhooks are sparse events, so that is accepted.
  *
- * A status change posts to the destinations like a polled one. A webhook
- * spends 5 calls plus one per destination; with more destinations than fit in
- * the 10-call budget the change is recorded and `deliverySkipped: 'capacity'`
- * marks that it was not announced.
+ * A status change posts to the destinations like a polled one.
  */
 export async function handleWebhook(
   provider: WebhookProvider,
-  routeCtx: Pick<SandboxedRouteContext, 'input' | 'request'>,
+  routeCtx: Pick<RouteContext, 'input' | 'request'>,
   ctx: WebhookContext,
   options: WebhookOptions = {},
-): Promise<PluginResponse> {
+) {
   if (routeCtx.request.method.toUpperCase() !== 'POST') {
     return reply(405, 'Method not allowed', { Allow: 'POST' })
   }
   const settings = await readSettings(ctx)
-  const query = queryOf(routeCtx.request)
+  const query = new URL(routeCtx.request.url).searchParams
   if (!settings.webhookSecret || !timingSafeEqual(query.get('token') ?? '', settings.webhookSecret)) {
     return reply(401, 'Unauthorized')
   }
@@ -103,7 +89,7 @@ export async function handleWebhook(
   const graded = gradeWebhookPayload(provider, body, site)
   if ('error' in graded) {
     // As in the standalone Worker: payload drift (a provider API change) is logged with the Zod reason,
-    // and the caller gets the bare 400. `console` costs no bridge call, unlike `ctx.log`.
+    // and the caller gets the bare 400.
     console.warn(`webhook: payload failed validation for slug "${slug}": ${graded.reason}`)
     return reply(400, 'Invalid payload')
   }
@@ -114,26 +100,20 @@ export async function handleWebhook(
   const now = options.now ?? (() => new Date())
   const deadlineMs = options.deadlineMs ?? PROBE_DEADLINE_MS
   const result: CheckResult = { slug: site.slug, status: graded.status, code: 200, responseTime: 0, checkedAt: now().toISOString() }
-  const rowId = bucketId(site.slug, result.checkedAt.slice(0, 10), 'webhook')
+  const rowId = bucketId(site.slug, utcDay(result.checkedAt), 'webhook')
   const buckets = bucketsOf(ctx)
   const [existing, snapshots] = await Promise.all([buckets.getMany([rowId]), listSnapshots(ctx)])
   const previous = mergeSnapshots(snapshots)
 
   const changes = detectStatusChanges([result], previous.results)
   let deliveries: DeliveryOutcome[] = []
-  let deliverySkipped: 'capacity' | undefined
   if (changes.length > 0 && settings.destinations.length > 0) {
-    if (settings.destinations.length > WEBHOOK_MAX_DESTINATIONS) {
-      deliverySkipped = 'capacity'
+    const http = options.http ?? ctx.http
+    if (!http) {
+      throw new Error('ctx.http is unavailable: the plugin needs the network:request:unrestricted capability')
     }
-    else {
-      const http = ctx.http
-      if (!http) {
-        throw new Error('ctx.http is unavailable: the plugin needs the network:request:unrestricted capability')
-      }
-      const messages = buildMessages(settings.destinations, changes, result.checkedAt)
-      deliveries = await deliver((url, init) => http.fetch(url, init), settings.destinations, messages, deadlineMs)
-    }
+    const messages = buildMessages(settings.destinations, changes, result.checkedAt)
+    deliveries = await deliver((url, init) => http.fetch(url, init), settings.destinations, messages, deadlineMs)
   }
 
   const changed = applyResults(existing, [result], 'webhook')
@@ -146,22 +126,23 @@ export async function handleWebhook(
     updatedAt: now().toISOString(),
     monitor,
     deliveries,
-    ...(deliverySkipped ? { deliverySkipped } : {}),
   })
   return reply(200, 'OK')
 }
 
-function webhookRoute(provider: WebhookProvider): RouteEntry {
-  return {
+function webhookRoute(provider: WebhookProvider, options: WebhookOptions): PluginRoute {
+  return definePluginRoute({
     public: true,
     methods: ['POST'],
     response: 'raw',
     request: { body: 'text', maxBytes: MAX_BODY_BYTES },
-    handler: (routeCtx, ctx) => handleWebhook(provider, routeCtx, ctx),
-  }
+    handler: ctx => handleWebhook(provider, ctx, ctx, options),
+  }) as PluginRoute
 }
 
-export const webhookRoutes: Record<string, RouteEntry> = {
-  [`${WEBHOOK_ROUTE_PREFIX}statuspage`]: webhookRoute('statuspage'),
-  [`${WEBHOOK_ROUTE_PREFIX}sentry`]: webhookRoute('sentry'),
+export function webhookRoutes(options: WebhookOptions = {}): Record<string, PluginRoute> {
+  return {
+    [`${WEBHOOK_ROUTE_PREFIX}statuspage`]: webhookRoute('statuspage', options),
+    [`${WEBHOOK_ROUTE_PREFIX}sentry`]: webhookRoute('sentry', options),
+  }
 }

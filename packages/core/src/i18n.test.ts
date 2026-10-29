@@ -65,6 +65,12 @@ describe('getDict', () => {
       expect(dict.timeline.windowStart(90)).toContain('90')
       expect(dict.timeline.ariaUptime('99%').length).toBeGreaterThan(0)
       expect(dict.breakdown({ day: '100%', week: '99%', month: '98%', quarter: '97%' })).toContain('100%')
+      expect(dict.admin.monitors.monitorN(2)).toContain('2')
+      expect(dict.admin.monitors.remove('API')).toContain('API')
+      expect(dict.admin.monitors.slugRenamed('old-slug')).toContain('old-slug')
+      expect(dict.admin.monitors.duplicateSlug('dup-slug')).toContain('dup-slug')
+      expect(Object.keys(dict.admin.monitors.test)).toHaveLength(9)
+      expect(Object.keys(dict.admin.overview)).toHaveLength(7)
     }
   })
 

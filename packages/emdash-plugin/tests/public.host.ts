@@ -1,20 +1,23 @@
-import type { PluginRuntimeTestHost } from '@emdash-cms/plugin-test'
 import type { SiteSummary } from '@statusbeam/core'
-import type { MonitorState, ShardSnapshot } from '../src/snapshot'
-import { createPluginRuntimeTestHost } from '@emdash-cms/plugin-test'
+import type { MonitorState, PollSnapshot } from '../src/snapshot'
+import type { Host } from './host-harness'
 import { dayStatFromCounts, denseHistory, routePaths, shieldsEndpointSchema, siteResponseSchema, statusResponseSchema, validateConfig } from '@statusbeam/core'
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { mergeSnapshots, summariesFromSnapshot } from '../src/snapshot'
+import { beforeAll, beforeEach, describe, expect, it, mock } from 'bun:test'
+import { PUBLIC_CACHE_CONTROL } from '../src/routes/public'
+import { mergeSnapshots, POLL_SNAPSHOT_KEY, summariesFromSnapshot } from '../src/snapshot'
+import { newHost } from './host-harness'
 
 /**
- * The standalone handlers under `apps/web` run here with their data layer
- * replaced by the same summaries the plugin serves, so each comparison is
- * between two HTTP response bodies, not between pre-serialization data.
+ * The public routes through EmDash's production route boundary
+ * (`dispatchPluginApiRequest`). The standalone handlers under `apps/web` run
+ * here with their data layer replaced by the same summaries the plugin serves,
+ * so each comparison is between two HTTP response bodies, not between
+ * pre-serialization data.
  */
-const web = vi.hoisted(() => ({ summary: [] as unknown[] }))
-vi.mock('../../../apps/web/src/lib/data', () => ({
+const web = { summary: [] as SiteSummary[] }
+mock.module('../../../apps/web/src/lib/data', () => ({
   getSummary: async () => web.summary,
-  getSite: async (slug: string) => (web.summary as Array<{ slug: string }>).find(s => s.slug === slug),
+  getSite: async (slug: string) => web.summary.find(s => s.slug === slug),
 }))
 
 const YAML = [
@@ -28,15 +31,16 @@ const YAML = [
   '    url: https://worker.example.com/',
 ].join('\n')
 
-const config = validateConfig(YAML)
-if (!config.ok) {
+const parsed = validateConfig(YAML)
+if (!parsed.ok) {
   throw new Error('fixture configuration is invalid')
 }
+const config = parsed.config
 
 /**
- * The plugin reads the real clock inside workerd, where a test cannot freeze it.
- * So each test starts clear of UTC midnight (waiting past it when it is close)
- * and captures one time that the fixtures and the expectations share.
+ * The plugin reads the real clock, where a test cannot freeze it. So each test
+ * starts clear of UTC midnight (waiting past it when it is close) and captures
+ * one time that the fixtures and the expectations share.
  */
 const MIDNIGHT_MARGIN_MS = 20_000
 
@@ -49,11 +53,10 @@ async function clearOfMidnight(): Promise<Date> {
   return new Date()
 }
 
-/** One time per test (see {@link clearOfMidnight}); the fixtures below are rebuilt from it before each test. */
 let today = new Date()
 const isoDay = (ago: number) => new Date(today.getTime() - ago * 86_400_000).toISOString().slice(0, 10)
 
-function monitor(slug: string, status: 'up' | 'degraded' | 'down', responseTime: number, extra: Partial<MonitorState> = {}): MonitorState {
+function monitor(slug: string, status: 'up' | 'degraded' | 'down', responseTime: number): MonitorState {
   const counts = [
     { day: isoDay(2), up: 9, degraded: 1, down: 0, total: 10 },
     { day: isoDay(1), up: 3, degraded: 0, down: 1, total: 4 },
@@ -64,57 +67,45 @@ function monitor(slug: string, status: 'up' | 'degraded' | 'down', responseTime:
     result: { slug, status, code: status === 'down' ? 500 : 200, responseTime, checkedAt: today.toISOString() },
     days: denseHistory(new Map(counts.map(row => [row.day, dayStatFromCounts(row)])), today),
     totals: Object.fromEntries(counts.map(row => [row.day, row.total])),
-    ...extra,
   }
 }
 
-function snapshotAt(): ShardSnapshot {
+function snapshotAt(): PollSnapshot {
   return {
     version: 2,
-    shard: 0,
     updatedAt: today.toISOString(),
     deliveries: [],
-    monitors: [
-      monitor('website', 'up', 142),
-      monitor('api', 'degraded', 2310),
-      // An unsupported monitor keeps its last real result; only the warning marks it.
-      monitor('worker', 'up', 88, { warning: { limit: 'body', since: today.toISOString(), lastSeen: today.toISOString() } }),
-    ],
+    monitors: [monitor('website', 'up', 142), monitor('api', 'degraded', 2310), monitor('worker', 'up', 88)],
   }
 }
 
-let SNAPSHOT: ShardSnapshot = snapshotAt()
+let SNAPSHOT: PollSnapshot = snapshotAt()
 let summary: SiteSummary[] = []
 
 beforeEach(async () => {
   today = await clearOfMidnight()
   SNAPSHOT = snapshotAt()
-  summary = summariesFromSnapshot(mergeSnapshots([{ key: 'snapshot:0', value: SNAPSHOT }]), config.config.sites, today)
+  summary = summariesFromSnapshot(mergeSnapshots([{ key: POLL_SNAPSHOT_KEY, value: SNAPSHOT }]), config.sites, today)
   web.summary = summary
-})
+}, MIDNIGHT_MARGIN_MS + 5_000)
 
 const normalize = (body: string) => body.replace(/"generatedAt":"[^"]*"/, '"generatedAt":"<now>"')
 
-let host: PluginRuntimeTestHost | undefined
+const ok = () => new Response('ok', { status: 200 })
 
-afterEach(async () => {
-  await host?.dispose()
-  host = undefined
-})
-
-async function newHost(options: { yaml?: string, snapshot?: ShardSnapshot | null } = {}): Promise<PluginRuntimeTestHost> {
-  host = await createPluginRuntimeTestHost()
-  await host.fixtures.plugin.setting('config', options.yaml ?? YAML)
+async function newPublicHost(options: { yaml?: string, snapshot?: PollSnapshot | null } = {}): Promise<Host> {
+  const host = await newHost(ok)
+  await host.setConfig(options.yaml ?? YAML)
   if (options.snapshot !== null) {
-    await host.fixtures.plugin.kv('snapshot:0', options.snapshot ?? SNAPSHOT)
+    await host.setKv(POLL_SNAPSHOT_KEY, options.snapshot ?? SNAPSHOT)
   }
   return host
 }
 
 /** GET a `routePaths.emdash` path: the route name is its last segment, the query rides on the URL. */
-async function pluginGet(h: PluginRuntimeTestHost, path: string): Promise<Response> {
-  const name = new URL(path, 'https://example.com').pathname.split('/').at(-1) as string
-  return h.actions.routes.request(name, { url: `https://example.com${path}`, method: 'GET' })
+async function pluginGet(host: Host, path: string): Promise<Response> {
+  const parsedUrl = new URL(path, 'https://example.com')
+  return host.dispatch(parsedUrl.pathname.split('/').at(-1) as string, { query: Object.fromEntries(parsedUrl.searchParams) })
 }
 
 type WebHandler = (context: { params: Record<string, string>, url: URL }) => Promise<Response>
@@ -145,8 +136,8 @@ async function standaloneGet(handler: WebHandler, path: string, slug = ''): Prom
 
 describe('the public status routes', () => {
   it('serves an unwrapped status body that the contract accepts', async () => {
-    const h = await newHost()
-    const response = await pluginGet(h, routePaths.emdash.status())
+    const host = await newPublicHost()
+    const response = await pluginGet(host, routePaths.emdash.status())
     const body = await response.json()
 
     expect(response.status).toBe(200)
@@ -155,19 +146,21 @@ describe('the public status routes', () => {
     expect((body as { sites: unknown[] }).sites).toHaveLength(3)
     expect(body).not.toHaveProperty('success')
 
-    const site = await (await pluginGet(h, routePaths.emdash.site('api'))).json()
+    const site = await (await pluginGet(host, routePaths.emdash.site('api'))).json()
     expect(siteResponseSchema.safeParse(site).success).toBe(true)
     expect(site).toMatchObject({ slug: 'api', status: 'degraded', responseTime: 2310 })
   })
 
-  it('keeps an unsupported monitor on its last real result', async () => {
-    const h = await newHost()
-    const site = await (await pluginGet(h, routePaths.emdash.site('worker'))).json()
-    expect(site).toMatchObject({ slug: 'worker', status: 'up', responseTime: 88 })
+  it('serves the paths core declares under the plugin route base', () => {
+    expect(routePaths.emdash.status()).toBe('/_emdash/api/plugins/statusbeam/status')
+    expect(routePaths.emdash.site('api')).toBe('/_emdash/api/plugins/statusbeam/status?slug=api')
+    expect(routePaths.emdash.badge()).toBe('/_emdash/api/plugins/statusbeam/badge')
+    expect(routePaths.emdash.uptimeBadge('api', 'week')).toBe('/_emdash/api/plugins/statusbeam/badge-uptime?slug=api&period=week')
+    expect(routePaths.emdash.responseTimeBadge('api')).toBe('/_emdash/api/plugins/statusbeam/badge-response-time?slug=api')
   })
 
   it('serves valid shields.io endpoint bodies from every badge route', async () => {
-    const h = await newHost()
+    const host = await newPublicHost()
     const paths = [
       routePaths.emdash.badge(),
       routePaths.emdash.siteBadge('website'),
@@ -175,14 +168,14 @@ describe('the public status routes', () => {
       routePaths.emdash.responseTimeBadge('website'),
     ]
     for (const path of paths) {
-      const response = await pluginGet(h, path)
+      const response = await pluginGet(host, path)
       expect(response.status).toBe(200)
       expect(shieldsEndpointSchema.safeParse(await response.json()).success, path).toBe(true)
     }
   })
 
   it('serves a response body equal to the standalone endpoint, generatedAt aside', async () => {
-    const h = await newHost()
+    const host = await newPublicHost()
     const cases: Array<[string, WebHandler, string]> = [
       [routePaths.emdash.status(), standalone.status, routePaths.standalone.status()],
       [routePaths.emdash.badge(), standalone.badge, routePaths.standalone.badge()],
@@ -203,7 +196,7 @@ describe('the public status routes', () => {
     for (const [pluginPath, handler, standalonePath] of cases) {
       const slug = new URL(pluginPath, 'https://example.com').searchParams.get('slug') ?? ''
       const expected = await standaloneGet(handler, standalonePath, slug)
-      const actual = await pluginGet(h, pluginPath)
+      const actual = await pluginGet(host, pluginPath)
       expect(actual.status, pluginPath).toBe(expected.status)
       expect(normalize(await actual.text()), pluginPath).toBe(normalize(await expected.text()))
     }
@@ -215,12 +208,12 @@ describe('the public status routes', () => {
     if (!fresh.ok) {
       throw new Error('fixture configuration is invalid')
     }
-    web.summary = summariesFromSnapshot(mergeSnapshots([{ key: 'snapshot:0', value: SNAPSHOT }]), fresh.config.sites, today)
-    const h = await newHost({ yaml })
+    web.summary = summariesFromSnapshot(mergeSnapshots([{ key: POLL_SNAPSHOT_KEY, value: SNAPSHOT }]), fresh.config.sites, today)
+    const host = await newPublicHost({ yaml })
 
-    const site = await (await pluginGet(h, routePaths.emdash.site('fresh'))).json()
+    const site = await (await pluginGet(host, routePaths.emdash.site('fresh'))).json()
     expect(siteResponseSchema.parse(site)).toMatchObject({ slug: 'fresh', status: 'down', pending: true })
-    const badge = await (await pluginGet(h, routePaths.emdash.siteBadge('fresh'))).json()
+    const badge = await (await pluginGet(host, routePaths.emdash.siteBadge('fresh'))).json()
     expect(badge).toMatchObject({ message: 'not checked', color: 'lightgrey' })
 
     const cases: Array<[string, WebHandler, string]> = [
@@ -234,14 +227,25 @@ describe('the public status routes', () => {
     for (const [pluginPath, handler, standalonePath] of cases) {
       const slug = new URL(pluginPath, 'https://example.com').searchParams.get('slug') ?? ''
       const expected = await standaloneGet(handler, standalonePath, slug)
-      const actual = await pluginGet(h, pluginPath)
+      const actual = await pluginGet(host, pluginPath)
       expect(actual.status, pluginPath).toBe(200)
       expect(normalize(await actual.text()), pluginPath).toBe(normalize(await expected.text()))
     }
   })
 
+  it('marks a monitor as pending until its first real check, in the whole status body too', async () => {
+    const host = await newPublicHost({ snapshot: null })
+    const body = statusResponseSchema.parse(await (await pluginGet(host, routePaths.emdash.status())).json())
+    expect(body.sites).toHaveLength(3)
+    expect(body.sites.every(site => site.pending === true)).toBe(true)
+
+    await host.setKv(POLL_SNAPSHOT_KEY, SNAPSHOT)
+    const after = statusResponseSchema.parse(await (await pluginGet(host, routePaths.emdash.status())).json())
+    expect(after.sites.some(site => site.pending)).toBe(false)
+  })
+
   it('answers an unknown slug with the standalone 404 body', async () => {
-    const h = await newHost()
+    const host = await newPublicHost()
     const pairs: Array<[string, WebHandler, string]> = [
       [routePaths.emdash.site('nope'), standalone.site, routePaths.standalone.site('nope')],
       [routePaths.emdash.siteBadge('nope'), standalone.siteBadge, routePaths.standalone.siteBadge('nope')],
@@ -250,7 +254,7 @@ describe('the public status routes', () => {
     ]
     for (const [pluginPath, handler, standalonePath] of pairs) {
       const expected = await standaloneGet(handler, standalonePath, 'nope')
-      const actual = await pluginGet(h, pluginPath)
+      const actual = await pluginGet(host, pluginPath)
       expect(expected.status).toBe(404)
       expect(actual.status, pluginPath).toBe(404)
       expect(await actual.text(), pluginPath).toBe(await expected.text())
@@ -258,43 +262,64 @@ describe('the public status routes', () => {
   })
 
   it('falls back to the month window for an invalid or absent period, as standalone does', async () => {
-    const h = await newHost()
-    const month = await (await pluginGet(h, routePaths.emdash.uptimeBadge('api', 'month'))).text()
+    const host = await newPublicHost()
+    const month = await (await pluginGet(host, routePaths.emdash.uptimeBadge('api', 'month'))).text()
     for (const query of ['&period=decade', '&period=', '']) {
       const path = `${routePaths.emdash.uptimeBadge('api')}${query}`
       const expected = await standaloneGet(standalone.uptime, `/api/badge/api/uptime.json${query.replace(/^&/, '?')}`, 'api')
-      const actual = await (await pluginGet(h, path)).text()
+      const actual = await (await pluginGet(host, path)).text()
       expect(actual, path).toBe(month)
       expect(actual, path).toBe(await expected.text())
     }
   })
 
   it('carries the route cacheControl on successful GETs, and not on a 404', async () => {
-    const h = await newHost()
-    const ok = await pluginGet(h, routePaths.emdash.status())
+    const host = await newPublicHost()
     const standaloneCache = (await standaloneGet(standalone.status, '/api/status.json')).headers.get('cache-control')
-    expect(standaloneCache).toBe('public, s-maxage=60, stale-while-revalidate=600')
-    expect(ok.headers.get('cache-control')).toBe(standaloneCache)
+    expect(standaloneCache).toBe(PUBLIC_CACHE_CONTROL)
+    for (const path of [routePaths.emdash.status(), routePaths.emdash.site('api'), routePaths.emdash.badge(), routePaths.emdash.uptimeBadge('api'), routePaths.emdash.responseTimeBadge('api')]) {
+      expect((await pluginGet(host, path)).headers.get('cache-control'), path).toBe(standaloneCache)
+    }
 
-    const miss = await pluginGet(h, routePaths.emdash.site('nope'))
+    const miss = await pluginGet(host, routePaths.emdash.site('nope'))
     expect(miss.headers.get('cache-control')).not.toContain('s-maxage')
+  })
+
+  it('answers GET only, with the host\'s 405 and an Allow header', async () => {
+    const host = await newPublicHost()
+    for (const route of ['status', 'badge', 'badge-uptime', 'badge-response-time']) {
+      const response = await host.dispatch(route, { method: 'POST', body: '{}' })
+      expect(response.status, route).toBe(405)
+      expect(response.headers.get('allow'), route).toBe('GET')
+    }
   })
 
   it('answers as standalone does with no data when the configuration is absent, invalid, or rejected by the plugin rules', async () => {
     const duplicateSlugs = 'name: Test\nsites:\n  - name: website\n    url: https://a.example.com/\n  - name: website\n    url: https://b.example.com/'
     for (const yaml of ['', 'name: Test\nsites: [oops', duplicateSlugs]) {
-      const h = await newHost({ yaml, snapshot: null })
+      const host = await newPublicHost({ yaml, snapshot: null })
       web.summary = []
-      const status = await pluginGet(h, routePaths.emdash.status())
+      const status = await pluginGet(host, routePaths.emdash.status())
       expect(status.status).toBe(200)
       expect(normalize(await status.text())).toBe(normalize(await (await standaloneGet(standalone.status, '/api/status.json')).text()))
-      const badge = await pluginGet(h, routePaths.emdash.badge())
+      const badge = await pluginGet(host, routePaths.emdash.badge())
       expect(await badge.text()).toBe(await (await standaloneGet(standalone.badge, '/api/badge.json')).text())
-      const site = await pluginGet(h, routePaths.emdash.site('website'))
+      const site = await pluginGet(host, routePaths.emdash.site('website'))
       expect(site.status).toBe(404)
-      await h.dispose()
-      host = undefined
       web.summary = summary
     }
+  })
+
+  it('serves a rejected configuration exactly like an absent one, even with a snapshot for its monitors', async () => {
+    const duplicate = ['name: Test', 'sites:', '  - name: api', '    url: https://one.example.com/', '  - name: api', '    url: https://two.example.com/'].join('\n')
+    const rejected = await newPublicHost({ yaml: duplicate })
+    const absent = await newHost(ok)
+    for (const path of [routePaths.emdash.status(), routePaths.emdash.badge(), routePaths.emdash.site('api'), routePaths.emdash.responseTimeBadge('api')]) {
+      const served = await pluginGet(rejected, path)
+      const empty = await pluginGet(absent, path)
+      expect(served.status, path).toBe(empty.status)
+      expect(normalize(await served.text()), path).toBe(normalize(await empty.text()))
+    }
+    expect(((await (await pluginGet(rejected, routePaths.emdash.status())).json()) as { sites: unknown[] }).sites).toEqual([])
   })
 })

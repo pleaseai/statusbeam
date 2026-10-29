@@ -1,0 +1,3 @@
+{"message":"[plugin:statusbeam] statusbeam spike cron fired {\n  name: 'spike-tick',\n  scheduledAt: '2026-10-27T08:53:00.000Z',\n  ranAt: '2026-10-27T08:53:40.945Z'\n}","label":"vite","level":"info"}
+{"message":"{\"message\":\"[204] POST /_emdash/api/dev/scheduled-tasks 40ms\",\"label\":null,\"level\":\"info\"}","label":"vite","level":"info"}
+{"message":"{\"message\":\"[200] /_emdash/api/plugins/statusbeam/spike-cron 25ms\",\"label\":null,\"level\":\"info\"}","label":"vite","level":"info"}

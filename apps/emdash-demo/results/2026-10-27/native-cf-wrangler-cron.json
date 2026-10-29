@@ -1,0 +1,20 @@
+{
+  "success": true,
+  "data": {
+    "tasks": [
+      {
+        "name": "spike-tick",
+        "schedule": "* * * * *",
+        "nextRunAt": "2026-10-27T09:02:00.000Z",
+        "lastRunAt": "2026-10-27T09:01:11.390Z"
+      }
+    ],
+    "runs": [
+      {
+        "name": "spike-tick",
+        "scheduledAt": "2026-10-27T08:58:00.000Z",
+        "ranAt": "2026-10-27T09:01:11.393Z"
+      }
+    ]
+  }
+}

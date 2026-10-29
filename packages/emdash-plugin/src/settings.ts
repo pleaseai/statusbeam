@@ -1,3 +1,5 @@
+import type { PluginContext } from 'emdash/plugin'
+
 /**
  * The plain settings key that holds the monitor configuration as YAML. Every
  * reader validates it with the plugin rules (`config.ts`) before using it.
@@ -15,6 +17,21 @@ export const WEBHOOK_SECRET_KEY = 'webhookSecret'
 
 /** Encrypted secret setting: the Sentry API token used to poll Sentry monitors (separate from the webhook secret). */
 export const SENTRY_TOKEN_SECRET_KEY = 'sentryToken'
+
+/** The `settings.list` result as a key-to-value map. */
+export async function settingValues(ctx: Pick<PluginContext, 'settings'>): Promise<Map<string, unknown>> {
+  return new Map((await ctx.settings.list()).map(entry => [entry.key, entry.value]))
+}
+
+/** A text setting, trimmed; `undefined` when it is not a string or is blank. */
+export function secretText(values: Map<string, unknown>, key: string): string | undefined {
+  const value = values.get(key)
+  if (typeof value !== 'string') {
+    return undefined
+  }
+  const text = value.trim()
+  return text === '' ? undefined : text
+}
 
 /** One notification destination. The URL is a secret: never persist or log it. */
 export interface Destination {

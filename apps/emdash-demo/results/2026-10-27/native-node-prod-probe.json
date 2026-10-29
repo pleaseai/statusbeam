@@ -1,0 +1,25 @@
+{
+  "success": true,
+  "data": {
+    "target": "slow-body-3s",
+    "url": "https://httpbin.org/drip?duration=3&numbytes=10&delay=0&code=200",
+    "runtime": "Node.js/24",
+    "reports": [
+      {
+        "mode": "header",
+        "status": "up",
+        "code": 200,
+        "responseTime": 831,
+        "headersMs": 787,
+        "wallMs": 831
+      },
+      {
+        "mode": "body",
+        "status": "degraded",
+        "code": 200,
+        "responseTime": 3975,
+        "wallMs": 3975
+      }
+    ]
+  }
+}

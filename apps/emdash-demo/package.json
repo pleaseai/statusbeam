@@ -17,6 +17,8 @@
     "deploy:worker-loader": "SPIKE_MODE=worker-loader astro build && wrangler deploy",
     "build:workerd": "SPIKE_MODE=workerd astro build",
     "build:in-process": "SPIKE_MODE=in-process astro build",
+    "dev:native": "SPIKE_MODE=native astro dev",
+    "dev:native-cf": "SPIKE_MODE=native-cf astro dev",
     "start": "node ./dist/server/entry.mjs"
   },
   "dependencies": {

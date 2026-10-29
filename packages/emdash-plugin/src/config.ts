@@ -2,9 +2,7 @@ import type { StatusConfig } from '@statusbeam/core'
 import type { PluginContext } from 'emdash/plugin'
 import type { Destination } from './settings'
 import { validateConfig } from '@statusbeam/core'
-import { MAX_SHARDS } from './budget'
-import { CONFIG_SETTINGS_KEY, destinationsFrom, isHttpUrl, parseUrlList, SENTRY_TOKEN_SECRET_KEY, SLACK_SECRET_KEY, WEBHOOK_SECRET_KEY, WEBHOOKS_SECRET_KEY } from './settings'
-import { monitorsPerShard, pollableSites, shardCountFor } from './shards'
+import { CONFIG_SETTINGS_KEY, destinationsFrom, parseUrlList, secretText, SENTRY_TOKEN_SECRET_KEY, settingValues, SLACK_SECRET_KEY, WEBHOOK_SECRET_KEY, WEBHOOKS_SECRET_KEY } from './settings'
 
 export { SENTRY_TOKEN_SECRET_KEY } from './settings'
 
@@ -15,8 +13,6 @@ export interface PluginIssue {
   path: string
   /** Written for the administrator. Never quotes a secret. */
   message: string
-  /** `capacity`: the destinations leave no call for a probe. A saved configuration cannot run, but a run still records it as a capacity error in the snapshot. */
-  code?: 'capacity'
 }
 
 export interface PluginValidation {
@@ -44,18 +40,17 @@ function invalidEntriesOf(field: string, value: unknown): SecretsView['invalidEn
     return []
   }
   return value.split(/\r?\n/).flatMap((text, index) =>
-    text.split(/[\s,]+/).filter(Boolean).some(entry => !isHttpUrl(entry)) ? [{ field, line: index + 1 }] : [])
+    parseUrlList(text).invalid > 0 ? [{ field, line: index + 1 }] : [])
 }
 
 /** The secrets view of a `settings.list` result. */
 export function secretsFrom(values: Map<string, unknown>): { secrets: SecretsView, destinations: Destination[] } {
   const { destinations } = destinationsFrom(values)
-  const token = values.get(SENTRY_TOKEN_SECRET_KEY)
   return {
     destinations,
     secrets: {
       destinations: destinations.length,
-      sentryToken: typeof token === 'string' && token.trim() !== '',
+      sentryToken: secretText(values, SENTRY_TOKEN_SECRET_KEY) !== undefined,
       extraSlackUrls: Math.max(0, parseUrlList(values.get(SLACK_SECRET_KEY)).urls.length - 1),
       invalidEntries: [
         ...invalidEntriesOf(SLACK_SECRET_KEY, values.get(SLACK_SECRET_KEY)),
@@ -64,6 +59,15 @@ export function secretsFrom(values: Map<string, unknown>): { secrets: SecretsVie
     },
   }
 }
+
+/**
+ * Most monitors the plugin accepts. All monitor state is one `snapshot:poll` KV value,
+ * stored as one `options` row, and D1 limits a row to 2,000,000 bytes. Once 90 days of
+ * history fill in, a monitor takes about 6 to 9 KB: 5.9 KB at best, 8.6 KB with a long slug
+ * and a non-ASCII error at the 300-character cap (`MAX_STORED_ERROR_LENGTH`). 200 monitors
+ * therefore stay under the limit with headroom. Standalone has no such limit.
+ */
+export const MAX_MONITORS = 200
 
 const NOT_YAML = 'Notification URLs belong in the encrypted plugin settings, not in the YAML'
 
@@ -105,7 +109,7 @@ function analyze(yaml: string, secrets: SecretsView): Analysis {
   }
   const config = core.config
   const issues: PluginIssue[] = []
-  const error = (path: string, message: string, code?: 'capacity') => issues.push({ severity: 'error', path, message, ...(code ? { code } : {}) })
+  const error = (path: string, message: string) => issues.push({ severity: 'error', path, message })
   const warn = (path: string, message: string) => issues.push({ severity: 'warning', path, message })
 
   if (config.notifications?.delivery === 'queue') {
@@ -117,6 +121,10 @@ function analyze(yaml: string, secrets: SecretsView): Analysis {
   config.notifications?.webhooks?.forEach((_, index) => {
     error(`notifications.webhooks[${index}]`, `${NOT_YAML}. Remove this entry and add the URL to the "${WEBHOOKS_SECRET_KEY}" setting, one per line.`)
   })
+
+  if (config.sites.length > MAX_MONITORS) {
+    error('sites', `The configuration has ${config.sites.length} monitors, but the plugin supports at most ${MAX_MONITORS}: their state must fit in one D1 row. Remove ${config.sites.length - MAX_MONITORS} monitors.`)
+  }
 
   const firstSeen = new Map<string, number>()
   config.sites.forEach((site, index) => {
@@ -135,17 +143,6 @@ function analyze(yaml: string, secrets: SecretsView): Analysis {
     }
   })
 
-  // Count what the run and the reconcile will poll: Sentry poll monitors count only while a token is set.
-  const monitors = pollableSites(config, { sentryToken: secrets.sentryToken ? 'set' : undefined }).length
-  if (monitors > 0 && monitorsPerShard(secrets.destinations) < 1) {
-    error('notifications', `${secrets.destinations} notification destinations leave no call for a probe in a run. Remove destinations from the encrypted settings.`, 'capacity')
-  }
-  else {
-    const fit = shardCountFor(monitors, secrets.destinations) * monitorsPerShard(secrets.destinations)
-    if (monitors > fit) {
-      warn('sites', `${monitors} monitors are pollable, but a run of ${MAX_SHARDS} scheduled tasks probes ${fit} (${monitorsPerShard(secrets.destinations)} each, with ${secrets.destinations} notification destinations). ${monitors - fit} would go unchecked.`)
-    }
-  }
   issues.push(...secretIssues(secrets))
   return { parsed: config, issues }
 }
@@ -173,18 +170,18 @@ export interface ConfigErrorRecord {
   issues: PluginIssue[]
 }
 
-/** The recorded configuration error, or `null` (one bridge call). The admin page shows it as a banner. */
+/** The recorded configuration error, or `null`. */
 export async function readConfigError(ctx: Pick<PluginContext, 'kv'>): Promise<ConfigErrorRecord | null> {
   return ctx.kv.get<ConfigErrorRecord>(CONFIG_ERROR_KEY)
 }
 
-/** Record the failure (one bridge call). It stays until {@link clearConfigError}. */
+/** Record the failure. It stays until {@link clearConfigError}. */
 export async function recordConfigError(ctx: Pick<PluginContext, 'kv'>, issues: PluginIssue[], now: Date): Promise<void> {
   const record: ConfigErrorRecord = { version: 1, recordedAt: now.toISOString(), issues: issues.filter(issue => issue.severity === 'error') }
   await ctx.kv.set(CONFIG_ERROR_KEY, record)
 }
 
-/** Drop the recorded error (one bridge call). */
+/** Drop the recorded error. */
 export async function clearConfigError(ctx: Pick<PluginContext, 'kv'>): Promise<void> {
   await ctx.kv.delete(CONFIG_ERROR_KEY)
 }
@@ -198,11 +195,10 @@ export type StoredConfig
 /**
  * Read and re-validate the stored configuration with one `settings.list` call
  * (FR-20). An empty setting is `absent`: nothing is configured, so nothing is
- * wrong. A configuration whose only error is the capacity one is `valid`: the
- * run still records it as a capacity error in the snapshot.
+ * wrong.
  */
 export async function loadStoredConfig(ctx: Pick<PluginContext, 'settings'>): Promise<StoredConfig> {
-  return storedConfigFrom(new Map((await ctx.settings.list()).map(entry => [entry.key, entry.value])))
+  return storedConfigFrom(await settingValues(ctx))
 }
 
 /** {@link loadStoredConfig} over a `settings.list` result the caller already holds. Pure. */
@@ -213,12 +209,10 @@ function storedConfigFrom(values: Map<string, unknown>): StoredConfig {
   }
   const { destinations, secrets } = secretsFrom(values)
   const { parsed, issues } = analyze(yaml, secrets)
-  const blocking = issues.filter(issue => issue.severity === 'error' && issue.code !== 'capacity')
-  if (blocking.length > 0 || !parsed) {
+  if (issues.some(issue => issue.severity === 'error') || !parsed) {
     return { status: 'invalid', issues }
   }
-  const token = values.get(SENTRY_TOKEN_SECRET_KEY)
-  const sentryToken = typeof token === 'string' && token.trim() !== '' ? token.trim() : undefined
+  const sentryToken = secretText(values, SENTRY_TOKEN_SECRET_KEY)
   return { status: 'valid', config: parsed, destinations, issues, ...(sentryToken ? { sentryToken } : {}) }
 }
 
@@ -227,30 +221,25 @@ export interface PluginSettings {
   config: StatusConfig | null
   /** Notification destinations from the secret settings. */
   destinations: Destination[]
-  /** Secret entries that are not http(s) URLs. They are not delivered to; the admin page reports them. */
-  invalidDestinations: number
   /** The shared webhook token, or `null` when unset (the webhook routes then reject everything). */
   webhookSecret: string | null
 }
 
 /**
  * Read the configuration and the notification secrets with one `settings.list`
- * call (the bridge decrypts secret fields there). The configuration is gated
+ * call (the host decrypts secret fields there). The configuration is gated
  * exactly as the scheduled run gates it: core schema plus the plugin rules, so
  * the public and webhook routes never serve or route a configuration the run
  * refuses. An absent or rejected configuration gives `config: null`: callers
  * then check nothing and write nothing, so no monitor's status changes.
  */
 export async function readSettings(ctx: Pick<PluginContext, 'settings'>): Promise<PluginSettings> {
-  const entries = await ctx.settings.list()
-  const values = new Map(entries.map(entry => [entry.key, entry.value]))
-  const { destinations, invalid } = destinationsFrom(values)
+  const values = await settingValues(ctx)
+  const { destinations } = destinationsFrom(values)
   const stored = storedConfigFrom(values)
-  const secret = values.get(WEBHOOK_SECRET_KEY)
   return {
     config: stored.status === 'valid' ? stored.config : null,
     destinations,
-    invalidDestinations: invalid,
-    webhookSecret: typeof secret === 'string' && secret !== '' ? secret : null,
+    webhookSecret: secretText(values, WEBHOOK_SECRET_KEY) ?? null,
   }
 }

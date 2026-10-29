@@ -101,23 +101,28 @@ jobs:
           bun run test
 
       - name: Build
-        # Builds the workspace so core/cli/create-statusbeam/emdash-plugin emit their dist/
-        # (emdash-ui ships .astro/.ts source and has no build).
+        # Builds the workspace so core/cli/create-statusbeam emit their dist/
+        # (emdash-ui and emdash-plugin ship TypeScript/.astro source and have no build).
         run: bun run build
 
-      - name: Quality gate (EmDash host tests)
-        # The plugin's workerd host tests run it through EmDash's production
-        # sandbox wrapper, which `bun run test` does not cover. Gate its publish on them.
+      - name: Quality gate (EmDash native plugin tests)
+        # `bun run test` does not cover the plugin's native suites: the host tests boot
+        # EmDash's real runtime with the plugin in `plugins: []` (in-memory host, no
+        # network), and the admin tests render its React pages on a happy-dom document.
+        # Each needs its own preload, so each runs as its own process. Gate the plugin's
+        # publish on both.
         if: steps.pkg.outputs.dir == 'packages/emdash-plugin'
         working-directory: packages/emdash-plugin
-        run: bun run test:host
+        run: |
+          bun run test:host
+          bun run test:admin
 
       - name: Wait for the @statusbeam/core release this package needs
         # release-please cuts core's release in the same run when core changed
         # too, and each release publishes in its own run of this workflow, so the
         # two can race. `bun pm pack` pins `workspace:*` to the core version in
         # this tree, so wait until npm serves that version (up to 20 minutes)
-        # rather than publish a package whose `@statusbeam/core/contract` import
+        # rather than publish a package whose `@statusbeam/core` imports
         # cannot resolve. A core version that is already on npm passes at once.
         if: steps.pkg.outputs.dir == 'packages/emdash-ui' || steps.pkg.outputs.dir == 'packages/emdash-plugin'
         # Outside the checkout: inside the Bun workspaces monorepo npm enters workspace mode.
@@ -133,6 +138,27 @@ jobs:
             sleep 30
           done
           echo "::error::@statusbeam/core@$version is not on npm after 20 minutes. Publish core first, then re-run this tag with workflow_dispatch."
+          exit 1
+
+      - name: Wait for the @statusbeam/emdash-ui release the plugin pins
+        # The plugin depends on emdash-ui (`workspace:*`), which `bun pm pack` pins to the
+        # emdash-ui version in this tree. Its status block renders emdash-ui's components,
+        # so the plugin cannot install until npm serves that version. Wait the same way as
+        # for core above.
+        if: steps.pkg.outputs.dir == 'packages/emdash-plugin'
+        # Outside the checkout: inside the Bun workspaces monorepo npm enters workspace mode.
+        working-directory: ${{ runner.temp }}
+        run: |
+          version="$(node -p "require(process.env.GITHUB_WORKSPACE + '/packages/emdash-ui/package.json').version")"
+          for attempt in $(seq 1 40); do
+            if npm view "@statusbeam/emdash-ui@$version" version >/dev/null 2>&1; then
+              echo "@statusbeam/emdash-ui@$version is on npm"
+              exit 0
+            fi
+            echo "Waiting for @statusbeam/emdash-ui@$version on npm (attempt $attempt of 40)"
+            sleep 30
+          done
+          echo "::error::@statusbeam/emdash-ui@$version is not on npm after 20 minutes. Publish emdash-ui first, then re-run this tag with workflow_dispatch."
           exit 1
 
       - name: Pack + publish with provenance
