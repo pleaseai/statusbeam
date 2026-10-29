@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.2.0](https://github.com/pleaseai/statusbeam/compare/web-v0.1.1...web-v0.2.0) (2026-10-29)
+
+
+### Features
+
+* **core:** add a "not checked yet" state to the public status contract ([#109](https://github.com/pleaseai/statusbeam/issues/109)) ([790a7ec](https://github.com/pleaseai/statusbeam/commit/790a7ecbf2d75efa0a2640c830963b6b8a3d9dc0))
+* **emdash:** ship the EmDash engine plugin and render library (ADR-0004) ([#101](https://github.com/pleaseai/statusbeam/issues/101)) ([b7f387f](https://github.com/pleaseai/statusbeam/commit/b7f387ffbdf2c7ba1cfecb4f12dbfe9f600837fe))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @statusbeam/core bumped to 0.3.0
+
 ## [0.1.1](https://github.com/pleaseai/statusbeam/compare/web-v0.1.0...web-v0.1.1) (2026-08-25)
 
 
