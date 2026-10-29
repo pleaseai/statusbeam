@@ -7,7 +7,7 @@ depends: []
 conflicts: []
 traces: []
 created_at: 2026-10-22T11:16:17.725Z
-updated_at: 2026-10-29T02:53:50.715Z
+updated_at: 2026-10-29T03:12:06.454Z
 source_tracks: ["emdash-distribution-20261022", "emdash-native-plugin-20261027"]
 removed_by:
   - requirement: REQ-025
@@ -181,14 +181,14 @@ The system MUST show administrators a status overview of every monitor (current 
 - WHEN the status overview is shown
 - THEN show "Not checked yet" for the monitor, with no uptime figure, instead of "down" or "100%"
 
-### Requirement: classify each check as up, degraded, or down with the same rules and latency measure (time to response headers) a standalone deployment uses
+### Requirement: classify each check as up, degraded, or down with the same rules a standalone deployment uses, and time plain HTTP checks to the response headers as it does; body-reading checks (Statuspage, incident.io, Sentry, AI Gateway) go through the host's buffered fetch, so their latency runs to the last body byte
 <!-- req: REQ-013 tracks=emdash-distribution-20261022,emdash-native-plugin-20261027 -->
 
-The system MUST classify each check as up, degraded, or down with the same rules and latency measure (time to response headers) a standalone deployment uses.
+The system MUST classify each check as up, degraded, or down with the same rules a standalone deployment uses, and time plain HTTP checks to the response headers as it does; body-reading checks (Statuspage, incident.io, Sentry, AI Gateway) go through the host's buffered fetch, so their latency runs to the last body byte.
 
-#### Scenario: When a monitored URL sends its response headers quickly and then streams its body slowly, the system shall record latency up to the headers and shall not mark the monitor degraded because of the slow body.
+#### Scenario: When a plain HTTP check's URL sends its response headers quickly and then streams its body slowly, the system shall record latency up to the headers and shall not mark the monitor degraded because of the slow body.
 
-- WHEN a monitored URL sends its response headers quickly and then streams its body slowly
+- WHEN a plain HTTP check's URL sends its response headers quickly and then streams its body slowly
 - THEN record latency up to the headers
 - THEN do not mark the monitor degraded because of the slow body
 

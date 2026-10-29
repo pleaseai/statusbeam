@@ -147,8 +147,10 @@ results stay in ADR-0004 as the record of why those limits existed.
 
 - A React admin: a monitor editor with field-level errors, a status overview, a dashboard
   widget, and an on-demand test of one monitor.
-- Latency is time to headers, as on the standalone Worker, and a body over 8 MiB is graded
-  by its status code. Plugin and standalone numbers are comparable again.
+- Plain HTTP checks time to headers, as on the standalone Worker, and a body over 8 MiB is
+  graded by its status code. Plugin and standalone numbers for them are comparable again. The
+  body-reading checks (Statuspage, incident.io, Sentry, AI Gateway) still use the host's
+  buffered fetch, so their latency runs to the last byte and the 8 MiB limit still applies.
 - No call budget, sharding, or capacity table. One task checks all monitors.
 - No sandbox runner or Worker Loader requirement. The plugin loads in `plugins: []` on Node
   and Cloudflare.

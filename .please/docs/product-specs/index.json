@@ -6,7 +6,7 @@
       "domain": "distribution",
       "feature": "emdash",
       "created_at": "2026-10-22T11:16:17.725Z",
-      "updated_at": "2026-10-29T02:53:50.715Z",
+      "updated_at": "2026-10-29T03:12:06.454Z",
       "source_tracks": [
         "emdash-distribution-20261022",
         "emdash-native-plugin-20261027"
@@ -76,7 +76,7 @@
         {
           "id": "REQ-013",
           "kind": "functional",
-          "statement": "classify each check as up, degraded, or down with the same rules and latency measure (time to response headers) a standalone deployment uses"
+          "statement": "classify each check as up, degraded, or down with the same rules a standalone deployment uses, and time plain HTTP checks to the response headers as it does; body-reading checks (Statuspage, incident.io, Sentry, AI Gateway) go through the host's buffered fetch, so their latency runs to the last body byte"
         },
         {
           "id": "REQ-014",

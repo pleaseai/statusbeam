@@ -31,7 +31,7 @@ published, so no site has data to migrate.
 ### Functional Requirements
 
 - [ ] FR-1: run every configured monitor on its schedule from one native plugin, on a site that has no sandbox runner configured
-- [ ] FR-2: classify each check as up, degraded, or down with the same rules and latency measure (time to response headers) a standalone deployment uses
+- [ ] FR-2: classify each check as up, degraded, or down with the same rules a standalone deployment uses, and time plain HTTP checks to the response headers as it does. Body-reading checks (Statuspage, incident.io, Sentry, AI Gateway) go through the host's buffered fetch, so their latency runs to the last body byte.
 - [ ] FR-3: record check history and the current snapshot, and produce the same per-day uptime figures a standalone deployment produces for the same check results
 - [ ] FR-4: serve the public status, per-site status, and badge responses in the core-owned public status contract (contract version 1, including the optional "not checked yet" flag)
 - [ ] FR-5: accept inbound Statuspage and Sentry webhooks, rejecting every request while no webhook secret is configured and comparing the supplied token in constant time
@@ -55,7 +55,7 @@ published, so no site has data to migrate.
 
 - [ ] AC-001 (FR-1): When the plugin is installed on a site with no sandbox runner configured, the system shall load the plugin and run the scheduled checks.
 - [ ] AC-002 (FR-1): When 12 monitors are configured (more than one invocation of the current sandboxed engine can probe), the system shall check all 12 in each scheduled run.
-- [ ] AC-003 (FR-2): When a monitored URL sends its response headers quickly and then streams its body slowly, the system shall record latency up to the headers and shall not mark the monitor degraded because of the slow body.
+- [ ] AC-003 (FR-2): When a plain HTTP check's URL sends its response headers quickly and then streams its body slowly, the system shall record latency up to the headers and shall not mark the monitor degraded because of the slow body.
 - [ ] AC-004 (FR-2): When a plain HTTP check (which reads response headers only) serves a body larger than 8 MiB, the system shall classify the check by its status code and header latency instead of the host's body limit. Body-reading checks (Statuspage, incident.io, Sentry, AI Gateway) remain bound by the host's 8 MiB limit.
 - [ ] AC-005 (FR-2): If a monitored response never completes, then the system shall record that check as down when the plugin's per-check deadline expires and shall still check the remaining monitors in that run.
 - [ ] AC-006 (FR-3): When the same sequence of check results is recorded by the plugin and by a standalone deployment, the system shall report identical per-day uptime figures for the 90-day window.
