@@ -4,6 +4,7 @@ import type { Monitor } from './editor'
 import { Button } from '@cloudflare/kumo'
 import { getDict } from '@statusbeam/core'
 import { useEffect, useRef, useState } from 'react'
+import { SENTRY_TOKEN_SECRET_KEY } from '../settings'
 import { postAdmin } from './api'
 import { useAdminLocale } from './i18n'
 
@@ -84,7 +85,7 @@ function Result({ outcome, dict }: { outcome: Outcome, dict: Dict }) {
     const issues = response.reason === 'invalid' ? response.issues : []
     return (
       <div className="text-kumo-danger">
-        <p>{response.message}</p>
+        <p>{reasonText(dict.admin.monitors.testReason, response)}</p>
         {issues.length > 0 && (
           <ul className="space-y-1">
             {issues.map(issue => <li key={`${issue.path}:${issue.message}`}>{issue.path === '' ? issue.message : `${issue.path}: ${issue.message}`}</li>)}
@@ -105,6 +106,21 @@ function Result({ outcome, dict }: { outcome: Outcome, dict: Dict }) {
       {result.error !== undefined && <Figure label={t.error} value={result.error} />}
     </dl>
   )
+}
+
+/**
+ * The text for a refusal, in the admin's language. The route's English `message` stays on
+ * the wire for other clients, and is shown for a reason this bundle does not know yet.
+ */
+function reasonText(t: Dict['admin']['monitors']['testReason'], refusal: Exclude<TestResponse, { tested: true }>): string {
+  switch (refusal.reason) {
+    case 'invalid': return t.invalid
+    case 'not-found': return t.notFound
+    case 'webhook-only': return t.webhookOnly
+    case 'no-token': return t.noToken(SENTRY_TOKEN_SECRET_KEY)
+    case 'no-network': return t.noNetwork
+    default: return (refusal as { message: string }).message
+  }
 }
 
 function Figure({ label, value, strong }: { label: string, value: string, strong?: boolean }) {

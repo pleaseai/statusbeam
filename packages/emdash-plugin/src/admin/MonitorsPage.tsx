@@ -19,6 +19,7 @@ import {
   isRenamed,
   newRow,
   NO_FINDINGS,
+  storedText,
   withCheckKind,
 } from './editor'
 import { useAdminDict } from './i18n'
@@ -240,10 +241,7 @@ interface MonitorCardProps {
 }
 
 function MonitorCard({ t, index, row, findings, busy, onChange, onRemove }: MonitorCardProps) {
-  const text = (field: MonitorField): string => {
-    const value = row.monitor[field]
-    return typeof value === 'string' ? value : ''
-  }
+  const text = (field: MonitorField): string => storedText(row.monitor[field])
   const errorOf = (field: MonitorField) => findings.fields[`${index}.${field}` as FieldKey]
   const set = (field: MonitorField, value: string) => onChange(current => ({ ...current, monitor: { ...current.monitor, [field]: value } }))
   const title = text('name') || t.monitors.monitorN(index + 1)

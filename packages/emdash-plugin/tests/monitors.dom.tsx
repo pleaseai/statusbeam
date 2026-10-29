@@ -455,6 +455,8 @@ describe('text and direction (NFR-1)', () => {
   it('uses only classes the admin\'s precompiled stylesheet defines', () => {
     const css = readFileSync(require.resolve('@emdash-cms/admin/styles.css'), 'utf8')
     const escaped = (name: string) => `.${name.replace(/([^\w-])/g, '\\$1')}`
+    // The whole selector, not a prefix of a longer one: `.h-9` must match neither `.h-96` nor `.h-9\.5`.
+    const defines = (name: string) => new RegExp(`${escaped(name).replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}(?![\\w\\\\-])`).test(css)
     const missing = new Set<string>()
     const checked = new Set<string>()
     for (const file of ['MonitorsPage.tsx', 'AdminGate.tsx', 'index.tsx', 'MonitorActions.tsx', 'TestMonitor.tsx', 'StatusPage.tsx', 'StatusWidget.tsx']) {
@@ -462,7 +464,7 @@ describe('text and direction (NFR-1)', () => {
       for (const match of source.matchAll(/className=(?:"([^"]+)"|\{([^}]*)\})/g)) {
         const names = match[1] ? [match[1]] : [...(match[2] ?? '').matchAll(/[?:]\s*'([^']+)'/g)].map(literal => literal[1]!)
         for (const name of names.flatMap(group => group.split(/\s+/))) {
-          if (name !== '' && !css.includes(escaped(name))) {
+          if (name !== '' && !defines(name)) {
             missing.add(name)
           }
         }
@@ -483,7 +485,7 @@ describe('text and direction (NFR-1)', () => {
       }
     }
     for (const name of [...checked].flatMap(group => group.split(/\s+/))) {
-      if (name !== '' && !css.includes(escaped(name))) {
+      if (name !== '' && !defines(name)) {
         missing.add(name)
       }
     }

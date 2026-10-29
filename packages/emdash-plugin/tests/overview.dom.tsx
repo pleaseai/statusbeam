@@ -134,12 +134,12 @@ describe('status overview page (AC-014)', () => {
     expect(within(card('API')).getByText('100%', { selector: 'dd' })).toBeTruthy()
   })
 
-  it('shows the stored configuration\'s findings and an empty state when nothing is configured', async () => {
+  it('shows the stored configuration\'s findings instead of the empty state when the configuration is rejected', async () => {
     server.overview = { configured: false, configIssues: [{ severity: 'error', path: 'sites[0].url', message: 'Invalid URL' }], updatedAt: null, status: 'operational', monitors: [] }
     render(<StatusPage />)
     await screen.findByText('Invalid URL')
     expect(screen.getByRole('heading', { level: 2, name: dict.admin.overview.configIssues })).toBeTruthy()
-    expect(screen.getByText(dict.admin.overview.empty)).toBeTruthy()
+    expect(screen.queryByText(dict.admin.overview.empty)).toBeNull()
     // The only region is the findings section; there is no monitor card.
     expect(screen.getAllByRole('region').map(region => region.querySelector('h2')?.textContent)).toEqual([dict.admin.overview.configIssues])
     expect(screen.queryByText(dict.banner.operational)).toBeNull()

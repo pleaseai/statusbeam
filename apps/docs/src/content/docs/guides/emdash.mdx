@@ -120,7 +120,8 @@ administrators: a non-administrator sees a refusal and no configuration.
 
 The page text follows the admin language in English, Chinese, Japanese and
 Korean, and falls back to English. The sidebar labels "Status" and "Monitors"
-are English only.
+are English only, and so are the Status block's slash-menu entry and field labels
+in the editor.
 
 ## Configure monitors
 
@@ -172,8 +173,11 @@ Delivery logs never contain a full URL.
 
 ## How it runs
 
-The plugin checks every monitor every **5 minutes**, from one scheduled task
-named `check`. It probes all monitors at once. A daily `maintenance` task prunes
+The plugin checks every pollable monitor every **5 minutes**, from one scheduled
+task named `check`. It probes them all at once. A Sentry monitor with no `sentry`
+block (webhook-only) is not polled, and neither is a Sentry monitor that polls
+while the `sentryToken` setting is empty; Sentry webhooks update the first kind.
+A daily `maintenance` task prunes
 history older than 90 days. The plugin creates or repairs these tasks when it
 activates, on every run and on every save, and it touches only a task that is
 missing or changed.

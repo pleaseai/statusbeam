@@ -61,7 +61,7 @@ function StatusOverview() {
         </section>
       )}
       {overview.monitors.length === 0
-        ? <p className="text-sm text-kumo-subtle">{t.overview.empty}</p>
+        ? (overview.configured || overview.configIssues.length === 0) && <p className="text-sm text-kumo-subtle">{t.overview.empty}</p>
         : (
             <>
               <p className="text-lg font-medium" role="status">{overview.monitors.every(monitor => monitor.pending) ? t.overview.waiting : dict.banner[overview.status]}</p>

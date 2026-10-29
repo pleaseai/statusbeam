@@ -321,13 +321,14 @@ describe('a webhook racing a check run', () => {
   it('loses no bucket count and neither writer\'s latest result when an event lands between the check\'s reads and writes', async () => {
     let indicator = 'none'
     let raced = false
+    let racedStatus: number | undefined
     let host!: Host
     const internet: Internet = async (target, init) => {
       if (init?.method === 'POST') {
         // The delivery happens after the run read its buckets and snapshots, before it writes them.
         if (!raced) {
           raced = true
-          expect((await post(host, { body: DOWN, second: 5 })).status).toBe(200)
+          racedStatus = (await post(host, { body: DOWN, second: 5 })).status
         }
         return new Response('ok', { status: 200 })
       }
@@ -344,6 +345,8 @@ describe('a webhook racing a check run', () => {
     tick = 2
     expect(await host.cron(CHECK_TASK)).toBe(true)
     expect(raced).toBe(true)
+    // Asserted here: `deliver()` swallows an exception thrown inside the callback.
+    expect(racedStatus).toBe(200)
 
     const rows = await host.bucketRows()
     expect(rows['web:2026-10-22']).toMatchObject({ up: 1, down: 1, total: 2 })

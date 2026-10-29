@@ -1,7 +1,7 @@
 # Native plugin spike (T001, 2026-10-27)
 
 This run checks that StatusBeam can run as one native EmDash 1.3.1 plugin, with the id
-`statusbeam`, registered in `plugins: []` and with no sandbox runner. It covers the Node host
+`statusbeam`, registered in `plugins: [statusbeam()]` and with no sandbox runner. It covers the Node host
 (`SPIKE_MODE=native`) and the Cloudflare host (`SPIKE_MODE=native-cf`). Track:
 `emdash-native-plugin-20261027`, issue #110.
 

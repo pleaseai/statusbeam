@@ -36,8 +36,8 @@ and the React admin entry (`/admin`), aliased in `astro.config.mjs`. The probe p
 checkout with the local dev servers, and deploy nothing:
 
 ```sh
-bun run dev:native -- --host 127.0.0.1 --port 4430
-bun run dev:native-cf -- --host 127.0.0.1 --port 4431
+bun run probe:build && bun run dev:native -- --host 127.0.0.1 --port 4430
+bun run probe:build && bun run dev:native-cf -- --host 127.0.0.1 --port 4431
 ```
 
 To sign in, open `/_emdash/api/setup/dev-bypass?redirect=/_emdash/admin`. The status

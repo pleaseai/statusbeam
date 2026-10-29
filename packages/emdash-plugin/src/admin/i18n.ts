@@ -1,10 +1,29 @@
 import type { AdminDict, Locale } from '@statusbeam/core'
 import { getDict, matchLocale } from '@statusbeam/core'
-import { useEffect, useState } from 'react'
+import { useSyncExternalStore } from 'react'
 
 /** The locale of the admin, as the admin itself publishes it on `<html lang>`. */
 function documentLocale(): string | null {
   return typeof document === 'undefined' ? null : document.documentElement.getAttribute('lang')
+}
+
+const listeners = new Set<() => void>()
+let observer: MutationObserver | null = null
+
+/** One observer of `<html lang>` for every subscriber (a bar chart mounts a hook per day), created with the first and disconnected with the last. */
+function subscribe(listener: () => void): () => void {
+  listeners.add(listener)
+  if (observer === null) {
+    observer = new MutationObserver(() => listeners.forEach(notify => notify()))
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['lang'] })
+  }
+  return () => {
+    listeners.delete(listener)
+    if (listeners.size === 0) {
+      observer?.disconnect()
+      observer = null
+    }
+  }
 }
 
 /**
@@ -14,13 +33,7 @@ function documentLocale(): string | null {
  * `<html lang>` in step with the active locale, so the hook follows a switch.
  */
 export function useAdminLocale(): Locale {
-  const [tag, setTag] = useState(documentLocale)
-  useEffect(() => {
-    setTag(documentLocale())
-    const observer = new MutationObserver(() => setTag(documentLocale()))
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['lang'] })
-    return () => observer.disconnect()
-  }, [])
+  const tag = useSyncExternalStore(subscribe, documentLocale, () => null)
   return matchLocale(tag) ?? 'en'
 }
 

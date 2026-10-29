@@ -150,6 +150,15 @@ export interface AdminDict {
       /** Status of a check whose response body exceeds the host limit; it says nothing about the target. */
       unsupported: string
     }
+    /** Why a monitor was not tested, by the route's `reason`. */
+    testReason: {
+      invalid: string
+      notFound: string
+      webhookOnly: string
+      /** `key` is the plugin setting that holds the Sentry token. */
+      noToken: (key: string) => string
+      noNetwork: string
+    }
   }
   secrets: {
     heading: string
@@ -234,7 +243,7 @@ const en: Dict = {
   admin: {
     loading: 'Loading…',
     loadFailed: 'Could not load the configuration. Reload the page to try again.',
-    forbidden: 'Only administrators can edit monitors.',
+    forbidden: 'Only administrators can use StatusBeam.',
     monitors: {
       title: 'Monitors',
       pageName: 'Status page name',
@@ -285,6 +294,13 @@ const en: Dict = {
         error: 'Error',
         failed: 'Could not run the test. Try again.',
         unsupported: 'Unsupported (response body above the host limit)',
+      },
+      testReason: {
+        invalid: 'The monitor is not valid. Fix the errors, then test again.',
+        notFound: 'No monitor in the saved configuration has this slug.',
+        webhookOnly: 'A Sentry monitor without a sentry block is updated by Sentry webhooks only. Add the organization to poll it, then test again.',
+        noToken: key => `This monitor polls Sentry, which needs the "${key}" setting. Nothing was probed.`,
+        noNetwork: 'This plugin has no network access: it needs the network:request:unrestricted capability.',
       },
     },
     secrets: {
@@ -364,7 +380,7 @@ const zh: Dict = {
   admin: {
     loading: '加载中…',
     loadFailed: '无法加载配置。请刷新页面重试。',
-    forbidden: '只有管理员可以编辑监控项。',
+    forbidden: '只有管理员可以使用 StatusBeam。',
     monitors: {
       title: '监控项',
       pageName: '状态页名称',
@@ -415,6 +431,13 @@ const zh: Dict = {
         error: '错误',
         failed: '无法运行测试，请重试。',
         unsupported: '不支持（响应正文超出主机限制）',
+      },
+      testReason: {
+        invalid: '该监控项无效。请修正错误后重新测试。',
+        notFound: '已保存的配置中没有使用此 slug 的监控项。',
+        webhookOnly: '没有 sentry 块的 Sentry 监控项仅由 Sentry webhook 更新。添加组织即可轮询它，然后重新测试。',
+        noToken: key => `此监控项会轮询 Sentry，需要设置“${key}”。未发出任何探测。`,
+        noNetwork: '此插件没有网络访问权限：需要 network:request:unrestricted 权限。',
       },
     },
     secrets: {
@@ -494,7 +517,7 @@ const ja: Dict = {
   admin: {
     loading: '読み込み中…',
     loadFailed: '設定を読み込めませんでした。ページを再読み込みしてください。',
-    forbidden: 'モニターを編集できるのは管理者のみです。',
+    forbidden: 'StatusBeam を使用できるのは管理者のみです。',
     monitors: {
       title: 'モニター',
       pageName: 'ステータスページ名',
@@ -545,6 +568,13 @@ const ja: Dict = {
         error: 'エラー',
         failed: 'テストを実行できませんでした。もう一度お試しください。',
         unsupported: '非対応（レスポンス本文がホストの上限を超えています）',
+      },
+      testReason: {
+        invalid: 'このモニターは無効です。エラーを修正してから、もう一度テストしてください。',
+        notFound: '保存済みの設定に、この slug のモニターはありません。',
+        webhookOnly: 'sentry ブロックのない Sentry モニターは、Sentry の webhook でのみ更新されます。ポーリングするには組織を追加して、もう一度テストしてください。',
+        noToken: key => `このモニターは Sentry をポーリングするため、「${key}」の設定が必要です。プローブは行われていません。`,
+        noNetwork: 'このプラグインにはネットワークアクセスがありません。network:request:unrestricted 権限が必要です。',
       },
     },
     secrets: {
@@ -624,7 +654,7 @@ const ko: Dict = {
   admin: {
     loading: '불러오는 중…',
     loadFailed: '설정을 불러오지 못했습니다. 페이지를 새로 고쳐 다시 시도하세요.',
-    forbidden: '모니터는 관리자만 편집할 수 있습니다.',
+    forbidden: 'StatusBeam은 관리자만 사용할 수 있습니다.',
     monitors: {
       title: '모니터',
       pageName: '상태 페이지 이름',
@@ -675,6 +705,13 @@ const ko: Dict = {
         error: '오류',
         failed: '테스트를 실행할 수 없습니다. 다시 시도하세요.',
         unsupported: '지원 안 함 (응답 본문이 호스트 한도를 초과함)',
+      },
+      testReason: {
+        invalid: '모니터가 올바르지 않습니다. 오류를 수정한 뒤 다시 테스트하세요.',
+        notFound: '저장된 설정에 이 slug를 쓰는 모니터가 없습니다.',
+        webhookOnly: 'sentry 블록이 없는 Sentry 모니터는 Sentry webhook으로만 갱신됩니다. 폴링하려면 조직을 추가한 뒤 다시 테스트하세요.',
+        noToken: key => `이 모니터는 Sentry를 폴링하므로 "${key}" 설정이 필요합니다. 프로브는 실행되지 않았습니다.`,
+        noNetwork: '이 플러그인에는 네트워크 접근 권한이 없습니다. network:request:unrestricted 권한이 필요합니다.',
       },
     },
     secrets: {
@@ -729,6 +766,9 @@ export function negotiateLocale(
   return matchLocale(cookie) ?? matchLocale(preferredLocale)
 }
 
+/** One formatter per locale: building an `Intl.DateTimeFormat` per call is costly when a page renders a bar per day. */
+const dayFormatters = new Map<Locale, Intl.DateTimeFormat>()
+
 /**
  * Format an ISO date (`YYYY-MM-DD`, UTC) for `locale`, e.g. "Jul 5, 2026" /
  * "2026年7月5日" / "2026년 7월 5일". Uses UTC so a day bucket reads the same
@@ -749,10 +789,15 @@ export function formatDay(iso: string, locale: Locale = DEFAULT_LOCALE): string 
   if (date.getUTCFullYear() !== y || date.getUTCMonth() !== m - 1 || date.getUTCDate() !== d) {
     return iso
   }
-  return new Intl.DateTimeFormat(locale, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    timeZone: 'UTC',
-  }).format(date)
+  let formatter = dayFormatters.get(locale)
+  if (formatter === undefined) {
+    formatter = new Intl.DateTimeFormat(locale, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      timeZone: 'UTC',
+    })
+    dayFormatters.set(locale, formatter)
+  }
+  return formatter.format(date)
 }

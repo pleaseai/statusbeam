@@ -20,7 +20,7 @@ export function AdminGate({ children }: { children: ReactNode }) {
   if (user.isPending) {
     return <p className="p-6 text-sm text-kumo-subtle" role="status">{t.loading}</p>
   }
-  if (user.isError) {
+  if (user.isError && !user.data) {
     return <div className="p-6"><Banner variant="error" description={t.loadFailed} role="alert" /></div>
   }
   if (!user.data || user.data.role < ADMIN_ROLE) {

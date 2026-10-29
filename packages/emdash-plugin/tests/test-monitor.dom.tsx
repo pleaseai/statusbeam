@@ -105,10 +105,20 @@ describe('test one monitor (AC-015)', () => {
     server.test = () => ({ tested: false, reason: 'invalid', message: 'url: not a valid URL', issues: [] })
     await openPage()
     fireEvent.click(testButton('API'))
-    await waitFor(() => expect(result('API').textContent).toBe('url: not a valid URL'))
+    await waitFor(() => expect(result('API').textContent).toBe(dict.admin.monitors.testReason.invalid))
     server.test = () => ({ tested: false, reason: 'no-token', message: 'Set the Sentry token first.' })
     fireEvent.click(testButton('Web'))
-    await waitFor(() => expect(result('Web').textContent).toBe('Set the Sentry token first.'))
+    await waitFor(() => expect(result('Web').textContent).toBe(dict.admin.monitors.testReason.noToken('sentryToken')))
+  })
+
+  it('shows the reason in the admin language, not the route\'s English message', async () => {
+    document.documentElement.setAttribute('lang', 'ko')
+    const ko = getDict('ko').admin.monitors.test
+    server.test = () => ({ tested: false, reason: 'no-network', message: 'This plugin has no network access.' })
+    await openPage()
+    fireEvent.click(within(card('API')).getByRole('button', { name: ko.action }))
+    await waitFor(() => expect(result('API').textContent).toBe(getDict('ko').admin.monitors.testReason.noNetwork))
+    expect(getDict('ko').admin.monitors.testReason.noNetwork).not.toBe(dict.admin.monitors.testReason.noNetwork)
   })
 
   it('lists the field issues of an invalid monitor under the message', async () => {

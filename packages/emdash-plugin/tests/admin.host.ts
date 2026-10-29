@@ -185,9 +185,12 @@ describe('read the configuration', () => {
     const host = await newHost(ok)
     const big = `${yamlOf(doc(['alpha']))}# ${'x'.repeat(MAX_YAML_BYTES)}\n`
     await host.setConfig(big)
+    const before = await host.readKv<string>('settings:config')
     const { data } = await getConfig(host)
     expect(data.config).toBeNull()
     expect(JSON.stringify(data.issues)).toContain('larger than')
+    expect(before).toBe(big)
+    expect(await host.readKv<string>('settings:config')).toBe(before)
   })
 })
 

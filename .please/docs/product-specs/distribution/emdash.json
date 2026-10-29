@@ -7,7 +7,7 @@
   "conflicts": [],
   "traces": [],
   "created_at": "2026-10-22T11:16:17.725Z",
-  "updated_at": "2026-10-29T02:17:29.230Z",
+  "updated_at": "2026-10-29T02:53:50.715Z",
   "source_tracks": [
     "emdash-distribution-20261022",
     "emdash-native-plugin-20261027"
@@ -173,7 +173,7 @@
     {
       "id": "REQ-008",
       "kind": "functional",
-      "statement": "run every configured poll monitor on its schedule from one native plugin in a single scheduled task, on a site that has no sandbox runner configured (webhook-only Sentry monitors take their status from inbound webhooks), and keep check history and the current status snapshot in plugin-owned storage",
+      "statement": "run every configured poll monitor on its schedule from one native plugin in a single scheduled task, on a site that has no sandbox runner configured, accepting at most 200 monitors so the poll snapshot fits one D1 row (webhook-only Sentry monitors take their status from inbound webhooks), and keep check history and the current status snapshot in plugin-owned storage",
       "source_tracks": [
         "emdash-distribution-20261022",
         "emdash-native-plugin-20261027"
@@ -350,13 +350,13 @@
           ]
         },
         {
-          "name": "When a monitored response body exceeds 8 MiB, the system shall classify the check by its status code and response time instead of marking it down.",
+          "name": "When a plain HTTP check (which reads response headers only) serves a body larger than 8 MiB, the system shall classify the check by its status code and header latency instead of the host's body limit. Body-reading checks (Statuspage, incident.io, Sentry, AI Gateway) remain bound by the host's 8 MiB limit.",
           "given": [],
           "when": [
-            "a monitored response body exceeds 8 MiB"
+            "a plain HTTP check (which reads response headers only) serves a body larger than 8 MiB"
           ],
           "then": [
-            "classify the check by its status code and response time instead of marking it down"
+            "classify the check by its status code and header latency instead of the host's body limit"
           ]
         },
         {

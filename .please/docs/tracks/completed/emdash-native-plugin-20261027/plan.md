@@ -122,9 +122,9 @@ of the host's).
 
 ### Automated Tests
 
-- [ ] Root `bun run build`, `bun run typecheck`, and `bun test` pass
+- [x] Root `bun run build`, `bun run typecheck`, and `bun test` pass
 - [ ] Native host tests on `emdash/internal/plugin-test-runtime` (T002–T004) pass in CI
-- [ ] Admin component tests with a mocked `apiFetch` (T005–T007) pass
+- [x] Admin component tests with a mocked `apiFetch` (T005–T007) pass
 
 ### Observable Outcomes
 

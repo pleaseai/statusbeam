@@ -7,7 +7,7 @@ depends: []
 conflicts: []
 traces: []
 created_at: 2026-10-22T11:16:17.725Z
-updated_at: 2026-10-29T02:17:29.230Z
+updated_at: 2026-10-29T02:53:50.715Z
 source_tracks: ["emdash-distribution-20261022", "emdash-native-plugin-20261027"]
 removed_by:
   - requirement: REQ-025
@@ -104,10 +104,10 @@ The system MUST serve the engine plugin's public status, per-site, and badge end
 - WHEN the public status response is built
 - THEN mark the monitor "not checked yet" instead of reporting an outage
 
-### Requirement: run every configured poll monitor on its schedule from one native plugin in a single scheduled task, on a site that has no sandbox runner configured (webhook-only Sentry monitors take their status from inbound webhooks), and keep check history and the current status snapshot in plugin-owned storage
+### Requirement: run every configured poll monitor on its schedule from one native plugin in a single scheduled task, on a site that has no sandbox runner configured, accepting at most 200 monitors so the poll snapshot fits one D1 row (webhook-only Sentry monitors take their status from inbound webhooks), and keep check history and the current status snapshot in plugin-owned storage
 <!-- req: REQ-008 tracks=emdash-distribution-20261022,emdash-native-plugin-20261027 -->
 
-The system MUST run every configured poll monitor on its schedule from one native plugin in a single scheduled task, on a site that has no sandbox runner configured (webhook-only Sentry monitors take their status from inbound webhooks), and keep check history and the current status snapshot in plugin-owned storage.
+The system MUST run every configured poll monitor on its schedule from one native plugin in a single scheduled task, on a site that has no sandbox runner configured, accepting at most 200 monitors so the poll snapshot fits one D1 row (webhook-only Sentry monitors take their status from inbound webhooks), and keep check history and the current status snapshot in plugin-owned storage.
 
 #### Scenario: When the plugin is installed on a site with no sandbox runner configured, the system shall load the plugin and run the scheduled checks.
 
@@ -192,10 +192,10 @@ The system MUST classify each check as up, degraded, or down with the same rules
 - THEN record latency up to the headers
 - THEN do not mark the monitor degraded because of the slow body
 
-#### Scenario: When a monitored response body exceeds 8 MiB, the system shall classify the check by its status code and response time instead of marking it down.
+#### Scenario: When a plain HTTP check (which reads response headers only) serves a body larger than 8 MiB, the system shall classify the check by its status code and header latency instead of the host's body limit. Body-reading checks (Statuspage, incident.io, Sentry, AI Gateway) remain bound by the host's 8 MiB limit.
 
-- WHEN a monitored response body exceeds 8 MiB
-- THEN classify the check by its status code and response time instead of marking it down
+- WHEN a plain HTTP check (which reads response headers only) serves a body larger than 8 MiB
+- THEN classify the check by its status code and header latency instead of the host's body limit
 
 #### Scenario: If a monitored response never completes, then the system shall record that check as down when the plugin's per-check deadline expires and shall still check the remaining monitors in that run.
 

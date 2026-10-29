@@ -174,6 +174,9 @@ results stay in ADR-0004 as the record of why those limits existed.
 - **Known gaps.**
   - The sidebar labels "Status" and "Monitors" are English only, because the host reads them
     before any React runs. Page content is translated.
+  - The Status block's editor labels (its slash-menu entry and field labels) are English
+    only, because EmDash's `PortableTextBlockConfig` takes plain `label` strings at
+    registration.
   - The monitor form does not edit Sentry or AI Gateway monitor blocks. A save preserves them.
   - The first save from the admin drops YAML comments, because the server serializes the
     parsed object.

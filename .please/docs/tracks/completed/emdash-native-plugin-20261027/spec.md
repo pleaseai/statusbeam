@@ -56,7 +56,7 @@ published, so no site has data to migrate.
 - [ ] AC-001 (FR-1): When the plugin is installed on a site with no sandbox runner configured, the system shall load the plugin and run the scheduled checks.
 - [ ] AC-002 (FR-1): When 12 monitors are configured (more than one invocation of the current sandboxed engine can probe), the system shall check all 12 in each scheduled run.
 - [ ] AC-003 (FR-2): When a monitored URL sends its response headers quickly and then streams its body slowly, the system shall record latency up to the headers and shall not mark the monitor degraded because of the slow body.
-- [ ] AC-004 (FR-2): When a monitored response body exceeds 8 MiB, the system shall classify the check by its status code and response time instead of marking it down.
+- [ ] AC-004 (FR-2): When a plain HTTP check (which reads response headers only) serves a body larger than 8 MiB, the system shall classify the check by its status code and header latency instead of the host's body limit. Body-reading checks (Statuspage, incident.io, Sentry, AI Gateway) remain bound by the host's 8 MiB limit.
 - [ ] AC-005 (FR-2): If a monitored response never completes, then the system shall record that check as down when the plugin's per-check deadline expires and shall still check the remaining monitors in that run.
 - [ ] AC-006 (FR-3): When the same sequence of check results is recorded by the plugin and by a standalone deployment, the system shall report identical per-day uptime figures for the 90-day window.
 - [ ] AC-007 (FR-4): When a client requests the public status route, the system shall return an unwrapped JSON body that parses with the core public status schema.
@@ -85,6 +85,6 @@ published, so no site has data to migrate.
 ## Assumptions
 
 - The sandboxed engine entry is removed rather than kept as a legacy entry. The request names a single plugin, and with nothing published no site depends on the sandboxed form.
-- A native plugin can measure latency to the response headers without buffering the body. The host's HTTP API does not: ADR-0004's 2026-10-22 spike measured it buffering the whole body in every execution mode, in-process included, and blocking on a response that never completes. The platform's own fetch is the remaining path, and ADR-0004 did not test it. The plan starts with a spike; if that path does not work, FR-2 and AC-003 to AC-005 go back to the user before implementation.
+- A native plugin can measure latency to the response headers without buffering the body. The host's HTTP API buffers the whole body (ADR-0004's 2026-10-22 spike). The 2026-10-27 spike (apps/emdash-demo/results/2026-10-27/native-plugin.md) confirmed header-time latency through `createUnrestrictedHttpAccess` wrapping a header-only fetch. That export is undocumented, so ADR-0005 records it as a dependency to re-verify on each EmDash upgrade.
 - Native plugins get the same storage, KV, and settings APIs as sandboxed plugins (EmDash documents them as identical), so check history and the snapshot can keep their current shape.
 - Monitor configuration stays expressible as a `status.config.yml` document validated by core, so the standalone and plugin channels keep one schema even without an import/export view.

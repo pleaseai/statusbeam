@@ -69,7 +69,7 @@ export function effectiveSlug(monitor: Monitor): string {
 }
 
 /** A stored value as the text field shows it, so a wrongly typed one stays visible and is reported instead of dropped. */
-function storedText(value: unknown): string {
+export function storedText(value: unknown): string {
   if (value === undefined || value === null) {
     return ''
   }
