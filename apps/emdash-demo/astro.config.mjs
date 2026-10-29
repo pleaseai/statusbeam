@@ -2,8 +2,8 @@
 //   worker-loader  Cloudflare Worker Loader runner (`sandbox()` from @emdash-cms/cloudflare)
 //   workerd        Node host + workerd child-process runner (@emdash-cms/sandbox-workerd/sandbox)
 //   in-process     Node host, probe listed in `plugins: []` (no runner, no isolation)
-//   native         Node host, the native `statusbeam` plugin in `plugins: []` (no runner)
-//   native-cf      Cloudflare host (workerd), the native `statusbeam` plugin in `plugins: []` (no runner)
+//   native         Node host, the native `statusbeam` plugin in `plugins: [statusbeam()]` (no runner)
+//   native-cf      Cloudflare host (workerd), the native `statusbeam` plugin in `plugins: [statusbeam()]` (no runner)
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 import cloudflare from '@astrojs/cloudflare'
