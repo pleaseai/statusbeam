@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-Run: `bun run --cwd packages/emdash-plugin test:host` (= `bun test --preload ./tests/host-preload.ts ./tests/engine.host.ts`); `*.host.ts` is ignored by plain `bun test`.
+Run: `bun run --cwd packages/emdash-plugin test:host` (= `bun test --preload ./tests/host-preload.ts ./tests/engine.host.ts ./tests/public.host.ts ./tests/webhooks.host.ts ./tests/admin.host.ts`); `*.host.ts` is ignored by plain `bun test`.
 - Preload stubs six `virtual:emdash/*` modules via `Bun.plugin build.module` and sets `EMDASH_ENCRYPTION_KEY` (secret settings need it).
 - `EmDashRuntime.create` caches the db per `config.database.entrypoint`: use a unique entrypoint + temp sqlite file per host, else tests share/lose a db.
 - `create()` auto-installs/activates a new config plugin (cron tasks appear without calling activate). Fire cron with `runtime.hooks.invokeCronHook(id, {name, scheduledAt})` -> `.success`.

@@ -6,7 +6,7 @@ metadata:
 ---
 
 Verified 2026-10-27 (T001, EmDash 1.3.1):
-- `SPIKE_MODE=native|native-cf npx astro dev --host 127.0.0.1 --port N` works in place in the orca worktree (not nested in another checkout). Sign-in: `/_emdash/api/setup/dev-bypass?redirect=/_emdash/admin` (the `auth/dev-bypass` path in README is the older one); dismiss the "Get Started" dialog before screenshots. `npx astro dev logs/stop` manage the backgrounded server.
+- `SPIKE_MODE=native npx astro dev --host 127.0.0.1 --port N` and `SPIKE_MODE=native-cf npx astro dev --host 127.0.0.1 --port N` (two separate commands) work in place in the orca worktree (not nested in another checkout). Sign-in: `/_emdash/api/setup/dev-bypass?redirect=/_emdash/admin` (the `auth/dev-bypass` path in README is the older one); dismiss the "Get Started" dialog before screenshots. `npx astro dev logs/stop` manage the backgrounded server.
 - Plugin code changes are NOT hot-reloaded into the runtime; restart the dev server.
 - Cron: Node fires on the minute; Cloudflare dev bridge every 60 s; built Worker via `POST /cdn-cgi/local/explorer/api/local/scheduled?worker=statusbeam-emdash-spike` (`/__scheduled` 404s). `ctx.cron.schedule()` resets next_run_at — never call it unconditionally.
 - First native-cf dev start after config change can hang; restart on a fresh port.
