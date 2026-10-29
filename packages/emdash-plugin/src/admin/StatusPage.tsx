@@ -1,6 +1,6 @@
 import type { CheckStatus, DayStat, SiteSummary } from '@statusbeam/core'
 import { Banner } from '@cloudflare/kumo'
-import { formatDay, formatUptime, getDict, uptimeFigure } from '@statusbeam/core'
+import { formatDay, formatUptime, getDict, HISTORY_DAYS, uptimeFigure } from '@statusbeam/core'
 import { AdminGate } from './AdminGate'
 import { MONITORS_PAGE_HREF } from './api'
 import { useAdminLocale } from './i18n'
@@ -131,7 +131,7 @@ function DayBars({ history, figure }: { history: DayStat[], figure: string | nul
         })}
       </ul>
       <div className="flex justify-between text-xs text-kumo-subtle">
-        <span>{dict.timeline.windowStart(90)}</span>
+        <span>{dict.timeline.windowStart(HISTORY_DAYS)}</span>
         <span>{dict.timeline.today}</span>
       </div>
     </div>

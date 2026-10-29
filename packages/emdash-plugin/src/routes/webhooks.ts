@@ -3,7 +3,7 @@ import type { HttpAccess, PluginContext, PluginRoute, RouteContext } from 'emdas
 import type { DeliveryOutcome } from '../notify'
 import { detectStatusChanges, gradeWebhookPayload, timingSafeEqual, webhookProviderMatchesSite } from '@statusbeam/core'
 import { definePluginRoute, pluginResponse } from 'emdash'
-import { applyResults, bucketId, bucketsOf } from '../buckets'
+import { applyResults, bucketId, bucketsOf, utcDay } from '../buckets'
 import { readSettings } from '../config'
 import { buildMessages, deliver } from '../notify'
 import { PROBE_DEADLINE_MS } from '../probe'
@@ -100,7 +100,7 @@ export async function handleWebhook(
   const now = options.now ?? (() => new Date())
   const deadlineMs = options.deadlineMs ?? PROBE_DEADLINE_MS
   const result: CheckResult = { slug: site.slug, status: graded.status, code: 200, responseTime: 0, checkedAt: now().toISOString() }
-  const rowId = bucketId(site.slug, result.checkedAt.slice(0, 10), 'webhook')
+  const rowId = bucketId(site.slug, utcDay(result.checkedAt), 'webhook')
   const buckets = bucketsOf(ctx)
   const [existing, snapshots] = await Promise.all([buckets.getMany([rowId]), listSnapshots(ctx)])
   const previous = mergeSnapshots(snapshots)

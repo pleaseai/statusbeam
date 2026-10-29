@@ -38,7 +38,7 @@ interface Loaded {
 }
 
 function loadedFrom(response: Pick<ConfigResponse, 'config' | 'revision' | 'secretsSet'> & Partial<Pick<ConfigResponse, 'issues'>>): Loaded {
-  const config = 'config' in response ? response.config : null
+  const config = response.config
   const unreadable = config === null && response.revision !== null && (response.issues?.length ?? 0) > 0
   return { draft: draftFromConfig(config), revision: response.revision, secretsSet: response.secretsSet, unreadable }
 }

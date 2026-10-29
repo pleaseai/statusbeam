@@ -57,9 +57,14 @@ export function bucketId(slug: string, date: string, source: BucketSource = 'pol
   return source === 'webhook' ? `${slug}:${date}:webhook` : `${slug}:${date}`
 }
 
-/** UTC day of a check, taken from its ISO `checkedAt` the way D1's `date(checked_at)` does. */
+/** UTC day (`YYYY-MM-DD`) of an ISO timestamp, the way D1's `date(checked_at)` takes it. */
+export function utcDay(iso: string): string {
+  return iso.slice(0, 10)
+}
+
+/** UTC day of a check, taken from its ISO `checkedAt`. */
 export function dayOf(result: Pick<CheckResult, 'checkedAt'>): string {
-  return result.checkedAt.slice(0, 10)
+  return utcDay(result.checkedAt)
 }
 
 /** Storage ids of the buckets `results` will touch, deduplicated. */
@@ -97,23 +102,7 @@ export function toDayCounts(bucket: DayBucket): DayCounts {
 
 /** First UTC day still inside the 90-day window ending on `now`'s day; older buckets are expired. */
 export function windowStartDate(now: Date): string {
-  return historyWindowStart(now).toISOString().slice(0, 10)
-}
-
-/**
- * Read one monitor's buckets inside the 90-day window: 90 days fit one 100-row page.
- * A day with webhook events has two rows (poll and webhook); a reader sums them.
- */
-export async function readMonitorBuckets(
-  ctx: Pick<PluginContext, 'storage'>,
-  slug: string,
-  now: Date,
-): Promise<DayBucket[]> {
-  const page = await bucketsOf(ctx).query({
-    where: { slug, date: { gte: windowStartDate(now) } },
-    limit: QUERY_PAGE_LIMIT,
-  })
-  return page.items.map(item => item.data)
+  return utcDay(historyWindowStart(now).toISOString())
 }
 
 /**

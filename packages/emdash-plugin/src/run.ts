@@ -4,7 +4,7 @@ import type { PluginContext } from 'emdash/plugin'
 import type { DeliveryOutcome } from './notify'
 import type { PollSnapshot } from './snapshot'
 import { detectStatusChanges, selectPollSites } from '@statusbeam/core'
-import { applyResults, bucketId, bucketsOf, dayOf, pruneExpiredBuckets, touchedBucketIds } from './buckets'
+import { applyResults, bucketId, bucketsOf, dayOf, pruneExpiredBuckets, touchedBucketIds, utcDay } from './buckets'
 import { clearConfigError, CONFIG_ERROR_KEY, loadStoredConfig, recordConfigError } from './config'
 import { PLUGIN_ID } from './descriptor'
 import { createProbeHttp } from './http'
@@ -36,11 +36,6 @@ export interface CheckRunResult {
 
 /** Check types that read the response body, so they cannot use the header-only client. */
 export const BODY_CHECKS = new Set<string>(['statuspage', 'incidentio', 'sentry', 'aigateway'])
-
-/** UTC day of a date as `YYYY-MM-DD`. */
-function dayOfDate(date: Date): string {
-  return date.toISOString().slice(0, 10)
-}
 
 /**
  * The monitors a scheduled run must actively check, ordered by slug so the
@@ -100,7 +95,7 @@ export async function runCheck(ctx: RunContext, options: CheckRunOptions = {}): 
 
   const real = results.filter(result => !result.limit)
 
-  const today = dayOfDate(startedAt)
+  const today = utcDay(startedAt.toISOString())
   const buckets = bucketsOf(ctx)
   const [existing, entries] = await Promise.all([
     buckets.getMany([...new Set([...touchedBucketIds(results), ...sites.map(site => bucketId(site.slug, today))])]),

@@ -2,7 +2,7 @@ import type { StatusConfig } from '@statusbeam/core'
 import type { PluginContext } from 'emdash/plugin'
 import type { Destination } from './settings'
 import { validateConfig } from '@statusbeam/core'
-import { CONFIG_SETTINGS_KEY, destinationsFrom, isHttpUrl, parseUrlList, SENTRY_TOKEN_SECRET_KEY, SLACK_SECRET_KEY, WEBHOOK_SECRET_KEY, WEBHOOKS_SECRET_KEY } from './settings'
+import { CONFIG_SETTINGS_KEY, destinationsFrom, parseUrlList, secretText, SENTRY_TOKEN_SECRET_KEY, settingValues, SLACK_SECRET_KEY, WEBHOOK_SECRET_KEY, WEBHOOKS_SECRET_KEY } from './settings'
 
 export { SENTRY_TOKEN_SECRET_KEY } from './settings'
 
@@ -40,18 +40,17 @@ function invalidEntriesOf(field: string, value: unknown): SecretsView['invalidEn
     return []
   }
   return value.split(/\r?\n/).flatMap((text, index) =>
-    text.split(/[\s,]+/).filter(Boolean).some(entry => !isHttpUrl(entry)) ? [{ field, line: index + 1 }] : [])
+    parseUrlList(text).invalid > 0 ? [{ field, line: index + 1 }] : [])
 }
 
 /** The secrets view of a `settings.list` result. */
 export function secretsFrom(values: Map<string, unknown>): { secrets: SecretsView, destinations: Destination[] } {
   const { destinations } = destinationsFrom(values)
-  const token = values.get(SENTRY_TOKEN_SECRET_KEY)
   return {
     destinations,
     secrets: {
       destinations: destinations.length,
-      sentryToken: typeof token === 'string' && token.trim() !== '',
+      sentryToken: secretText(values, SENTRY_TOKEN_SECRET_KEY) !== undefined,
       extraSlackUrls: Math.max(0, parseUrlList(values.get(SLACK_SECRET_KEY)).urls.length - 1),
       invalidEntries: [
         ...invalidEntriesOf(SLACK_SECRET_KEY, values.get(SLACK_SECRET_KEY)),
@@ -199,7 +198,7 @@ export type StoredConfig
  * wrong.
  */
 export async function loadStoredConfig(ctx: Pick<PluginContext, 'settings'>): Promise<StoredConfig> {
-  return storedConfigFrom(new Map((await ctx.settings.list()).map(entry => [entry.key, entry.value])))
+  return storedConfigFrom(await settingValues(ctx))
 }
 
 /** {@link loadStoredConfig} over a `settings.list` result the caller already holds. Pure. */
@@ -213,8 +212,7 @@ function storedConfigFrom(values: Map<string, unknown>): StoredConfig {
   if (issues.some(issue => issue.severity === 'error') || !parsed) {
     return { status: 'invalid', issues }
   }
-  const token = values.get(SENTRY_TOKEN_SECRET_KEY)
-  const sentryToken = typeof token === 'string' && token.trim() !== '' ? token.trim() : undefined
+  const sentryToken = secretText(values, SENTRY_TOKEN_SECRET_KEY)
   return { status: 'valid', config: parsed, destinations, issues, ...(sentryToken ? { sentryToken } : {}) }
 }
 
@@ -223,31 +221,25 @@ export interface PluginSettings {
   config: StatusConfig | null
   /** Notification destinations from the secret settings. */
   destinations: Destination[]
-  /** Secret entries that are not http(s) URLs. They are not delivered to; the admin page reports them. */
-  invalidDestinations: number
   /** The shared webhook token, or `null` when unset (the webhook routes then reject everything). */
   webhookSecret: string | null
 }
 
 /**
  * Read the configuration and the notification secrets with one `settings.list`
- * call (the bridge decrypts secret fields there). The configuration is gated
+ * call (the host decrypts secret fields there). The configuration is gated
  * exactly as the scheduled run gates it: core schema plus the plugin rules, so
  * the public and webhook routes never serve or route a configuration the run
  * refuses. An absent or rejected configuration gives `config: null`: callers
  * then check nothing and write nothing, so no monitor's status changes.
  */
 export async function readSettings(ctx: Pick<PluginContext, 'settings'>): Promise<PluginSettings> {
-  const entries = await ctx.settings.list()
-  const values = new Map(entries.map(entry => [entry.key, entry.value]))
-  const { destinations, invalid } = destinationsFrom(values)
+  const values = await settingValues(ctx)
+  const { destinations } = destinationsFrom(values)
   const stored = storedConfigFrom(values)
-  const secret = values.get(WEBHOOK_SECRET_KEY)
-  const trimmedSecret = typeof secret === 'string' ? secret.trim() : ''
   return {
     config: stored.status === 'valid' ? stored.config : null,
     destinations,
-    invalidDestinations: invalid,
-    webhookSecret: trimmedSecret !== '' ? trimmedSecret : null,
+    webhookSecret: secretText(values, WEBHOOK_SECRET_KEY) ?? null,
   }
 }

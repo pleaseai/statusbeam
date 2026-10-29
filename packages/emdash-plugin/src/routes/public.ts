@@ -33,12 +33,13 @@ function notFound(slug: string) {
  * feeds its endpoints. An absent or invalid configuration has no monitors, so
  * the endpoints answer as standalone does for an empty summary.
  */
-async function loadSummary(ctx: ReadContext): Promise<SiteSummary[]> {
-  const { config } = await readSettings(ctx)
+async function loadSummary(ctx: ReadContext, slug?: string): Promise<SiteSummary[]> {
+  const [{ config }, snapshot] = await Promise.all([readSettings(ctx), readSnapshot(ctx)])
   if (!config) {
     return []
   }
-  return summariesFromSnapshot(await readSnapshot(ctx), config.sites, new Date())
+  const sites = slug === undefined ? config.sites : config.sites.filter(site => site.slug === slug)
+  return summariesFromSnapshot(snapshot, sites, new Date())
 }
 
 function queryOf(input: unknown): Query {
@@ -67,11 +68,11 @@ function publicRoute({ aggregate, site: build }: Handlers): PluginRoute {
     request: { body: 'none' },
     handler: async (ctx) => {
       const query = queryOf(ctx.input)
-      const summary = await loadSummary(ctx)
       if (aggregate && !('slug' in query)) {
-        return json(aggregate(summary))
+        return json(aggregate(await loadSummary(ctx)))
       }
       const slug = stringParam(query, 'slug') ?? ''
+      const summary = await loadSummary(ctx, slug)
       const site = summary.find(s => s.slug === slug)
       return site ? json(build(site, query)) : notFound(slug)
     },

@@ -20,7 +20,6 @@ import type { FetchOptions, StatusSource } from '@statusbeam/emdash-ui/client'
 export const BLOCK_TYPE = 'statusbeam-status'
 
 export const BLOCK_VIEWS = ['banner', 'site'] as const
-export type BlockView = (typeof BLOCK_VIEWS)[number]
 
 export const BLOCK_FLAVORS = ['standalone', 'emdash'] as const satisfies readonly RouteFlavor[]
 

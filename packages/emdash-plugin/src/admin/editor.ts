@@ -242,7 +242,7 @@ export function hasHiddenSettings(monitor: Monitor): boolean {
 }
 
 /** The settings block that is only valid with one check kind. */
-const KIND_BLOCKS = { sentry: 'sentry', aigateway: 'aigateway' } as const
+const KIND_BLOCKS = ['sentry', 'aigateway'] as const
 
 /** Changes a monitor's check kind, dropping hidden settings blocks the new kind does not allow (core rejects them). */
 export function withCheckKind(monitor: Monitor, check: string): Monitor {
@@ -250,8 +250,8 @@ export function withCheckKind(monitor: Monitor, check: string): Monitor {
   if (monitor.check === check) {
     return next
   }
-  for (const [block, kind] of Object.entries(KIND_BLOCKS)) {
-    if (check !== kind) {
+  for (const block of KIND_BLOCKS) {
+    if (check !== block) {
       delete next[block]
     }
   }

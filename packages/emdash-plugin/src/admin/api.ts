@@ -1,5 +1,7 @@
-import type { ADMIN_ROUTE, ConfigResponse, OverviewResponse, SaveResponse } from '../routes/admin'
+import type { ConfigResponse, OverviewResponse, SaveResponse } from '../routes/admin'
 import { apiFetch, parseApiResponse } from '@emdash-cms/admin'
+import { EMDASH_ROUTE_BASE } from '@statusbeam/core'
+import { ADMIN_ROUTE } from '../admin-routes'
 
 /**
  * The client of the plugin's private admin routes (`src/routes/admin.ts`).
@@ -11,15 +13,8 @@ import { apiFetch, parseApiResponse } from '@emdash-cms/admin'
  * its code reaches the browser bundle.
  */
 
-/** Same ids as `PLUGIN_ID` and `ADMIN_ROUTE`; the compiler checks the route names against the server's. */
-const BASE = '/_emdash/api/plugins/statusbeam'
-const ROUTE: typeof ADMIN_ROUTE = {
-  config: 'admin/config',
-  validate: 'admin/validate',
-  save: 'admin/save',
-  test: 'admin/test',
-  overview: 'admin/overview',
-}
+const BASE = EMDASH_ROUTE_BASE
+const ROUTE = ADMIN_ROUTE
 
 /** Where EmDash's generated settings page for the plugin lives (secrets are edited there). */
 export const SETTINGS_PAGE_HREF = '/_emdash/admin/plugins-manager/statusbeam/settings'

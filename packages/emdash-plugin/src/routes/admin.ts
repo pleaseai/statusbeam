@@ -6,13 +6,14 @@ import { buildStatusResponse } from '@statusbeam/core'
 import { definePluginRoute } from 'emdash'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { z } from 'zod'
+import { ADMIN_ROUTE } from '../admin-routes'
 import { clearConfigError, loadStoredConfig, secretsFrom, validatePluginConfig } from '../config'
 import { PLUGIN_ID } from '../descriptor'
 import { createProbeHttp } from '../http'
 import { PROBE_DEADLINE_MS, probeSite } from '../probe'
 import { BODY_CHECKS } from '../run'
 import { reconcileSchedule } from '../schedule'
-import { CONFIG_SETTINGS_KEY, SENTRY_TOKEN_SECRET_KEY, SLACK_SECRET_KEY, WEBHOOK_SECRET_KEY, WEBHOOKS_SECRET_KEY } from '../settings'
+import { CONFIG_SETTINGS_KEY, secretText, SENTRY_TOKEN_SECRET_KEY, settingValues, SLACK_SECRET_KEY, WEBHOOK_SECRET_KEY, WEBHOOKS_SECRET_KEY } from '../settings'
 import { readSnapshot, summariesFromSnapshot } from '../snapshot'
 
 /**
@@ -30,14 +31,7 @@ import { readSnapshot, summariesFromSnapshot } from '../snapshot'
  * of them are set.
  */
 
-/** Route names, mounted under `/_emdash/api/plugins/statusbeam/`. */
-export const ADMIN_ROUTE = {
-  config: 'admin/config',
-  validate: 'admin/validate',
-  save: 'admin/save',
-  test: 'admin/test',
-  overview: 'admin/overview',
-} as const
+export { ADMIN_ROUTE }
 
 /** Largest configuration the editor accepts: the serialized YAML, in bytes. */
 export const MAX_YAML_BYTES = 64 * 1024
@@ -128,20 +122,13 @@ const MAX_REVISION_LENGTH = 128
 const encoder = new TextEncoder()
 
 function secretsSetFrom(values: Map<string, unknown>): SecretsSet {
-  const isSet = (key: string) => {
-    const value = values.get(key)
-    return typeof value === 'string' && value.trim() !== ''
-  }
+  const isSet = (key: string) => secretText(values, key) !== undefined
   return {
     [SLACK_SECRET_KEY]: isSet(SLACK_SECRET_KEY),
     [WEBHOOKS_SECRET_KEY]: isSet(WEBHOOKS_SECRET_KEY),
     [WEBHOOK_SECRET_KEY]: isSet(WEBHOOK_SECRET_KEY),
     [SENTRY_TOKEN_SECRET_KEY]: isSet(SENTRY_TOKEN_SECRET_KEY),
   }
-}
-
-async function settingsOf(ctx: Pick<PluginContext, 'settings'>): Promise<Map<string, unknown>> {
-  return new Map((await ctx.settings.list()).map(entry => [entry.key, entry.value]))
 }
 
 function isDocument(value: unknown): value is ConfigDocument {
@@ -172,7 +159,7 @@ function serialize(config: unknown): { yaml: string } | { issues: PluginIssue[] 
 /** Read the stored configuration the way the editor needs it: parsed, with its revision and findings. */
 async function readConfig(ctx: Pick<PluginContext, 'settings'>): Promise<ConfigResponse> {
   const stored = await ctx.settings.getVersioned<string>(CONFIG_SETTINGS_KEY)
-  const values = await settingsOf(ctx)
+  const values = await settingValues(ctx)
   const secretsSet = secretsSetFrom(values)
   const yaml = typeof stored?.value === 'string' ? stored.value : ''
   const revision = stored?.revision ?? null
@@ -203,7 +190,7 @@ async function validateDocument(ctx: Pick<PluginContext, 'settings'>, config: un
   if ('issues' in serialized) {
     return { ok: false, issues: serialized.issues }
   }
-  const { secrets } = secretsFrom(await settingsOf(ctx))
+  const { secrets } = secretsFrom(await settingValues(ctx))
   const validation = validatePluginConfig(serialized.yaml, secrets)
   return { ok: validation.ok, issues: validation.issues, yaml: serialized.yaml }
 }
@@ -249,7 +236,7 @@ function relativeIssue(issue: PluginIssue): PluginIssue {
 }
 
 async function resolveSite(ctx: Pick<PluginContext, 'settings'>, input: TestInput): Promise<{ site: Site, values: Map<string, unknown> } | TestResponse> {
-  const values = await settingsOf(ctx)
+  const values = await settingValues(ctx)
   const { secrets } = secretsFrom(values)
   if (input.monitor !== undefined) {
     const serialized = serialize({ name: 'test', sites: [input.monitor] })
@@ -287,8 +274,7 @@ async function testMonitor(ctx: AdminContext, input: TestInput, options: AdminOp
     return resolved
   }
   const { site, values } = resolved
-  const token = values.get(SENTRY_TOKEN_SECRET_KEY)
-  const sentryToken = typeof token === 'string' && token.trim() !== '' ? token.trim() : undefined
+  const sentryToken = secretText(values, SENTRY_TOKEN_SECRET_KEY)
   if (site.check === 'sentry' && site.sentry === undefined) {
     return { tested: false, reason: 'webhook-only', message: 'A Sentry monitor without a sentry block is updated by Sentry webhooks only. Add the organization to poll it, then test again.' }
   }
@@ -307,8 +293,7 @@ async function testMonitor(ctx: AdminContext, input: TestInput, options: AdminOp
 }
 
 async function overview(ctx: Pick<PluginContext, 'settings' | 'kv'>, now: Date): Promise<OverviewResponse> {
-  const stored = await loadStoredConfig(ctx)
-  const merged = await readSnapshot(ctx)
+  const [stored, merged] = await Promise.all([loadStoredConfig(ctx), readSnapshot(ctx)])
   if (stored.status !== 'valid') {
     const configIssues = stored.status === 'invalid' ? stored.issues.filter(issue => issue.severity === 'error') : []
     return { configured: false, configIssues, updatedAt: merged.updatedAt, status: buildStatusResponse([], now).status, monitors: [] }
