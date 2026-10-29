@@ -34,12 +34,12 @@ function notFound(slug: string) {
  * the endpoints answer as standalone does for an empty summary.
  */
 async function loadSummary(ctx: ReadContext, slug?: string): Promise<SiteSummary[]> {
-  const [{ config }, snapshot] = await Promise.all([readSettings(ctx), readSnapshot(ctx)])
+  const { config } = await readSettings(ctx)
   if (!config) {
     return []
   }
   const sites = slug === undefined ? config.sites : config.sites.filter(site => site.slug === slug)
-  return summariesFromSnapshot(snapshot, sites, new Date())
+  return summariesFromSnapshot(await readSnapshot(ctx), sites, new Date())
 }
 
 function queryOf(input: unknown): Query {
