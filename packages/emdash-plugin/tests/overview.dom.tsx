@@ -15,16 +15,16 @@ interface Recorded { method: string, url: string }
 const server = { requests: [] as Recorded[], overview: undefined as unknown as OverviewResponse, failing: false }
 const user = { role: 50 }
 
-async function fakeApiFetch(input: string | URL | Request, init?: RequestInit): Promise<Response> {
+function fakeApiFetch(input: string | URL | Request, init?: RequestInit): Promise<Response> {
   const url = String(input)
   server.requests.push({ method: init?.method ?? 'GET', url })
   const route = url.replace('/_emdash/api/plugins/statusbeam/', '')
   if (route === 'admin/overview') {
-    return server.failing
+    return Promise.resolve(server.failing
       ? Response.json({ success: false, error: { code: 'INTERNAL', message: 'boom' } }, { status: 500 })
-      : Response.json({ success: true, data: server.overview })
+      : Response.json({ success: true, data: server.overview }))
   }
-  return Response.json({ success: false, error: { code: 'NOT_FOUND', message: `no route ${route}` } }, { status: 404 })
+  return Promise.resolve(Response.json({ success: false, error: { code: 'NOT_FOUND', message: `no route ${route}` } }, { status: 404 }))
 }
 
 let StatusPage: typeof import('../src/admin/StatusPage').StatusPage
@@ -33,7 +33,7 @@ let admin: typeof import('../src/admin/index')
 
 beforeAll(async () => {
   const real = await import('@emdash-cms/admin')
-  mock.module('@emdash-cms/admin', () => ({
+  await mock.module('@emdash-cms/admin', () => ({
     ...real,
     apiFetch: fakeApiFetch,
     useCurrentUser: () => ({ isPending: false, isError: false, data: { id: 'u1', email: 'a@example.com', role: user.role } }),
@@ -128,7 +128,7 @@ describe('status overview page (AC-014)', () => {
     expect(within(pending).queryByText(dict.day.down)).toBeNull()
     expect(within(pending).queryByText(dict.admin.overview.uptime)).toBeNull()
     expect(within(pending).queryByText(dict.status.responseTime)).toBeNull()
-    expect(pending.textContent).not.toMatch(/\d+(\.\d+)?%/)
+    expect(pending.textContent).not.toMatch(/\d(?:\.\d+)?%/)
     expect(within(pending).getByRole('list').getAttribute('aria-label')).toBe(dict.timeline.ariaNoData)
     // The checked monitor beside it still shows its figure.
     expect(within(card('API')).getByText('100%', { selector: 'dd' })).toBeTruthy()

@@ -24,7 +24,7 @@ const server = {
 
 const user: { role: number } = { role: 50 }
 
-async function fakeFetch(input: string | URL | Request, init?: RequestInit): Promise<Response> {
+function fakeFetch(input: string | URL | Request, init?: RequestInit): Promise<Response> {
   const url = String(input)
   const headers = new Headers(init?.headers)
   const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined
@@ -32,16 +32,16 @@ async function fakeFetch(input: string | URL | Request, init?: RequestInit): Pro
   const route = url.replace('/_emdash/api/plugins/statusbeam/', '')
   const data = route === 'admin/config' ? server.config : route === 'admin/save' ? server.save(body) : null
   if (data === null) {
-    return Response.json({ success: false, error: { code: 'NOT_FOUND', message: `no route ${route}` } }, { status: 404 })
+    return Promise.resolve(Response.json({ success: false, error: { code: 'NOT_FOUND', message: `no route ${route}` } }, { status: 404 }))
   }
-  return Response.json({ success: true, data })
+  return Promise.resolve(Response.json({ success: true, data }))
 }
 
 let MonitorsPage: typeof import('../src/admin/MonitorsPage').MonitorsPage
 
 beforeAll(async () => {
   const real = (globalThis as unknown as { __realEmdashAdmin: typeof import('@emdash-cms/admin') }).__realEmdashAdmin
-  mock.module('@emdash-cms/admin', () => ({
+  await mock.module('@emdash-cms/admin', () => ({
     ...real,
     useCurrentUser: () => ({ isPending: false, isError: false, data: { id: 'u1', email: 'a@example.com', role: user.role } }),
   }))

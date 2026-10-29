@@ -19,8 +19,8 @@ function boundedError(error: string): string {
     return error
   }
   let end = MAX_STORED_ERROR_LENGTH - 1
-  const last = error.charCodeAt(end - 1)
-  if (last >= 0xD800 && last <= 0xDBFF) {
+  const point = error.codePointAt(end - 1) ?? 0
+  if (point > 0xFFFF || (point >= 0xD800 && point <= 0xDBFF)) {
     end--
   }
   return `${error.slice(0, end)}…`

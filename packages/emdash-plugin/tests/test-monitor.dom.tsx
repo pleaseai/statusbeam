@@ -34,7 +34,7 @@ let MonitorsPage: typeof import('../src/admin/MonitorsPage').MonitorsPage
 
 beforeAll(async () => {
   const real = await import('@emdash-cms/admin')
-  mock.module('@emdash-cms/admin', () => ({
+  await mock.module('@emdash-cms/admin', () => ({
     ...real,
     apiFetch: fakeApiFetch,
     useCurrentUser: () => ({ isPending: false, isError: false, data: { id: 'u1', email: 'a@example.com', role: 50 } }),
