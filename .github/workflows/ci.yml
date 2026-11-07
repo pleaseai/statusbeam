@@ -37,6 +37,9 @@ jobs:
       - name: Lint
         run: bun run lint
 
+      - name: Verify native TypeScript compiler
+        run: bun run check:typescript-version
+
       - name: Typecheck
         run: bun run typecheck
 
