@@ -36,7 +36,7 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260820.1",
-    "@emdash-cms/plugin-cli": "0.13.4",
+    "@emdash-cms/plugin-cli": "0.13.5",
     "wrangler": "^4.125.0"
   }
 }
